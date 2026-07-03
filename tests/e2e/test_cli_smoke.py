@@ -75,3 +75,25 @@ def test_apply_unknown_session_exits_1(sample_repo):
 def test_sessions_show_unknown_exits_1(sample_repo):
     r = _run_cli("sessions", "show", "nope", "-C", str(sample_repo))
     assert r.returncode == 1
+
+
+def test_unknown_pattern_name_exits_cleanly(sample_repo):
+    r = _run_cli("pattern", "banana", str(sample_repo), "--dry-run")
+    assert r.returncode == 2
+    assert "unknown pattern" in r.stderr.lower()
+    assert "Traceback" not in r.stderr
+
+
+def test_file_path_rejected_cleanly(sample_repo):
+    a_file = next(sample_repo.rglob("*.py"))
+    r = _run_cli("pattern", "singleton", str(a_file), "--yes")
+    assert r.returncode == 2
+    assert "not a directory" in r.stderr.lower()
+    assert "Traceback" not in r.stderr
+
+
+def test_report_without_any_report_exits_cleanly(sample_repo):
+    # session-id path: no such report -> clean exit 1, never a traceback
+    r = _run_cli("report", "no-such-session")
+    assert r.returncode == 1
+    assert "Traceback" not in r.stderr

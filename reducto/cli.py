@@ -40,6 +40,15 @@ def _get_cfg(
     return _cfg
 
 
+def _resolve_repo(path: Path) -> str:
+    """Resolve to a directory or exit cleanly — commands operate on a repo, not a file."""
+    p = path.resolve()
+    if not p.is_dir():
+        typer.echo(f"Not a directory: {p}", err=True)
+        raise typer.Exit(2)
+    return str(p)
+
+
 def _check_git(path: str, cfg: AppConfig) -> None:
     git = GitSafety(path)
     if not git.is_repo() or git.is_clean():
@@ -67,7 +76,7 @@ def analyze(
 ):
     """Scan for complexity hotspots."""
     cfg = _get_cfg(config, verbose, model, prefer_local, prefer_remote)
-    svc = App(str(path.resolve()), cfg)
+    svc = App(_resolve_repo(path), cfg)
     result = _run(svc.analyze(str(path)))
     typer.echo(
         f"Files: {result.total_files}  Symbols: {result.total_symbols}  Hotspots: {len(result.hotspots)}"
@@ -93,7 +102,7 @@ def deduplicate(
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(str(path.resolve()), cfg)
+    svc = App(_resolve_repo(path), cfg)
     plan = _run(svc.deduplicate(str(path)))
     typer.echo(plan.description)
     if dry_run:
@@ -122,7 +131,7 @@ def idiomatize(
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(str(path.resolve()), cfg)
+    svc = App(_resolve_repo(path), cfg)
     plan = _run(svc.idiomatize(str(path)))
     typer.echo(plan.description)
     if dry_run:
@@ -130,7 +139,11 @@ def idiomatize(
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
-    svc.apply_plan(plan)
+    result = svc.apply_plan(plan)
+    typer.echo("Applied." if result.success else f"Failed: {result.error}")
+
+
+_PATTERNS = ("factory", "strategy", "observer", "singleton")
 
 
 @app.command()
@@ -142,11 +155,16 @@ def pattern(
     config: Path | None = typer.Option(None, "--config", "-c"),
 ):
     """Apply or suggest a design pattern (factory|strategy|observer|singleton)."""
+    if pattern_name and pattern_name.lower() not in _PATTERNS:
+        typer.echo(
+            f"Unknown pattern '{pattern_name}'. Choose from: {', '.join(_PATTERNS)}", err=True
+        )
+        raise typer.Exit(2)
     cfg = _get_cfg(config, False, "", True, False)
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(str(path.resolve()), cfg)
+    svc = App(_resolve_repo(path), cfg)
     plan = _run(svc.pattern(pattern_name, str(path)))
     typer.echo(plan.description)
     if dry_run:
@@ -166,7 +184,7 @@ def check(
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
     cfg = _get_cfg(config, verbose, "", True, False)
-    svc = App(str(path.resolve()), cfg)
+    svc = App(_resolve_repo(path), cfg)
     result = _run(svc.check(str(path)))
     typer.echo(
         f"Issues: {result['total_issues']} (critical={result['critical']}, warning={result['warning']})"
@@ -183,7 +201,7 @@ def apply(
     """Apply a previously saved plan by session ID."""
     cfg = _get_cfg(config, False, "", True, False)
     cfg.pre_approve = yes
-    root = path.resolve()
+    root = Path(_resolve_repo(path))
     store = SessionStore(storage_dir=str(root / ".reducto" / "sessions"))
     plan = store.load_plan(session_id)
     if not plan:
@@ -203,7 +221,11 @@ def report_cmd(
 ):
     """Print a saved report (latest, or the given session ID)."""
     cfg = _get_cfg(config, False, "", True, False)
-    text = Reporter(cfg).load_latest(session_id)
+    try:
+        text = Reporter(cfg).load_latest(session_id)
+    except FileNotFoundError:
+        typer.echo("No report found. Run a command with --report first.", err=True)
+        raise typer.Exit(1) from None
     typer.echo(text)
 
 

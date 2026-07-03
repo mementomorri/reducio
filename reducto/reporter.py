@@ -73,7 +73,7 @@ class Reporter:
                 return p.read_text()
             raise FileNotFoundError(session_id)
         reports = sorted(
-            self.output_dir.glob("reducto-report-*.md"),
+            self.output_dir.glob("reducto-*.md"),
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )

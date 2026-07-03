@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 import tree_sitter_python as tspython
@@ -81,19 +82,21 @@ def _python_block_end(lines: list[str], start: int) -> int:
 
 
 _NESTERS = ("if ", "elif ", "for ", "while ", "with ", "except")
+# ponytail: word-boundary match so "for" isn't counted as "or", "editor" isn't "or",
+# "elif" isn't "if". Still counts keywords inside string literals — acceptable heuristic.
+_DECISION = re.compile(r"\b(?:if|elif|for|while|and|or)\b")
 
 
 def get_complexity(content: str) -> ComplexityMetrics:
-    """Cyclomatic (decision-point count) and cognitive (nesting-weighted) complexity."""
+    """Cyclomatic (McCabe, base 1) and cognitive (nesting-weighted) complexity."""
     metrics = ComplexityMetrics(lines_of_code=max(1, content.count("\n") + 1))
+    metrics.cyclomatic_complexity = 1
     base_indent: int | None = None
     for line in content.split("\n"):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        for kw in ("if ", "elif ", "for ", "while ", "and ", "or "):
-            if kw in stripped:
-                metrics.cyclomatic_complexity += 1
+        metrics.cyclomatic_complexity += len(_DECISION.findall(stripped))
         if base_indent is None:
             base_indent = len(line) - len(line.lstrip())
         depth = max(0, (len(line) - len(line.lstrip()) - base_indent) // 4 - 1)

@@ -100,6 +100,25 @@ async def test_idiomatize_nested_paren_append_is_valid(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_idiomatize_skips_accumulator_referencing_loop(tmp_path):
+    # Order-preserving dedup: the filter reads the accumulator `u`. Rewriting to
+    # `[v for v in t if v not in u]` changes behaviour (u is empty in the comp), so
+    # this loop must be left alone. (Was a real correctness bug.)
+    content = (
+        "def s(t):\n"
+        "    u = []\n"
+        "    for v in t:\n"
+        "        if v not in u:\n"
+        "            u.append(v)\n"
+        "    return u\n"
+    )
+    plan = await _idioms(tmp_path, content)
+    assert not any("list comprehension" in c.description for c in plan.changes)
+    # nothing else matches -> no change emitted for this file
+    assert plan.changes == []
+
+
+@pytest.mark.asyncio
 async def test_idiomatize_compare_to_none(tmp_path):
     plan = await _idioms(tmp_path, "def f(x):\n    if x == None:\n        return 1\n    return 2\n")
     assert any("is None" in c.modified for c in plan.changes)

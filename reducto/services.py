@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import difflib
 from typing import Any
 
@@ -18,6 +19,7 @@ from reducto.models import (
     AnalyzeRequest,
     AnalyzeResult,
     AppConfig,
+    ComplexityMetrics,
     DeduplicateRequest,
     FileInfo,
     IdiomatizeRequest,
@@ -78,6 +80,20 @@ class App:
         return report.to_dict()
 
     def apply_plan(self, plan: RefactorPlan, run_tests: bool = True) -> RefactorResult:
+        # A whole-file rewrite (non-empty original) must not silently drop a def/class —
+        # guards against LLM rewrites (or future bugs) deleting code. Advisory modules
+        # (original="") are exempt.
+        for c in plan.changes:
+            if c.original.strip() and c.path.endswith(".py"):
+                lost = _def_names(c.original) - _def_names(c.modified)
+                if lost:
+                    return RefactorResult(
+                        session_id=plan.session_id,
+                        success=False,
+                        changes=[],
+                        tests_passed=False,
+                        error=f"refusing change to {c.path}: would drop {', '.join(sorted(lost))}",
+                    )
         pairs = [(c.path, _change_to_diff(c)) for c in plan.changes]
         result = self.workspace.apply_changes_safe(pairs, run_tests=run_tests)
         if not result.get("success"):
@@ -90,12 +106,28 @@ class App:
             )
         if self.cfg.commit_changes:
             self.workspace.commit_changes(f"reducto: {plan.description[:72]}", plan.changes)
+        before = sum(c.original.count("\n") + 1 for c in plan.changes if c.original)
+        after = sum(c.modified.count("\n") + 1 for c in plan.changes if c.modified)
         return RefactorResult(
             session_id=plan.session_id,
             success=True,
             changes=plan.changes,
             tests_passed=result.get("tests_passed", True),
+            metrics_before=ComplexityMetrics(lines_of_code=before),
+            metrics_after=ComplexityMetrics(lines_of_code=after),
         )
+
+
+def _def_names(src: str) -> set[str]:
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return set()
+    return {
+        n.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    }
 
 
 def _change_to_diff(change) -> str:

@@ -6,8 +6,6 @@ import hashlib
 import logging
 from typing import Any, cast
 
-import chromadb
-
 from reducto.models import CodeBlock, FileInfo
 
 logger = logging.getLogger(__name__)
@@ -15,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingService:
     def __init__(self):
-        self.client: chromadb.Client | None = None
+        self.client: Any = None
         self.collection = None
         self.model: Any = None
         self._initialized = False
@@ -59,11 +57,17 @@ class EmbeddingService:
             )
             self._use_real_embeddings = False
 
-        self.client = chromadb.EphemeralClient()
+        # chromadb is part of the [embeddings] extra; if it's absent, degrade to the
+        # "install the extra" path instead of crashing at import time.
+        try:
+            import chromadb
 
-        self.collection = self.client.get_or_create_collection(
-            name="code_embeddings", metadata={"hnsw:space": "cosine"}
-        )
+            self.client = chromadb.EphemeralClient()
+            self.collection = self.client.get_or_create_collection(
+                name="code_embeddings", metadata={"hnsw:space": "cosine"}
+            )
+        except ImportError:
+            self._use_real_embeddings = False
 
         self._initialized = True
 

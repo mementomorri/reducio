@@ -48,25 +48,17 @@ class PatternAgent(BaseAgent):
                 if change:
                     changes.append(change)
                     continue
-            if pattern == "singleton":
-                changes.append(
-                    FileChange(
-                        path=path,
-                        original=content,
-                        modified=template_fn(path),
-                        description="Wrap global state in Singleton pattern",
-                    )
+            # Every pattern writes a NEW advisory module (original=""); never overwrite the
+            # source file — that discarded the original code (singleton used to do this).
+            module = _module_name(path)
+            changes.append(
+                FileChange(
+                    path=f"{subdir}/{module}_{pattern}.py",
+                    original="",
+                    modified=template_fn(path),
+                    description=f"Extract into {pattern.title()} pattern",
                 )
-            else:
-                module = _module_name(path)
-                changes.append(
-                    FileChange(
-                        path=f"{subdir}/{module}_{pattern}.py",
-                        original="",
-                        modified=template_fn(path),
-                        description=f"Extract into {pattern.title()} pattern",
-                    )
-                )
+            )
         return changes
 
     async def _detect_and_suggest_patterns(self, files) -> list[FileChange]:
@@ -242,5 +234,5 @@ _DESIGN_PATTERNS = {
     "strategy": (_has_complex_conditionals, _generate_strategy_template, "strategies"),
     "factory": (_has_conditional_instantiation, _generate_factory_template, "factories"),
     "observer": (_has_event_handling, _generate_observer_template, "observers"),
-    "singleton": (_has_global_state, _generate_singleton_template, ""),
+    "singleton": (_has_global_state, _generate_singleton_template, "singletons"),
 }

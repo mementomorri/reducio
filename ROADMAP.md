@@ -54,6 +54,31 @@ clear "install the extra" message instead of an empty result.
   instead of `original=""` against the source file — which previously prepended a template into it.
 - The dirty-tree prompt (`cli._check_git`) and `--yes`/`--dry-run` gating are unchanged.
 
+### P3 — Semantic safety (apply can't change behaviour or lose code) — **done**
+
+P0–P2 closed *syntactic* corruption; these close *semantic* corruption found in an audit:
+
+- `idiomatize` no longer rewrites a for/append loop whose value, iterable, or filter reads the
+  accumulator (e.g. order-preserving dedup `if v not in u: u.append(v)`) — that silently changed
+  behaviour. It also skips any file that doesn't `ast.parse` (can't safely rewrite/validate it), so one
+  broken file no longer rolls back the whole batch. (`agents/idiomatizer.py`)
+- `pattern singleton` writes a NEW advisory module (`singletons/…`) like every other pattern instead of
+  overwriting the source file — which used to discard the original code. (`agents/pattern.py`)
+- `apply` refuses any whole-file rewrite that drops a top-level/nested `def`/`class`
+  (`services._def_names`) — a net for LLM rewrites and future template bugs.
+- Cyclomatic complexity is word-boundary matched (McCabe, base 1); `for` is no longer double-counted as
+  `or`, `editor`/`error` no longer false-positive. Drives `analyze` hotspots + `check` criticals.
+  (`parse.py`)
+- CLI robustness: unknown `pattern` names and non-directory paths exit `2` with a message (no traceback);
+  `report` falls back cleanly when no report exists; `idiomatize` now echoes apply success/failure;
+  `deduplicate` degrades to the "install the extra" message instead of crashing when `chromadb` is
+  absent.
+
+**Guarded by:** `tests/unit/test_idiomatizer.py::test_idiomatize_skips_accumulator_referencing_loop`,
+`tests/unit/test_pattern_agent.py::test_singleton_pattern_writes_advisory_module_not_source`,
+`tests/unit/test_apply_guard.py`, `tests/unit/test_complexity.py::test_cyclomatic_counts_for_loop_once`,
+and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% coverage.
+
 ## Now — v1.0 (shipped & tested)
 
 | Capability | Status | Notes |

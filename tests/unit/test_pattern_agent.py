@@ -60,11 +60,15 @@ async def test_factory_pattern_on_conditional_instantiation():
 
 
 @pytest.mark.asyncio
-async def test_singleton_pattern_wraps_global_state():
+async def test_singleton_pattern_writes_advisory_module_not_source():
+    # Must NOT overwrite the source file (that discarded the original code); write an
+    # advisory module with original="" like every other pattern.
     content = "count = 0\n\ndef bump():\n    global count\n    count += 1\n"
     plan = await _apply("singleton", content)
     assert plan.changes
-    assert plan.changes[0].original == content  # in-place rewrite
+    assert all(c.path != "m.py" for c in plan.changes)
+    assert any("singletons/" in c.path for c in plan.changes)
+    assert all(c.original == "" for c in plan.changes)
     assert "class Singleton" in plan.changes[0].modified
 
 

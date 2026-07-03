@@ -2,6 +2,7 @@
 Idiomatizer agent for transforming code to idiomatic patterns (Python heuristics).
 """
 
+import ast
 import re
 
 from reducto.agents.base import BaseAgent
@@ -31,6 +32,10 @@ class IdiomatizerAgent(BaseAgent):
     async def _idiomatize_file(self, file) -> tuple[FileChange | None, int]:
         content, path = self._file_content_path(file)
         if detect_language(path) != Language.PYTHON:
+            return None, 0
+        try:
+            ast.parse(content)  # can't safely rewrite (or validate) a file that doesn't parse
+        except SyntaxError:
             return None, 0
         if self._llm_enabled():
             change = await self._llm_rewrite(
@@ -92,6 +97,18 @@ class IdiomatizerAgent(BaseAgent):
     def _is_boolean_line(line: str) -> bool:
         return line.strip().startswith(("if ", "elif ", "while "))
 
+    @staticmethod
+    def _references(var: str, *exprs: str) -> bool:
+        """True if `var` appears as a name in any expr — unsafe to fold into a comprehension.
+
+        A `for/append` loop whose value, iterable, or filter reads the accumulator
+        (e.g. order-preserving dedup: `if v not in u: u.append(v)`) changes behaviour
+        when rewritten as `[v for v in t if v not in u]`, because the comprehension sees
+        an empty `u`. Refuse those.
+        """
+        pat = re.compile(rf"\b{re.escape(var)}\b")
+        return any(pat.search(e) for e in exprs)
+
     def _truthiness(self, lines: list[str], idx: int) -> tuple | None:
         line = lines[idx]
         if not self._is_boolean_line(line):
@@ -132,6 +149,8 @@ class IdiomatizerAgent(BaseAgent):
         if_m = re.match(r"if\s+(.+?):", lines[idx + 1].strip())
         app_m = re.match(r"(\w+)\.append\((.+)\)", lines[idx + 2].strip())
         if not (for_m and if_m and app_m):
+            return None
+        if self._references(app_m.group(1), if_m.group(1), app_m.group(2), for_m.group(2)):
             return None
         indent = len(lines[idx]) - len(lines[idx].lstrip())
         comp = (
@@ -189,6 +208,8 @@ class IdiomatizerAgent(BaseAgent):
             return None
         var, iterable = for_match.group(1), for_match.group(2)
         list_var, expr = append_match.group(1), append_match.group(2)
+        if self._references(list_var, expr, iterable):
+            return None
         indent = len(for_line) - len(for_line.lstrip())
         list_comp = f"{' ' * indent}{list_var} = [{expr} for {var} in {iterable}]"
         return (
