@@ -8,6 +8,10 @@ from pathlib import Path
 from reducto.models import AnalyzeResult, AppConfig, RefactorPlan, RefactorResult
 
 
+def _md_cell(value: object) -> str:
+    return str(value).replace("|", "/").replace("\n", " ")
+
+
 class Reporter:
     def __init__(self, cfg: AppConfig | None = None, output_dir: str = ".reducto"):
         self.cfg = cfg or AppConfig()
@@ -17,6 +21,7 @@ class Reporter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         name = f"reducto-baseline-{datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
         path = self.output_dir / name
+        threshold = self.cfg.complexity_thresholds.cyclomatic_complexity
         lines = [
             "# reducto Baseline Analysis Report\n",
             f"**Generated:** {datetime.now().isoformat()}\n\n",
@@ -25,14 +30,59 @@ class Reporter:
             f"| Total Files | {result.total_files} |\n",
             f"| Total Symbols | {result.total_symbols} |\n",
             f"| Complexity Hotspots | {len(result.hotspots)} |\n\n",
+            f"Hotspots are symbols with cyclomatic complexity ≥ {threshold}.\n\n",
         ]
         if result.hotspots:
             lines.append(
-                "## Complexity Hotspots\n\n| File | Line | Symbol | CC |\n|------|------|--------|----|\n"
+                "## Complexity Hotspots\n\n"
+                "| File | Line | Symbol | Cyclomatic | Cognitive |\n"
+                "|------|------|--------|------------|-----------|\n"
             )
             for hs in result.hotspots:
                 lines.append(
-                    f"| {hs.file} | {hs.line} | {hs.symbol} | {hs.cyclomatic_complexity} |\n"
+                    f"| {hs.file} | {hs.line} | {hs.symbol} | "
+                    f"{hs.cyclomatic_complexity} | {hs.cognitive_complexity} |\n"
+                )
+        path.write_text("".join(lines))
+        return path
+
+    def generate_check(self, result: dict) -> Path:
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        name = f"reducto-check-{datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
+        path = self.output_dir / name
+        lines = [
+            "# reducto Quality Check Report\n",
+            f"**Generated:** {datetime.now().isoformat()}\n\n",
+            "## Summary\n\n",
+            "| Metric | Value |\n|--------|-------|\n",
+            f"| Total Issues | {result.get('total_issues', 0)} |\n",
+            f"| Critical | {result.get('critical', 0)} |\n",
+            f"| Warning | {result.get('warning', 0)} |\n",
+            f"| Info | {result.get('info', 0)} |\n\n",
+        ]
+        issues = result.get("issues") or []
+        if issues:
+            lines.append(
+                "## Issues\n\n"
+                "| Severity | Type | File | Line | Symbol | Message | Suggestion |\n"
+                "|----------|------|------|------|--------|---------|------------|\n"
+            )
+            for i in issues:
+                lines.append(
+                    "| "
+                    + " | ".join(
+                        _md_cell(i.get(k, ""))
+                        for k in (
+                            "severity",
+                            "issue_type",
+                            "file",
+                            "line",
+                            "symbol",
+                            "message",
+                            "suggestion",
+                        )
+                    )
+                    + " |\n"
                 )
         path.write_text("".join(lines))
         return path

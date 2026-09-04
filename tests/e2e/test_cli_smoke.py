@@ -13,12 +13,13 @@ def _parses(path) -> bool:
         return False
 
 
-def _run_cli(*args: str) -> subprocess.CompletedProcess:
+def _run_cli(*args: str, cwd=None) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, "-m", "reducto.cli", *args],
         capture_output=True,
         text=True,
         timeout=180,
+        cwd=cwd,
     )
 
 
@@ -28,17 +29,65 @@ def test_help():
     assert "analyze" in r.stdout
 
 
+def test_analyze_help_flags():
+    r = _run_cli("analyze", "--help")
+    assert r.returncode == 0
+    assert "--verbose" in r.stdout and "-v" in r.stdout
+    assert "--report" in r.stdout and "-r" in r.stdout
+
+
+def test_check_help_flags():
+    r = _run_cli("check", "--help")
+    assert r.returncode == 0
+    assert "--verbose" in r.stdout and "-v" in r.stdout
+    assert "--report" in r.stdout and "-r" in r.stdout
+
+
 def test_analyze_sample_repo(sample_repo):
     r = _run_cli("analyze", str(sample_repo))
     assert r.returncode == 0
     assert "Files:" in r.stdout
     assert "Symbols: 0" not in r.stdout  # parser must extract symbols
+    assert "cyclomatic=" not in r.stdout
 
 
 def test_check_sample_repo(sample_repo):
     r = _run_cli("check", str(sample_repo))
     assert r.returncode == 0
     assert "Issues:" in r.stdout
+    assert "long_function" not in r.stdout
+    assert "high_complexity" not in r.stdout
+
+
+def test_analyze_verbose_lists_hotspots(sample_repo):
+    r = _run_cli("analyze", str(sample_repo), "-v")
+    assert r.returncode == 0
+    assert "Files:" in r.stdout
+    assert "cyclomatic=" in r.stdout
+
+
+def test_analyze_report_writes_baseline(sample_repo):
+    r = _run_cli("analyze", ".", "-r", cwd=sample_repo)
+    assert r.returncode == 0
+    assert "Baseline report:" in r.stdout
+    assert list((sample_repo / ".reducto").glob("reducto-baseline-*.md"))
+
+
+def test_check_verbose_lists_issues(sample_repo):
+    r = _run_cli("check", str(sample_repo), "-v")
+    assert r.returncode == 0
+    assert "Issues:" in r.stdout
+    assert "long_function" in r.stdout or "high_complexity" in r.stdout
+
+
+def test_check_report_writes_markdown(sample_repo):
+    r = _run_cli("check", ".", "-r", cwd=sample_repo)
+    assert r.returncode == 0
+    assert "Quality report:" in r.stdout
+    reports = list((sample_repo / ".reducto").glob("reducto-check-*.md"))
+    assert reports
+    text = reports[0].read_text()
+    assert "long_function" in text or "high_complexity" in text
 
 
 def test_idiomatize_sample_repo(sample_repo):

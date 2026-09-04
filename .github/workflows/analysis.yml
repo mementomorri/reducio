@@ -35,12 +35,15 @@ jobs:
           test -n "$(ls -1 .reducto/reducto-baseline-*.md 2>/dev/null | head -1)"
 
       - name: Quality check
-        run: reducto check test-python-code/python
+        run: |
+          reducto check test-python-code/python --report
+          test -n "$(ls -1 .reducto/reducto-check-*.md 2>/dev/null | head -1)"
 
       - name: Stage reports for upload
         run: |
           mkdir -p ci-reports
           cp -v .reducto/reducto-baseline-*.md ci-reports/
+          cp -v .reducto/reducto-check-*.md ci-reports/
           ls -la ci-reports/
 
       - name: Upload analysis reports

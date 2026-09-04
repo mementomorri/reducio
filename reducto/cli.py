@@ -69,7 +69,7 @@ def analyze(
     path: Path = typer.Argument(Path("."), help="Repository path"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
-    report: bool = typer.Option(False, "--report"),
+    report: bool = typer.Option(False, "--report", "-r"),
     model: str = typer.Option("", "--model"),
     prefer_local: bool = typer.Option(True, "--prefer-local"),
     prefer_remote: bool = typer.Option(False, "--prefer-remote"),
@@ -81,6 +81,16 @@ def analyze(
     typer.echo(
         f"Files: {result.total_files}  Symbols: {result.total_symbols}  Hotspots: {len(result.hotspots)}"
     )
+    if verbose:
+        if result.hotspots:
+            for h in result.hotspots:
+                typer.echo(
+                    f"{h.file}:{h.line}  {h.symbol}  "
+                    f"cyclomatic={h.cyclomatic_complexity}  cognitive={h.cognitive_complexity}"
+                )
+        else:
+            th = cfg.complexity_thresholds.cyclomatic_complexity
+            typer.echo(f"No hotspots (cyclomatic >= {th})")
     if report:
         p = Reporter(cfg).generate_baseline(result)
         typer.echo(f"Baseline report: {p}")
@@ -181,14 +191,27 @@ def check(
     path: Path = typer.Argument(Path(".")),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    report: bool = typer.Option(False, "--report", "-r"),
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
     cfg = _get_cfg(config, verbose, "", True, False)
     svc = App(_resolve_repo(path), cfg)
     result = _run(svc.check(str(path)))
     typer.echo(
-        f"Issues: {result['total_issues']} (critical={result['critical']}, warning={result['warning']})"
+        f"Issues: {result['total_issues']} "
+        f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
     )
+    if verbose:
+        for i in result["issues"]:
+            typer.echo(
+                f"{i['severity']}  {i['issue_type']}  {i['file']}:{i['line']}  "
+                f"{i['symbol']}  {i['message']}"
+            )
+            if i.get("suggestion"):
+                typer.echo(f"  {i['suggestion']}")
+    if report:
+        p = Reporter(cfg).generate_check(result)
+        typer.echo(f"Quality report: {p}")
 
 
 @app.command()
