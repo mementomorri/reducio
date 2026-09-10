@@ -5,61 +5,124 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  analyze:
+  overview:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-
       - name: Install
-        run: pip install -e ".[embeddings]"
+        run: pip install -e ".[reports]"
 
-      - name: Analyze package (dogfood)
-        run: |
-          OUT=$(reducto analyze reducto/ --report -v)
-          echo "$OUT"
-          echo "$OUT" | grep -qv "Symbols: 0" || { echo "PARSE REGRESSION: zero symbols"; exit 1; }
-          test -n "$(ls -1 .reducto/reducto-baseline-*.md 2>/dev/null | head -1)"
+      - name: Analyze package
+        run: reducto analyze reducto/ --report --format all --output-dir ci-reports/overview -v
 
-      - name: Analyze fixture corpus
+      - name: Validate structured result
         run: |
-          OUT=$(reducto analyze test-python-code/python --report -v)
-          echo "$OUT"
-          echo "$OUT" | grep -qv "Symbols: 0" || { echo "PARSE REGRESSION: zero symbols"; exit 1; }
-          echo "$OUT" | grep -Eq "Hotspots: [1-9]" || { echo "no hotspots detected"; exit 1; }
-          test -n "$(ls -1 .reducto/reducto-baseline-*.md 2>/dev/null | head -1)"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = list(Path("ci-reports/overview").glob("*.json"))
+          assert len(reports) == 1, "Expected one overview"
+          result = json.loads(reports[0].read_text())
+          assert result["complete"], "Analysis is incomplete"
+          assert result["total_symbols"] > 0 and result["functions"], "Parser produced no functions"
+          assert result["total_hotspots"] == len(result["hotspots"])
+          PY
 
       - name: Quality check
         run: |
-          reducto check test-python-code/python --report
-          test -n "$(ls -1 .reducto/reducto-check-*.md 2>/dev/null | head -1)"
+          reducto check reducto/ --report
+          cp .reducto/reducto-check-*.md ci-reports/overview/
 
-      - name: Stage reports for upload
-        run: |
-          mkdir -p ci-reports
-          cp -v .reducto/reducto-baseline-*.md ci-reports/
-          cp -v .reducto/reducto-check-*.md ci-reports/
-          ls -la ci-reports/
-
-      - name: Upload analysis reports
+      - name: Upload overview
+        id: reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reducto-analysis-reports
-          path: ci-reports/
-          if-no-files-found: error
+          name: reducto-overview
+          path: ci-reports/overview/
+          if-no-files-found: warn
 
       - name: Job summary
         if: always()
+        env:
+          REPORT_URL: ${{ steps.reports.outputs.artifact-url }}
         run: |
-          REPORT=$(ls -t .reducto/reducto-baseline-*.md 2>/dev/null | head -1)
-          {
-            echo "## reducto analysis"
-            echo "Latest report: \`$REPORT\`"
-            echo ""
-            head -80 "$REPORT"
-          } >> "$GITHUB_STEP_SUMMARY"
+          for report in ci-reports/overview/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [ -n "$REPORT_URL" ]; then
+            echo "[Download full reports — unzip and open the HTML dashboard]($REPORT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Reports unavailable; inspect the failed step above." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  comparison:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install
+        run: pip install -e ".[reports]"
+
+      - name: Resolve PR comparison
+        id: revisions
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          echo "base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
+
+      - name: Compare changed package files
+        env:
+          BASE_SHA: ${{ steps.revisions.outputs.base }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          reducto compare reducto/ --base "$BASE_SHA" --head "$HEAD_SHA" \
+            --report --format all --output-dir ci-reports/comparison -v
+
+      - name: Upload comparison
+        id: reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reducto-comparison
+          path: ci-reports/comparison/
+          if-no-files-found: warn
+
+      - name: Job summary
+        if: always()
+        env:
+          REPORT_URL: ${{ steps.reports.outputs.artifact-url }}
+        run: |
+          for report in ci-reports/comparison/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [ -n "$REPORT_URL" ]; then
+            echo "[Download full reports — unzip and open the HTML dashboard]($REPORT_URL)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Comparison unavailable; inspect the failed step above." >> "$GITHUB_STEP_SUMMARY"
+          fi

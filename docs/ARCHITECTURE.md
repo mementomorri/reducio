@@ -24,7 +24,10 @@ User
 | `services.py` | `App`: orchestrates agents, apply, embedding lazy init |
 | `workspace.py` | Files, symbols, diffs, git, tests |
 | `repo.py` | Walk repo; include `*.py` by default; `detect_language` → Python or unknown |
-| `parse.py` | Tree-sitter Python symbols and complexity heuristics |
+| `parse.py` | Tree-sitter symbols for refactoring; compatibility metric import |
+| `metrics.py`, `analysis.py` | Shared AST metrics and complete function analysis |
+| `compare.py` | Read-only Git blob snapshots, changed-file selection, function matching |
+| `visual_report.py` | Markdown, JSON, and optional offline Plotly HTML dashboards |
 | `diff.py` | Apply unified diffs with context validation (raises `DiffError` on mismatch) |
 | `git_safety.py` | Checkpoint, rollback (GitPython) |
 | `runner.py` | `pytest` / `unittest` for Python projects |
@@ -41,8 +44,16 @@ User
 ### Analyze
 
 1. `repo.walk` → `.py` files only (per `include_patterns`).
-2. `parse.get_symbols` per file.
-3. Hotspots where cyclomatic complexity ≥ threshold.
+2. `analysis.analyze_files` parses AST, extracts symbols and independent function metrics.
+3. All hotspots where cyclomatic complexity ≥ threshold; explicit parse diagnostics.
+4. `visual_report` renders one shared result as Markdown/JSON/HTML when requested.
+
+### Compare
+
+`cli.compare` → `compare_revisions`: resolve exact commits, list changed paths and
+Git renames, read regular blobs without checkout, analyze both snapshots using
+the same configuration, match qualified function names, and render deltas.
+No target imports, LLM calls, tests, or working-tree edits. See [CI.md](CI.md).
 
 ### Deduplicate / idiomatize / pattern / check
 
@@ -61,7 +72,7 @@ overwrite an existing file. See [SAFETY.md](SAFETY.md) for the full guarantees a
 
 - PyPI: `reducto`, entrypoint `reducto.cli:app`
 - **Python 3.14+**
-- Extras: `embeddings`, `dev`
+- Extras: `embeddings`, `reports`, `dev`
 - Docker: `.[embeddings]`, `ENTRYPOINT ["reducto"]`
 
 ## External dependencies
@@ -70,7 +81,8 @@ overwrite an existing file. See [SAFETY.md](SAFETY.md) for the full guarantees a
 |---------|------------|
 | CLI | Typer |
 | Models | Pydantic v2 |
-| Parse | tree-sitter-python |
+| Parse | Python AST (metrics), tree-sitter-python (refactoring symbols) |
+| Dashboards | Plotly, optional `[reports]` extra |
 | LLM | LiteLLM |
 | VCS | GitPython |
 | Dedup | ChromaDB, sentence-transformers |

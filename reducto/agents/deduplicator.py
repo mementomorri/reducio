@@ -71,6 +71,10 @@ class DeduplicatorAgent(BaseAgent):
                 lines = f.content.split("\n")
                 end = min(sym.end_line, len(lines))
                 content = "\n".join(lines[sym.start_line - 1 : end])
+                try:
+                    metrics = get_complexity(content)
+                except SyntaxError, ValueError:
+                    continue  # invalid snippets have no trustworthy numeric score
                 blocks.append(
                     CodeBlock(
                         id=f"{f.path}:{sym.start_line}:{sym.name}",
@@ -81,7 +85,7 @@ class DeduplicatorAgent(BaseAgent):
                         language=lang,
                         symbol_type=sym.type,
                         symbol_name=sym.name,
-                        metrics=get_complexity(content),
+                        metrics=metrics,
                     )
                 )
         return blocks

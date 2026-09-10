@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from reducto import parse
+from reducto.metrics import line_decisions, measure_functions
 from reducto.models import (
     ComplexityThresholds,
     FileInfo,
@@ -17,7 +17,6 @@ from reducto.repo import detect_language
 from reducto.utils.code_utils import (
     extract_class_name,
     extract_python_function_name,
-    find_python_block_end,
     to_pascal_case,
     to_snake_case,
 )
@@ -105,9 +104,20 @@ class QualityCheckerAgent:
         lines = content.split("\n")
         issues = []
         issues.extend(self._check_variable_names(file_path, lines))
-        issues.extend(self._check_function_length(file_path, lines))
-        issues.extend(self._check_function_complexity(file_path, content))
-        issues.extend(self._check_complexity(file_path, lines))
+        try:
+            issues.extend(self._check_function_length(file_path, lines))
+            issues.extend(self._check_function_complexity(file_path, content))
+            issues.extend(self._check_complexity(file_path, lines))
+        except (SyntaxError, ValueError) as error:
+            issues.append(
+                QualityIssue(
+                    file=file_path,
+                    line=getattr(error, "lineno", None) or 1,
+                    issue_type="parse_error",
+                    severity="warning",
+                    message=f"Metrics unavailable: {getattr(error, 'msg', str(error))}",
+                )
+            )
         issues.extend(self._check_naming_conventions(file_path, lines))
         return issues
 
@@ -201,19 +211,16 @@ class QualityCheckerAgent:
 
     def _check_function_length(self, file_path: str, lines: list[str]) -> list[QualityIssue]:
         issues = []
-        for i, line in enumerate(lines):
-            stripped = line.strip()
-            if not (stripped.startswith("def ") or stripped.startswith("async def ")):
-                continue
-            func_name = extract_python_function_name(stripped) or "anonymous"
-            func_length = find_python_block_end(lines, i) - i
+        for function in measure_functions("\n".join(lines), file_path):
+            func_name = function.qualified_name
+            func_length = function.lines_of_code
             if func_length <= self.max_function_lines:
                 continue
             severity = "critical" if func_length > self.max_function_lines * 2 else "warning"
             issues.append(
                 QualityIssue(
                     file=file_path,
-                    line=i + 1,
+                    line=function.line,
                     issue_type="long_function",
                     severity=severity,
                     message=(
@@ -228,27 +235,22 @@ class QualityCheckerAgent:
 
     def _check_function_complexity(self, file_path: str, content: str) -> list[QualityIssue]:
         issues = []
-        lines = content.split("\n")
-        for sym in parse.get_symbols(content, file_path):
-            if sym.type not in ("function", "method"):
-                continue
-            end = min(sym.end_line, len(lines))
-            block = "\n".join(lines[sym.start_line - 1 : end])
-            cc = parse.get_complexity(block).cyclomatic_complexity
+        for sym in measure_functions(content, file_path):
+            cc = sym.cyclomatic_complexity
             if cc < self.max_complexity:
                 continue
             severity = "critical" if cc >= self.max_complexity * 2 else "warning"
             issues.append(
                 QualityIssue(
                     file=file_path,
-                    line=sym.start_line,
+                    line=sym.line,
                     issue_type="high_complexity_function",
                     severity=severity,
                     message=(
-                        f"Function '{sym.name}' has cyclomatic complexity {cc} "
+                        f"Function '{sym.qualified_name}' has cyclomatic complexity {cc} "
                         f"(max {self.max_complexity})"
                     ),
-                    symbol=sym.name,
+                    symbol=sym.qualified_name,
                     suggestion="Consider extracting branches into smaller functions",
                 )
             )
@@ -257,11 +259,7 @@ class QualityCheckerAgent:
     def _check_complexity(self, file_path: str, lines: list[str]) -> list[QualityIssue]:
         issues = []
 
-        complexity_keywords = ["if ", "elif ", "else:", "for ", "while ", "except ", "and ", "or "]
-
-        for line_num, line in enumerate(lines, 1):
-            complexity = sum(line.count(kw) for kw in complexity_keywords)
-
+        for line_num, complexity in sorted(line_decisions("\n".join(lines)).items()):
             if complexity > 3:
                 issues.append(
                     QualityIssue(

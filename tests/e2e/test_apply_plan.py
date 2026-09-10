@@ -36,4 +36,5 @@ def test_cli_check_smoke():
         text=True,
         timeout=120,
     )
-    assert r.returncode == 0
+    assert r.returncode == 1  # fixture corpus includes invalid Python
+    assert "Quality check incomplete" in r.stderr

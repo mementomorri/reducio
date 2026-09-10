@@ -45,7 +45,8 @@ def test_check_help_flags():
 
 def test_analyze_sample_repo(sample_repo):
     r = _run_cli("analyze", str(sample_repo))
-    assert r.returncode == 0
+    assert r.returncode == 1  # corpus deliberately includes invalid Python
+    assert "Metrics unavailable" in r.stderr
     assert "Files:" in r.stdout
     assert "Symbols: 0" not in r.stdout  # parser must extract symbols
     assert "cyclomatic=" not in r.stdout
@@ -53,7 +54,7 @@ def test_analyze_sample_repo(sample_repo):
 
 def test_check_sample_repo(sample_repo):
     r = _run_cli("check", str(sample_repo))
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Issues:" in r.stdout
     assert "long_function" not in r.stdout
     assert "high_complexity" not in r.stdout
@@ -61,28 +62,28 @@ def test_check_sample_repo(sample_repo):
 
 def test_analyze_verbose_lists_hotspots(sample_repo):
     r = _run_cli("analyze", str(sample_repo), "-v")
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Files:" in r.stdout
     assert "cyclomatic=" in r.stdout
 
 
 def test_analyze_report_writes_baseline(sample_repo):
     r = _run_cli("analyze", ".", "-r", cwd=sample_repo)
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Baseline report:" in r.stdout
     assert list((sample_repo / ".reducto").glob("reducto-baseline-*.md"))
 
 
 def test_check_verbose_lists_issues(sample_repo):
     r = _run_cli("check", str(sample_repo), "-v")
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Issues:" in r.stdout
     assert "long_function" in r.stdout or "high_complexity" in r.stdout
 
 
 def test_check_report_writes_markdown(sample_repo):
     r = _run_cli("check", ".", "-r", cwd=sample_repo)
-    assert r.returncode == 0
+    assert r.returncode == 1
     assert "Quality report:" in r.stdout
     reports = list((sample_repo / ".reducto").glob("reducto-check-*.md"))
     assert reports

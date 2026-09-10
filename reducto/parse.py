@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from functools import lru_cache
 
 import tree_sitter_python as tspython
 from tree_sitter import Language as TSLanguage
 from tree_sitter import Parser
 
-from reducto.models import ComplexityMetrics, Language, Symbol
+from reducto.metrics import get_complexity as get_complexity
+from reducto.models import Language, Symbol
 
 
 @lru_cache(maxsize=1)
@@ -79,28 +79,3 @@ def _python_block_end(lines: list[str], start: int) -> int:
         if line.strip() and (len(line) - len(line.lstrip())) <= base:
             return i
     return len(lines)
-
-
-_NESTERS = ("if ", "elif ", "for ", "while ", "with ", "except")
-# ponytail: word-boundary match so "for" isn't counted as "or", "editor" isn't "or",
-# "elif" isn't "if". Still counts keywords inside string literals — acceptable heuristic.
-_DECISION = re.compile(r"\b(?:if|elif|for|while|and|or)\b")
-
-
-def get_complexity(content: str) -> ComplexityMetrics:
-    """Cyclomatic (McCabe, base 1) and cognitive (nesting-weighted) complexity."""
-    metrics = ComplexityMetrics(lines_of_code=max(1, content.count("\n") + 1))
-    metrics.cyclomatic_complexity = 1
-    base_indent: int | None = None
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        metrics.cyclomatic_complexity += len(_DECISION.findall(stripped))
-        if base_indent is None:
-            base_indent = len(line) - len(line.lstrip())
-        depth = max(0, (len(line) - len(line.lstrip()) - base_indent) // 4 - 1)
-        if stripped.startswith(_NESTERS) or stripped.startswith("else:"):
-            metrics.cognitive_complexity += 1 + depth
-        metrics.cognitive_complexity += stripped.count(" and ") + stripped.count(" or ")
-    return metrics

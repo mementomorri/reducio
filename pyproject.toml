@@ -22,6 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+reports = ["plotly>=6,<8"]
 embeddings = [
     "chromadb>=1.5.0",
     "sentence-transformers>=2.2.0",
@@ -53,6 +54,9 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501", "F841", "W291", "W293"]
+
+[tool.ruff.lint.per-file-ignores]
+"reducto/metrics.py" = ["N802", "N815"] # ast.NodeVisitor dispatch requires visit_NodeName
 
 [tool.black]
 line-length = 100

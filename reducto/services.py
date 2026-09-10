@@ -106,8 +106,8 @@ class App:
             )
         if self.cfg.commit_changes:
             self.workspace.commit_changes(f"reducto: {plan.description[:72]}", plan.changes)
-        before = sum(c.original.count("\n") + 1 for c in plan.changes if c.original)
-        after = sum(c.modified.count("\n") + 1 for c in plan.changes if c.modified)
+        before = sum(len(c.original.splitlines()) for c in plan.changes if c.original)
+        after = sum(len(c.modified.splitlines()) for c in plan.changes if c.modified)
         return RefactorResult(
             session_id=plan.session_id,
             success=True,

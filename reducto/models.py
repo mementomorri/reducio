@@ -3,7 +3,7 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 
 class Language(StrEnum):
@@ -111,12 +111,87 @@ class ComplexityHotspot(BaseModel):
     cognitive_complexity: int
 
 
+class FunctionMetrics(ComplexityMetrics):
+    # Inherited for compatibility, but not measured or published as a fake zero.
+    maintainability_index: float = Field(default=0.0, exclude=True)
+    file: str
+    name: str
+    qualified_name: str
+    kind: str = "function"
+    line: int
+    end_line: int
+
+
+class AnalysisDiagnostic(BaseModel):
+    file: str
+    message: str
+    line: int | None = None
+    revision: str | None = None
+
+
 class AnalyzeResult(BaseModel):
     total_files: int
     total_symbols: int
     hotspots: list[ComplexityHotspot]
     duplicates: list[DuplicateGroup] = Field(default_factory=list)
     symbols: list[Symbol] = Field(default_factory=list)
+    metrics_version: int = 2
+    scope: str = "."
+    configuration: dict = Field(default_factory=dict)
+    functions: list[FunctionMetrics] = Field(default_factory=list)
+    file_lines: dict[str, int] = Field(default_factory=dict)
+    diagnostics: list[AnalysisDiagnostic] = Field(default_factory=list)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def complete(self) -> bool:
+        return not self.diagnostics
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_hotspots(self) -> int:
+        return len(self.hotspots)
+
+
+class FunctionComparison(BaseModel):
+    before: FunctionMetrics | None = None
+    after: FunctionMetrics | None = None
+    status: str
+    cyclomatic_delta: int | None = None
+    cognitive_delta: int | None = None
+    lines_delta: int | None = None
+    new_hotspot: bool = False
+    resolved_hotspot: bool = False
+
+
+class CompareResult(BaseModel):
+    metrics_version: int = 2
+    scope: str = "."
+    base_revision: str
+    head_revision: str
+    configuration: dict = Field(default_factory=dict)
+    files: list[dict[str, str | None]] = Field(default_factory=list)
+    before: AnalyzeResult
+    after: AnalyzeResult
+    changes: list[FunctionComparison] = Field(default_factory=list)
+    diagnostics: list[AnalysisDiagnostic] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def complete(self) -> bool:
+        return self.before.complete and self.after.complete and not self.diagnostics
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def counts(self) -> dict[str, int]:
+        counts = {
+            status: sum(c.status == status for c in self.changes)
+            for status in ("improved", "regressed", "mixed", "unchanged", "added", "removed")
+        }
+        counts["new_hotspots"] = sum(c.new_hotspot for c in self.changes)
+        counts["resolved_hotspots"] = sum(c.resolved_hotspot for c in self.changes)
+        return counts
 
 
 class ModelTier(StrEnum):

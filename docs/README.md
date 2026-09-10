@@ -19,7 +19,7 @@ pip install "reducto[embeddings]"
 ### From source
 
 ```bash
-git clone https://github.com/alexkarsten/reducto.git
+git clone https://github.com/mementomorri/reducto.git
 cd reducto
 pip install -e ".[embeddings]"
 ```
@@ -29,6 +29,7 @@ pip install -e ".[embeddings]"
 | Extra | Purpose |
 |-------|---------|
 | `embeddings` | Semantic deduplication (ChromaDB + sentence-transformers) |
+| `reports` | Self-contained interactive HTML dashboards (Plotly); Markdown/JSON need no extra |
 | `dev` | pytest, ruff, black, mypy (contributors) |
 
 ### Quick install script
@@ -56,6 +57,7 @@ Run commands from the root of a **Python project** (with `.py` sources):
 
 ```bash
 reducto analyze .              # Complexity hotspots and symbols
+reducto compare . --base HEAD~1 # Changed-file complexity vs a committed revision
 reducto deduplicate .          # Similar blocks → proposed utils modules
 reducto idiomatize .           # Pythonic heuristics (comprehensions, etc.)
 reducto pattern factory .      # Design-pattern templates
@@ -81,6 +83,11 @@ reducto sessions list          # List saved sessions
 - `--model` — LLM override (e.g. `gpt-4o`, `ollama/qwen2.5-coder:1.5b`)
 - `--prefer-local` / `--prefer-remote` — Ollama vs cloud models
 
+For `analyze` and `compare`, add `--report --format all` for Markdown, JSON, and an
+offline HTML dashboard, or choose one format. `--output-dir` controls where those
+reports go. Comparison is informational; parse/read failures exit nonzero and
+produce incomplete reports. See [Reports and CI](CI.md) and [Metrics v2](METRICS.md).
+
 ## Architecture
 
 Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (LiteLLM + optional embeddings). Plans persist under `.reducto/sessions/`.
@@ -93,6 +100,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md).
 |-----|-------------|
 | [ONBOARDING.md](ONBOARDING.md) | Setup, layout, CI, extension points |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Modules and request flows |
+| [CI.md](CI.md) | Dashboards, revision comparison, GitHub summaries and artifacts |
+| [METRICS.md](METRICS.md) | Versioned syntax-aware metrics and interpretation |
 | [SAFETY.md](SAFETY.md) | Apply/rollback safety model and guarantees |
 | [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md) | pytest and CI |
 | [TEST_RULES.md](TEST_RULES.md) | Acceptance criteria |

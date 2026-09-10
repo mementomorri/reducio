@@ -36,7 +36,7 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 cd /path/to/reducto
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,embeddings]"
+pip install -e ".[dev,embeddings,reports]"
 reducto version
 pytest tests/ -v
 ```
@@ -58,7 +58,8 @@ exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
 
 | CLI | `App` method | Notes |
 |-----|--------------|-------|
-| `analyze` | `analyze` | Static; tree-sitter + complexity |
+| `analyze` | `analyze` | Static; AST symbols and shared metrics v2 |
+| `compare` | Direct `compare_revisions` | Read-only Git snapshots; changed-file function deltas |
 | `deduplicate` | `deduplicate` | Embeddings on Python functions/methods |
 | `idiomatize` | `idiomatize` | Python heuristics only |
 | `pattern` | `pattern` | Template `.py` modules |
@@ -76,7 +77,10 @@ exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
 | Workflow | Role |
 |----------|------|
 | `test.yml` | pytest, lint, wheel |
-| `analysis.yml` | Dogfood on `reducto/` and fixtures |
+| `analysis.yml` | Source overview on pushes/manual runs; independent PR comparison job |
+
+See [CI.md](CI.md) for report access and [METRICS.md](METRICS.md) before changing
+counting rules. Fixtures are validated by pytest, including known parse failures.
 
 ## Smoke
 

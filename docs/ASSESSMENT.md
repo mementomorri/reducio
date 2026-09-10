@@ -1,0 +1,246 @@
+# Implementation assessment
+
+Reviewed **2026-09-10**, against `main` at **`1e79b7b`** (`feat(cli): verbose
+listings and check reports`). Package version: **1.0.0**, Python **3.14+**.
+Canonical repository, confirmed by the maintainer: **`mementomorri/reducto`**.
+
+This assessment includes the implementation update below and the original audit.
+The actionable backlog is
+[TODO.md](../TODO.md), ordered from small corrections to larger decisions. Its
+order reflects effort; the release blockers below reflect severity.
+
+## Implementation update — metrics and CI reporting
+
+Implemented locally after the baseline commit:
+
+- Mandatory **metrics v2**: AST decisions, independent functions/methods, no class
+  double-counting, uncapped hotspot counts, physical LOC, explicit parse failures.
+  `analyze`, `check`, and `compare` share these rules; cognitive is explicitly a
+  custom Reducto score, not Sonar-compatible. See [METRICS.md](METRICS.md).
+- **`compare`** reads committed changed-file blobs without checkout or target
+  execution. It matches qualified function names and Git-detected file renames;
+  additions/removals are separate from matched-function deltas.
+- **Markdown, JSON, and offline HTML dashboards**, with `--format` and
+  `--output-dir` on analysis/comparison. Full data is retained; display lists are
+  capped at 20. Legacy apply-session reports still lack complexity deltas.
+- **Separate CI jobs**: source overview on pushes/manual runs, merge-base-to-head
+  comparison on PRs. Summary tables and distinct downloadable artifacts; available
+  reports upload after failures. Complexity verdicts are informational. The old
+  log-grep parser guard is replaced by JSON validation with regression tests.
+- Fixture parse failures are explicit and tested; tracked fixtures are unchanged.
+  The roadmap now distinguishes shipped features from incomplete modifier safety.
+
+Local verification: **169 tests passed, 80.88% coverage**; Ruff, Black, mypy, and
+wheel/sdist build passed. The metric engine reached 100% statement coverage.
+Browser inspection rendered all three overview and four comparison charts with
+**no page errors or external requests**. See [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md)
+for test commands. Remote GitHub execution has not been run from this checkout.
+Usage and result access: [CI.md](CI.md). Existing local edits to `SAFETY.md` were
+preserved; no modifying refactor was run on this checkout.
+
+## Verdict
+
+**The v1 feature set exists, but automatic modification is not production-safe.**
+Static analysis, quality checks, planning, session persistence, and Markdown
+reports work. Several earlier corruption defects have been fixed. However, current
+idiom rewrites can still change program output, and rollback does not reliably
+preserve the state that existed immediately before application.
+
+The previous roadmap's claims of provable correctness and complete semantic safety
+were stronger than the implementation supports and have been corrected. Syntax validation,
+definition-name checks, and passing tests are useful safeguards; they do not prove
+that every proposed transformation preserves behavior.
+
+## Original verified baseline and scope (historical)
+
+The following checks ran locally during this review, using the existing Python
+3.14.7 virtual environment at the commit above:
+
+| Check | Result |
+| --- | --- |
+| `pytest -q` | 120 passed; 72.16% coverage; 60% coverage gate passed |
+| `ruff check reducto/ --no-cache` | Passed |
+| `black --check reducto/` | Passed; 27 source files unchanged |
+| `mypy reducto/ --ignore-missing-imports` | Passed; notes about unchecked untyped function bodies |
+| `reducto version` | `reducto 1.0.0` |
+| `reducto analyze reducto/ -v` | 27 files, 215 symbols, 20 reported hotspots |
+| `reducto check reducto/` | 58 issues: 0 critical, 51 warning, 7 info |
+
+The counts above came from the old metric engine. They are not comparable to v2;
+both sides of a new revision comparison are remeasured with the current engine.
+
+Additional probes compared original and rewritten functions in memory, supplied
+stubbed failed apply results to the real CLI, and inspected session path
+resolution without accessing files outside session storage. No refactor was
+applied to this checkout. Remote CI, published packages, and live LLM-provider
+behavior were not independently verified. That original review was documentation-only;
+the implementation update above records subsequent application changes.
+
+## What currently works
+
+| Capability | Actual behavior and limits |
+| --- | --- |
+| Analysis and quality checks | AST symbol extraction, defined syntax-aware function metrics, naming and function-length checks. Explicit unavailable measurements. No LLM required. |
+| Revision comparison | Complete changed-file function metrics at two exact commits; deltas and unmatched additions/removals. No target execution or checkout. |
+| Idiom planning | Produces one whole-file change per file. Skips invalid Python and some accumulator-dependent loops. Remaining unsafe cases are listed below. |
+| Deduplication | Embedding similarity proposes shared utility modules. It does not remove duplicates or rewrite callers. Requires the optional embeddings dependencies for useful results. |
+| Design patterns | Default factory, strategy, observer, and singleton paths produce advisory modules. They do not integrate those templates into existing callers. |
+| Optional LLM rewrites | A configured model enables whole-module rewriting for idiomatize and applicable named patterns. `pattern` currently takes model selection through configuration/environment, not a `--model` CLI flag. |
+| Persistence and reports | Plans are saved as JSON and can be replayed. Analysis/comparison support Markdown/JSON/offline HTML; quality, dry-run, and apply remain Markdown. Plan previews and legacy report locations need improvement. |
+| Apply safeguards | Context-validated diffs, create-over-existing rejection, syntax checks, definition-name checks, and rollback attempts on handled failures exist. They have the limitations below. |
+
+Analysis and dry-run modes leave target source code unchanged, but can create
+`.reducto` directories, reports, and saved plans. They are not strictly free of
+filesystem writes.
+
+The architecture remains one Python process: Typer CLI → `App` services →
+workspace and specialized agents. See [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Earlier findings that are fixed
+
+These should not be carried forward as unresolved defects from the earlier
+assessment:
+
+| Earlier defect | Current implementation |
+| --- | --- |
+| Snippet-relative idiom diffs corrupt the beginning of a file | One full-file change is emitted per file; diff context/removals are validated. |
+| Pattern singleton replaces the source module | Singleton now writes a new advisory module, like the other default patterns. |
+| Some list rewrites read their own accumulator | Simple and filtered list rules now reject explicit accumulator references in the iterable/value/filter. This is a partial semantic fix, not a general proof. |
+| Missing `chromadb` crashes during module import | Import is deferred and missing optional imports follow the unavailable-embeddings path. |
+| Keywords in literals/comments affect complexity | AST metrics v2 ignore non-code text, superseding the earlier word-boundary fix. |
+| Unknown pattern names and file targets cause poor CLI behavior | Main commands validate repository directories; unknown pattern names exit 2. Session commands still need consistent validation. |
+| Missing reports produce an unhandled traceback | Report lookup handles missing reports and considers all generated report types for latest-report lookup. |
+| Idiomatize prints no apply result | It now prints success/failure, although failed application still exits 0. |
+| Apply report LOC values are always zero | Successful application now populates before/after LOC totals. Complexity deltas are still absent. |
+
+The original suite had 120 tests; the 105/112-test figures in older documents
+describe earlier snapshots. Additional metric/report/comparison tests now exist.
+
+## Release blockers
+
+### 1. Idiom rewrites still change behavior
+
+**Reproduced in memory** using the current idiomatizer:
+
+| Original operation | Original result | Result after rewriting |
+| --- | --- | --- |
+| `return "x == None"` | `"x == None"` | `"x is None"` |
+| Start with `out = [99]`, then append each value from `range(2)` | `[99, 0, 1]` | `[0, 1]` |
+| Start with `d = {}`, then assign `d[x] = len(d)` for each value in `range(3)` | `{0: 0, 1: 1, 2: 2}` | `{0: 0, 1: 0, 2: 0}` |
+
+`_compare_to_none` runs regex substitutions across literal text. The list rule
+replaces accumulation with a new assignment without proving the accumulator is
+fresh and unaliased. The dictionary rule does not reject reads from the dictionary
+being built. All three examples remain valid Python and retain their function
+names, so the syntax and definition-name guards cannot detect these failures.
+Target tests could detect them if those behaviors are covered.
+
+**Additional risks identified by code inspection:** equality-chain conversion
+can replace short-circuit evaluation with eager tuple construction; truthiness
+and `len` comparisons can differ for custom objects; overloaded equality can
+make `== None` differ from `is None`. Loop-variable scope, aliases, and complete
+loop bodies also need explicit handling. These broader cases require focused
+behavior tests before declaring the rules safe.
+
+Sources: [idiomatizer.py](../reducto/agents/idiomatizer.py),
+[apply guard](../reducto/services.py). Backlog: **TODO 19–21, 26**.
+
+### 2. Git rollback restores the wrong baseline for dirty targets
+
+**Confirmed in the implementation and the existing passing regression test:**
+checkpoint creation stages all files and commits them. Rollback resets to that
+checkpoint's **parent**, not to the pre-apply contents stored in the checkpoint.
+Pre-existing uncommitted work is therefore discarded from the working tree on
+rollback, although the checkpoint may remain recoverable through Git's reflog.
+
+The existing test starts from `x = 1`, changes it to `x = 2` before checkpointing,
+and expects rollback to restore `x = 1`. It currently locks in the undesirable
+behavior. The saved-plan `apply` command also omits the dirty-tree warning used by
+the other modifying commands.
+
+Recovery needs to preserve staged, unstaged, and untracked user work. Tests must
+also cover newly created advisory files and failed restoration. The choice of
+checkpoint, stash, or snapshot mechanism remains an implementation decision.
+
+Sources: [git_safety.py](../reducto/git_safety.py),
+[workspace.py](../reducto/workspace.py), [test_git.py](../tests/unit/test_git.py),
+[cli.py](../reducto/cli.py). Backlog: **TODO 09, 22**.
+
+### 3. Exceptions can bypass recovery, and rollback status is optimistic
+
+**Identified by code inspection:** failures returned by the test runner trigger
+rollback, but exceptions while launching tests, subprocess timeouts, and some
+post-apply validation errors can escape after writes. `_safe_rollback` suppresses
+`GitError`; callers derive `rolled_back=True` from having a checkpoint/snapshot,
+not from confirming successful restoration.
+
+The entire post-write validation/test phase needs recovery handling, and reported
+rollback status must reflect what actually happened. The runner also uses bare
+`python` and can report test success when no tests ran; interpreter selection and
+passed/failed/not-run outcomes need an explicit contract.
+
+Sources: [workspace.py](../reducto/workspace.py),
+[runner.py](../reducto/runner.py). Backlog: **TODO 23–24**.
+
+## Other current defects and inconsistencies
+
+| Finding | Evidence and impact | TODO |
+| --- | --- | --- |
+| Failed application exits successfully | Reproduced with a stubbed failed apply result: `idiomatize`, `deduplicate`, `pattern`, and `apply` all exit 0. Pattern also ignores the result. | 07–08 |
+| Session IDs can escape storage paths | Reproduced by path resolution only: `../../../outside` resolves outside the configured session directory. File operations need ID/containment validation. | 15 |
+| Configuration is applied inconsistently | Default local-preference arguments overwrite YAML. Missing explicit config paths silently select defaults. The `cfg.verbose` handling is fixed. | 10–11, 28 |
+| Reports and sessions use different roots | Reports default to the caller's working directory; sessions use the target repository. Docker's advertised data-directory variable is unused. | 13 |
+| Plans lack a convenient code preview | Dry-run reports and session display show descriptions; apply approval generally shows a count. Full original/modified text is available in session JSON. | 14 |
+| Advisory modules may be invalid or incomplete | Copied methods retain indentation/class dependencies; extracted functions may lack imports. Destination names can collide across source paths. | 18 |
+| Fallbacks can hide capability failures | Parser initialization failure yields no symbols. Failed LLM rewriting falls back to heuristics/templates without a clear user-facing explanation of the path used. | 17 |
+| Installer instructions do not match the script | Docs pipe to `sh`; the script uses Bash syntax and editable `.` installation, requiring a checkout. Installation CI does not exercise the script. | 12 |
+| Repository identity is inconsistent | The source clone example uses confirmed `mementomorri/reducto`; local origin remains `mementomorri/dehydrator`, and old installer/site links still need reconciliation. | 01 |
+| Task-based model routing is not operational in the normal agent path | A configured model enables rewriting and bypasses tier selection. Tier-selection unit tests do not demonstrate task-based routing in an actual workflow. | 27 |
+
+The repository identity is a confirmed maintainer choice, not inferred from a
+remote lookup. No Git remote setting was changed during this review. The package
+version and locally available tags alone do not establish what has been published.
+
+## Test coverage and documentation gaps
+
+The CLI has subprocess smoke tests and new in-process analysis/comparison tests.
+Coverage now measures the latter, but not the subprocesses. Several older tests
+assert exit status or syntax
+without asserting successful application or preserved runtime behavior; the
+reproductions above demonstrate why those distinctions matter.
+
+Add behavior comparisons for rewritten functions, approval-decline cases,
+failed-apply exit codes, dirty-state preservation, and runner/recovery exceptions.
+Measure CLI execution either through subprocess coverage or focused `CliRunner`
+tests. Keep live provider/model integration results distinct from mocked tests.
+
+[TEST_RULES.md](TEST_RULES.md) also mixes implemented behavior with future goals:
+dependency mapping, side-by-side previews, before/after complexity deltas,
+duplicate-removal statistics, and task-based routing are not all implemented.
+Default pattern templates are advisory modules. Richer analysis/comparison reports
+are now implemented; apply preview improvements remain planned.
+Backlog: **TODO 02–05, 16**.
+
+## Roadmap position and next steps
+
+The implementation has reached the **v1 feature milestone**, but the modifier's
+**safety milestone remains incomplete**. Keep the fixes already delivered under
+P0–P3 recorded as completed work; revise their broad safety conclusions to account
+for the remaining blockers rather than describing those individual fixes as absent.
+
+Recommended sequencing:
+
+1. Finish repository links, stale documentation, and modifier CLI result/exit
+   handling. The CI parser assertion is fixed.
+2. Resolve behavior-changing idioms and reliable recovery before promoting
+   automatic modification as production-safe. Add tests for the concrete failures.
+3. Improve configuration, plan review, legacy report locations, and target test
+   execution. Shared metric correctness and revision reporting are implemented.
+4. Decide model-routing policy and the scope of real deduplication. Caller
+   rewriting requires cross-file dependency/reference handling. Pre-commit
+   integration and broader orchestration remain subsequent features.
+
+Unused-code cleanup and replacing parsing, Git, or formatting libraries are
+optional design work. They should not be mistaken for fixes to the correctness
+defects above. The detailed tasks and unresolved design choices remain in
+[TODO.md](../TODO.md), especially **26–30**.

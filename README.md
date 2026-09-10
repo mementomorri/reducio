@@ -10,6 +10,9 @@ pip install "reducto[embeddings]"
 reducto analyze .
 ```
 
+For interactive reports and revision comparisons, install `reducto[reports]` and
+see [Reports and CI](docs/CI.md). Counting rules: [Metrics v2](docs/METRICS.md).
+
 Requires **Python 3.14+**. Only **`.py`** files in the target repository are analyzed.
 
 ## License

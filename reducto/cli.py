@@ -8,12 +8,15 @@ from pathlib import Path
 import typer
 
 from reducto import __version__
+from reducto.analysis import analysis_configuration, analyze_files
+from reducto.compare import CompareError, compare_revisions
 from reducto.config import apply_env, load_config
 from reducto.git_safety import GitSafety
-from reducto.models import AppConfig
+from reducto.models import AnalysisDiagnostic, AppConfig, CompareResult
 from reducto.reporter import Reporter
 from reducto.services import App
 from reducto.session import SessionStore
+from reducto.visual_report import ReportError, ReportFormat, write_reports
 
 app = typer.Typer(
     name="reducto",
@@ -73,6 +76,10 @@ def analyze(
     model: str = typer.Option("", "--model"),
     prefer_local: bool = typer.Option(True, "--prefer-local"),
     prefer_remote: bool = typer.Option(False, "--prefer-remote"),
+    format: ReportFormat = typer.Option(
+        ReportFormat.MARKDOWN, "--format", help="Format used with --report"
+    ),
+    output_dir: Path = typer.Option(Path(".reducto"), "--output-dir", help="Report directory"),
 ):
     """Scan for complexity hotspots."""
     cfg = _get_cfg(config, verbose, model, prefer_local, prefer_remote)
@@ -81,9 +88,9 @@ def analyze(
     typer.echo(
         f"Files: {result.total_files}  Symbols: {result.total_symbols}  Hotspots: {len(result.hotspots)}"
     )
-    if verbose:
+    if cfg.verbose:
         if result.hotspots:
-            for h in result.hotspots:
+            for h in result.hotspots[:20]:
                 typer.echo(
                     f"{h.file}:{h.line}  {h.symbol}  "
                     f"cyclomatic={h.cyclomatic_complexity}  cognitive={h.cognitive_complexity}"
@@ -92,8 +99,81 @@ def analyze(
             th = cfg.complexity_thresholds.cyclomatic_complexity
             typer.echo(f"No hotspots (cyclomatic >= {th})")
     if report:
-        p = Reporter(cfg).generate_baseline(result)
-        typer.echo(f"Baseline report: {p}")
+        _write_analysis_reports(result, output_dir, format)
+    for diagnostic in result.diagnostics:
+        typer.echo(
+            f"Metrics unavailable: {diagnostic.file}:{diagnostic.line or 1}: {diagnostic.message}",
+            err=True,
+        )
+    if not result.complete:
+        raise typer.Exit(1)
+
+
+def _write_analysis_reports(result, output_dir: Path, format: ReportFormat) -> None:
+    try:
+        for path in write_reports(result, output_dir, format):
+            label = "Comparison" if isinstance(result, CompareResult) else "Baseline"
+            typer.echo(f"{label} report: {path}")
+    except (ReportError, OSError) as error:
+        typer.echo(f"Report failed: {error}", err=True)
+        raise typer.Exit(1) from None
+
+
+@app.command()
+def compare(
+    path: Path = typer.Argument(Path("."), help="Git repository or source subdirectory"),
+    base: str = typer.Option(
+        ..., "--base", help="Base revision (exact ref, not an implicit merge base)"
+    ),
+    head: str = typer.Option(
+        "HEAD", "--head", help="Head revision; working-tree edits are ignored"
+    ),
+    report: bool = typer.Option(False, "--report", "-r"),
+    format: ReportFormat = typer.Option(
+        ReportFormat.MARKDOWN, "--format", help="Format used with --report"
+    ),
+    output_dir: Path = typer.Option(Path(".reducto"), "--output-dir"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+):
+    """Compare functions in changed Python files at two committed revisions. Informational only."""
+    cfg = _get_cfg(config, verbose, "", True, False)
+    root = _resolve_repo(path)
+    try:
+        result = compare_revisions(root, base, head, cfg)
+    except CompareError as error:
+        empty = analyze_files([], cfg, str(path))
+        result = CompareResult(
+            scope=str(path),
+            base_revision=base,
+            head_revision=head,
+            before=empty,
+            after=empty,
+            configuration=analysis_configuration(cfg),
+            diagnostics=[AnalysisDiagnostic(file=str(path), message=str(error))],
+        )
+    counts = result.counts
+    typer.echo(
+        f"Changed Python files: {len(result.files)}  Improved: {counts['improved']}  "
+        f"Regressed: {counts['regressed']}  Mixed: {counts['mixed']}  "
+        f"Added: {counts['added']}  Removed: {counts['removed']}"
+    )
+    if not result.files and result.complete:
+        typer.echo("No Python changes in the selected scope.")
+    if cfg.verbose:
+        for change in result.changes:
+            function = change.after or change.before
+            assert function is not None
+            typer.echo(
+                f"{function.file}:{function.line} {function.qualified_name} "
+                f"{change.status} CC delta={change.cyclomatic_delta} cognitive delta={change.cognitive_delta}"
+            )
+    if report:
+        _write_analysis_reports(result, output_dir, format)
+    for diagnostic in result.diagnostics + result.before.diagnostics + result.after.diagnostics:
+        typer.echo(f"Comparison incomplete: {diagnostic.file}: {diagnostic.message}", err=True)
+    if not result.complete:
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -201,7 +281,7 @@ def check(
         f"Issues: {result['total_issues']} "
         f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
     )
-    if verbose:
+    if cfg.verbose:
         for i in result["issues"]:
             typer.echo(
                 f"{i['severity']}  {i['issue_type']}  {i['file']}:{i['line']}  "
@@ -212,6 +292,9 @@ def check(
     if report:
         p = Reporter(cfg).generate_check(result)
         typer.echo(f"Quality report: {p}")
+    if any(issue["issue_type"] == "parse_error" for issue in result["issues"]):
+        typer.echo("Quality check incomplete: some Python files could not be parsed.", err=True)
+        raise typer.Exit(1)
 
 
 @app.command()

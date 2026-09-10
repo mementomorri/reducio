@@ -5,19 +5,26 @@ What is shipped today versus what is planned. This is the actionable index;
 
 Status legend: **done** = shipped & tested · **planned** = intended next · **idea** = vision, not scheduled.
 
-## Status: v1 ready (analyzer + modifier)
+## Status: analysis/reporting expanded; modifier safety incomplete
 
-**Goal.** A tool you can trust on a real Python repo: it *analyzes* safely (read-only) and *modifies*
-code only when the edit is provably correct and reversible.
+The v1 feature set exists. Analysis now has syntax-aware metrics v2, offline HTML
+and JSON reports, and Git revision comparison. Automatic modification is **not
+production-safe**: known behavior-changing rewrites and dirty-tree recovery defects
+remain. See [ASSESSMENT.md](docs/ASSESSMENT.md) and [TODO.md](TODO.md), items 19–24.
 
-Both lanes now meet that bar:
+### Analysis and CI reporting — implemented
 
-- **v1-analyzer:** `analyze`, `check`, and every `--dry-run` / `--report` flow — read-only and tested.
-- **v1-modifier:** `idiomatize` / `pattern` / `deduplicate` apply, and `apply <session_id>`. The
-  corruption blocker (P0) is fixed, and apply is now guarded by context-validated diffs plus a
-  post-apply `ast.parse` check that rolls back any syntactically broken result — even on repos with no
-  tests. Full apply/rollback contract: [`docs/SAFETY.md`](docs/SAFETY.md). (~100 LOC removed in the same
-  pass; suite at 105 tests / ~73% coverage.)
+- Mandatory shared AST metrics for `analyze`, `check`, and `compare`; independent
+  functions/methods, uncapped hotspot counts, explicit unavailable measurements.
+- `compare --base ... --head ...`: complete changed-file functions, read-only Git
+  snapshots, qualified-name matching, deltas and unmatched additions/removals.
+- Markdown/JSON/offline HTML from the same result; overview and comparison charts.
+- Independent overview and PR comparison jobs in the Analysis workflow, summaries
+  and downloadable artifacts. Complexity verdicts are informational; actual errors fail.
+- Rules and use: [METRICS.md](docs/METRICS.md), [CI.md](docs/CI.md).
+
+The entries below record earlier delivered fixes. Their historical test counts
+are not the current suite size, and individual guards do not prove semantic safety.
 
 ### P0 — Apply pipeline correctness — **done**
 
@@ -54,9 +61,10 @@ clear "install the extra" message instead of an empty result.
   instead of `original=""` against the source file — which previously prepended a template into it.
 - The dirty-tree prompt (`cli._check_git`) and `--yes`/`--dry-run` gating are unchanged.
 
-### P3 — Semantic safety (apply can't change behaviour or lose code) — **done**
+### P3 — Initial semantic guards — **partial; safety milestone incomplete**
 
-P0–P2 closed *syntactic* corruption; these close *semantic* corruption found in an audit:
+These specific guards shipped, but the later audit found additional semantic and
+recovery defects. They remain release blockers:
 
 - `idiomatize` no longer rewrites a for/append loop whose value, iterable, or filter reads the
   accumulator (e.g. order-preserving dedup `if v not in u: u.append(v)`) — that silently changed
@@ -66,9 +74,8 @@ P0–P2 closed *syntactic* corruption; these close *semantic* corruption found i
   overwriting the source file — which used to discard the original code. (`agents/pattern.py`)
 - `apply` refuses any whole-file rewrite that drops a top-level/nested `def`/`class`
   (`services._def_names`) — a net for LLM rewrites and future template bugs.
-- Cyclomatic complexity is word-boundary matched (McCabe, base 1); `for` is no longer double-counted as
-  `or`, `editor`/`error` no longer false-positive. Drives `analyze` hotspots + `check` criticals.
-  (`parse.py`)
+- Historical word-boundary metric fix: prevented `for`/`or` substring double-counting.
+  Now superseded by syntax-aware metrics v2 (`metrics.py`).
 - CLI robustness: unknown `pattern` names and non-directory paths exit `2` with a message (no traceback);
   `report` falls back cleanly when no report exists; `idiomatize` now echoes apply success/failure;
   `deduplicate` degrades to the "install the extra" message instead of crashing when `chromadb` is
@@ -79,17 +86,18 @@ P0–P2 closed *syntactic* corruption; these close *semantic* corruption found i
 `tests/unit/test_apply_guard.py`, `tests/unit/test_complexity.py::test_cyclomatic_counts_for_loop_once`,
 and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% coverage.
 
-## Now — v1.0 (shipped & tested)
+## Current capabilities
 
 | Capability | Status | Notes |
 |------------|--------|-------|
-| `analyze` — tree-sitter symbols + cyclomatic & cognitive-complexity hotspots | done | Static, no LLM. Cognitive complexity is nesting-weighted, distinct from cyclomatic. |
-| `idiomatize` — comprehensions (list/dict/filtered), `is None`, `len()` truthiness, `==`-chain → `in` | done | Detection, `--dry-run`, and **apply** all correct (one whole-file change per file). Optional LLM whole-file rewrite when `--model` is set. |
+| `analyze` — AST symbols + function-level metrics v2 | done | Static, no LLM; Markdown/JSON/HTML reports. |
+| `compare` — committed revision comparison | done | Changed-file function deltas; independent PR job. |
+| `idiomatize` — comprehensions, `is None`, truthiness, membership | partial safety | Planning/apply exist; known behavior-changing cases remain. Optional LLM whole-file rewrite. |
 | `deduplicate` — embedding clustering → proposed `utils/<symbol>_dedup.py` | done (suggest-only) | Honestly labeled; does **not** remove dupes or rewrite call sites. See Near-term. |
-| `pattern` — factory/strategy/observer/singleton templates | done | Named patterns rewrite/extract; auto-detect writes advisory modules. Opt-in LLM refactor when `--model` set. |
+| `pattern` — factory/strategy/observer/singleton templates | done | Default paths write advisory modules. Opt-in LLM via model configuration. |
 | `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold. |
 | Unified thresholds | done | `check` and `analyze` both read `AppConfig.complexity_thresholds`. |
-| Safe apply — git checkpoint + context-validated diffs + post-apply `ast.parse` + test rollback | done | All-or-nothing; rolls back on apply error, broken syntax, or failing tests. |
+| Apply — checkpoints, validated diffs, syntax checks, rollback attempts | partial safety | Dirty-state preservation and exceptional recovery remain blockers. |
 | Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducto/sessions/`. |
 | LiteLLM model routing (local Ollama / remote) | done | Opt-in via `--model`; tier config lives in `LLMRouter`. |
 | Config: `.reducto.yaml` + `REDUCTO_*` env overrides | done | |
@@ -108,7 +116,7 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 
 - **Cross-file impact analysis** — re-introduce an LSP/symbol-graph layer *only when a command consumes it*
   (dead-code detection, safe-rename impact, real dedup rewrite).
-- **Report formats** — JSON / HTML alongside Markdown.
+- **Further reporting** — historical trends, hosted dashboards, and optional PR comments.
 - **CI mode** — non-interactive `--ci` / pre-commit integration with meaningful exit codes.
 
 ## Vision (from DESIGN.md — not scheduled)

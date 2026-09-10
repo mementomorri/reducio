@@ -50,6 +50,10 @@ Applied as one all-or-nothing transaction:
   diff fails loudly via context validation.
 - **No path escapes** — `Workspace._resolve_path` rejects any path outside the repo root
   (`PathEscapeError`).
+- **No silent code loss** — a whole-file rewrite (non-empty `original`) that would drop a
+  top-level or nested `def`/`class` is refused before apply (`services._def_names`). Guards LLM
+  rewrites and template bugs. `idiomatize` also skips any file that does not `ast.parse` up front —
+  a file that can't be parsed can't be safely refactored or validated.
 
 ## Limits (be honest)
 
@@ -61,6 +65,11 @@ Applied as one all-or-nothing transaction:
 - A plan that re-targets the same new-file path twice (e.g. two same-named duplicate groups) now fails
   the batch via the create-over-existing guard rather than concatenating — safe, but it means that plan
   produces no output.
+- **The git checkpoint uses `git add -A`.** On a *dirty* repo, your pre-existing uncommitted work is
+  folded into the "reducto checkpoint" commit, and rollback (`git reset` to the checkpoint's parent)
+  discards it from the working tree — recoverable only via `git reflog`. On a *clean* repo there is
+  nothing to lose. This is exactly why mutating commands prompt before running on a dirty tree; commit
+  or stash first (`--yes` skips the prompt and the safety it buys).
 
 ## Tests that lock this
 
@@ -73,3 +82,6 @@ Applied as one all-or-nothing transaction:
 | Create-over-existing refused | `tests/unit/test_workspace.py::test_apply_diff_refuses_create_over_existing` |
 | Non-git mid-batch failure restores earlier changes | `tests/unit/test_workspace.py::test_apply_changes_no_git_restores_on_failure` |
 | Path escape rejected | `tests/unit/test_workspace.py::test_path_escape` |
+| Rewrite dropping a `def`/`class` refused | `tests/unit/test_apply_guard.py::test_apply_plan_refuses_dropping_a_def` |
+| Behaviour-changing dedup loop left alone | `tests/unit/test_idiomatizer.py::test_idiomatize_skips_accumulator_referencing_loop` |
+| Singleton writes advisory module, not over source | `tests/unit/test_pattern_agent.py::test_singleton_pattern_writes_advisory_module_not_source` |

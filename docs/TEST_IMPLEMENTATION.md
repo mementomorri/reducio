@@ -7,7 +7,7 @@ New contributors: start with [ONBOARDING.md](ONBOARDING.md) for environment setu
 ## Run tests
 
 ```bash
-pip install -e ".[dev,embeddings]"
+pip install -e ".[dev,embeddings,reports]"
 pytest tests/ -v
 ```
 
@@ -59,14 +59,22 @@ black --check reducto/
 mypy reducto/ --ignore-missing-imports
 ```
 
-Coverage target: `reducto/` package (minimum 60% in CI; see `pyproject.toml`). Current: ~73% across 105 tests.
+Coverage target: `reducto/` package (minimum 60% in CI; see `pyproject.toml`).
+Latest local run: **169 tests / 80.88% coverage** (2026-09-10). The pre-metrics-v2
+baseline was 120 tests / 72.16%. See [ASSESSMENT.md](ASSESSMENT.md).
+
+Metric contracts are in `tests/unit/test_metrics_v2.py`; isolated Git comparisons
+(including dirty-tree preservation, renames, invalid revisions/source, and empty
+changes) in `test_compare.py`; report agreement, escaping, optional dependencies,
+and in-process CLI exit behavior in `test_visual_report.py`. CLI subprocess smoke
+tests remain; the new `CliRunner` tests are included in coverage.
 
 ## CI analysis job
 
-`.github/workflows/analysis.yml` runs product analysis separately from pytest:
-
-- `reducto analyze reducto/ --report` (dogfood)
-- `reducto analyze test-python-code/python --report` (fixture corpus)
-- `reducto check test-python-code/python`
-
-Markdown reports are copied to `ci-reports/` (`.reducto` is hidden and excluded by `upload-artifact` by default) and uploaded as the `reducto-analysis-reports` Actions artifact.
+`.github/workflows/analysis.yml` runs a source overview on pushes/manual runs and
+a separate merge-base-to-PR-head comparison on pull requests. Reports use distinct
+non-hidden directories and artifacts; Markdown is included in each job summary.
+The overview validates JSON counts rather than grepping terminal output.
+See [CI.md](CI.md) for commands and artifact access. The five invalid fixture files
+are tested as explicit unavailable measurements; they are not silently treated as
+zero-complexity functions or included in product overview charts.
