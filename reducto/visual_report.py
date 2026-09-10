@@ -12,6 +12,48 @@ from reducto.models import AnalyzeResult, CompareResult, FunctionMetrics
 
 Result = AnalyzeResult | CompareResult
 
+# Match docs/index.html without external fonts/assets: reports remain offline.
+_REPORT_STYLE = """
+:root{color-scheme:dark;--bg-void:#0a0a12;--bg-deep:#12101f;--bg-night:#1a1530;
+--gold:#d4a853;--gold-light:#f0d78c;--purple-glow:#8b5cf6;--text-light:#f0e6d3;
+--text-muted:#a89ec9;--border-magic:rgba(139,92,246,.3)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg-void);color:var(--text-light);
+font:17px/1.7 'Crimson Pro',Georgia,serif}
+a{color:var(--gold);text-decoration:none}a:hover{color:var(--gold-light)}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:5px}
+header{border-bottom:1px solid var(--border-magic);padding:24px max(24px,calc((100vw - 1240px)/2)) 40px;
+background:radial-gradient(ellipse at 75% 0,rgba(139,92,246,.2),transparent 65%),var(--bg-void)}
+.navigation{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:38px}
+.brand{font-family:'Cinzel',Georgia,serif;font-size:26px;font-weight:bold;letter-spacing:.1em}
+.brand span{color:var(--gold);text-shadow:0 0 18px var(--purple-glow);margin-right:10px}
+nav{display:flex;gap:24px;flex-wrap:wrap;font:12px/1.6 'Cinzel',Georgia,serif;text-transform:uppercase;letter-spacing:.1em}
+nav a{color:var(--text-muted)}nav a:hover{color:var(--gold)}
+header p{color:var(--text-muted);overflow-wrap:anywhere;max-width:1100px;margin:14px 0}
+h1,h2{font-family:'Cinzel',Georgia,serif;color:var(--gold-light);font-weight:500}
+h1{font-size:clamp(32px,4vw,48px);line-height:1.2;margin:12px 0 18px;letter-spacing:.02em}
+h2{font-size:23px;margin:0 0 18px}.eyebrow{color:var(--gold);letter-spacing:.17em;text-transform:uppercase;font-size:12px}
+.status{display:inline-block;border:1px solid var(--border-magic);border-radius:24px;padding:6px 14px;font:12px/1.7 system-ui,sans-serif}
+.status strong{color:var(--text-light)}main{max-width:1290px;padding:28px 24px;margin:auto}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.card,section{min-width:0;background:linear-gradient(135deg,var(--bg-deep),var(--bg-night));
+border:1px solid var(--border-magic);border-radius:12px;padding:24px;margin-bottom:20px}
+.card{border-top:2px solid var(--gold);box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.card span{display:block;color:var(--text-muted);font:12px/1.6 system-ui,sans-serif}
+.card strong{display:block;color:var(--gold-light);font:27px/1.4 'JetBrains Mono',monospace;margin-top:12px}
+.chart{padding:12px;overflow:hidden;background:var(--bg-deep)}.plotly-graph-div{min-width:0}
+.table-scroll{overflow:auto;max-height:650px}table{width:100%;border-collapse:collapse;font:12px/1.6 'JetBrains Mono',monospace}
+td,th{text-align:left;padding:12px 14px;border-bottom:1px solid var(--border-magic);white-space:nowrap}
+th{background:var(--bg-night);color:var(--gold-light);position:sticky;top:0}tr:nth-child(even){background:rgba(139,92,246,.05)}
+.notice{padding:14px;background:#2b2020;border-left:3px solid var(--gold)}
+code,pre{font-family:'JetBrains Mono',monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;font-size:12px}
+details{margin-top:18px}summary{cursor:pointer;color:var(--gold)}footer{color:var(--text-muted);font-size:14px;margin:26px 0;text-align:center}
+.js-plotly-plot .plotly .modebar{background:var(--bg-deep)!important}
+.js-plotly-plot .plotly .modebar-btn path{fill:var(--text-muted)!important}
+@media(max-width:600px){main{padding:18px 12px}header{padding:20px 20px 28px}
+.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.card{padding:16px}.card strong{font-size:22px}
+.chart{overflow-x:auto}.chart .plotly-graph-div{min-width:680px}section{padding:18px}}
+"""
+
 
 class ReportFormat(StrEnum):
     MARKDOWN = "markdown"
@@ -210,7 +252,7 @@ def _figures(result: Result) -> list[Any]:
             go.Histogram(
                 x=[f.cyclomatic_complexity for f in functions],
                 xbins=dict(start=0.5, size=1),
-                marker_color="#2563eb",
+                marker_color="#8b5cf6",
                 name="Functions",
             )
         )
@@ -228,14 +270,14 @@ def _figures(result: Result) -> list[Any]:
                 marker=dict(
                     size=10,
                     color=[f.cognitive_complexity for f in functions],
-                    colorscale="Blues",
+                    colorscale=[[0, "#5b21b6"], [0.5, "#c4b5fd"], [1, "#f0d78c"]],
                     colorbar=dict(title="Cognitive"),
-                    line=dict(width=1, color="#1e3a8a"),
+                    line=dict(width=1, color="#f0d78c"),
                 ),
                 hovertemplate="%{text}<br>Lines: %{x}<br>CC: %{y}<br>Cognitive: %{marker.color}<extra></extra>",
             )
         )
-        scatter.add_hline(y=_threshold(result), line_dash="dash", line_color="#d97706")
+        scatter.add_hline(y=_threshold(result), line_dash="dash", line_color="#d4a853")
         scatter.update_layout(
             title="Where are the long, complex functions?",
             xaxis_title="Function length (physical lines)",
@@ -247,7 +289,7 @@ def _figures(result: Result) -> list[Any]:
                 x=[f.cyclomatic_complexity for f in top],
                 y=[escape(_label(f)) for f in top],
                 orientation="h",
-                marker_color="#2563eb",
+                marker_color="#8b5cf6",
             )
         )
         bars.update_layout(
@@ -272,7 +314,7 @@ def _figures(result: Result) -> list[Any]:
             ("cognitive_complexity", "Cognitive"),
         ]:
             bars = go.Figure()
-            for side, color in [("before", "#94a3b8"), ("after", "#2563eb")]:
+            for side, color in [("before", "#a89ec9"), ("after", "#8b5cf6")]:
                 bars.add_trace(
                     go.Bar(
                         name=side.title(),
@@ -298,22 +340,22 @@ def _figures(result: Result) -> list[Any]:
                 orientation="h",
                 marker_color=[
                     (
-                        "#0f766e"
+                        "#4ade80"
                         if c.cyclomatic_delta < 0
-                        else "#c2410c" if c.cyclomatic_delta > 0 else "#64748b"
+                        else "#fb923c" if c.cyclomatic_delta > 0 else "#a89ec9"
                     )
                     for c in ranked
                 ],
             )
         )
-        delta.add_vline(x=0, line_color="#0f172a")
+        delta.add_vline(x=0, line_color="#d4a853")
         delta.update_layout(
             title="Change in cyclomatic complexity · lower is simpler",
             xaxis_title="After − before",
             yaxis=dict(autorange="reversed"),
         )
         distribution = go.Figure()
-        for side, color in [("before", "#94a3b8"), ("after", "#2563eb")]:
+        for side, color in [("before", "#a89ec9"), ("after", "#8b5cf6")]:
             distribution.add_trace(
                 go.Histogram(
                     x=[getattr(c, side).cyclomatic_complexity for c in matched],
@@ -332,12 +374,20 @@ def _figures(result: Result) -> list[Any]:
         figures += [delta, distribution]
     for figure in figures:
         figure.update_layout(
-            template="plotly_white",
-            font=dict(family="Arial, sans-serif", color="#1e293b"),
+            template="plotly_dark",
+            paper_bgcolor="#12101f",
+            plot_bgcolor="#12101f",
+            font=dict(family="Arial, sans-serif", color="#f0e6d3"),
+            title_font=dict(family="Georgia, serif", color="#f0d78c", size=20),
+            hoverlabel=dict(bgcolor="#231d3d", bordercolor="#8b5cf6", font_color="#f0e6d3"),
+            legend=dict(bgcolor="#12101f"),
             margin=dict(l=30, r=30, t=75, b=55),
             height=480,
         )
-        figure.update_yaxes(automargin=True)
+        figure.update_xaxes(gridcolor="rgba(139,92,246,.15)", zerolinecolor="#a89ec9")
+        figure.update_yaxes(
+            automargin=True, gridcolor="rgba(139,92,246,.15)", zerolinecolor="#a89ec9"
+        )
     return figures
 
 
@@ -390,24 +440,16 @@ def html_report(result: Result) -> str:
     )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>reducto · {title}</title><style>
-*{{box-sizing:border-box}}body{{margin:0;background:#f1f5f9;color:#1e293b;font:15px/1.6 system-ui,sans-serif}}
-header{{background:#0f172a;color:#f8fafc;padding:38px max(24px,calc((100vw - 1240px)/2))}}
-header p{{color:#cbd5e1;overflow-wrap:anywhere;max-width:1100px}}h1{{font-size:36px;margin:8px 0}}h2{{font-size:21px}}
-.eyebrow{{color:#67e8f9;letter-spacing:.15em;text-transform:uppercase;font-size:12px}}
-main{{max-width:1290px;padding:28px 24px;margin:auto}}.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}}
-.card,section{{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:22px;margin-bottom:20px}}
-.card span{{display:block;color:#64748b;font-size:13px}}.card strong{{display:block;font-size:28px;margin-top:8px}}
-.chart{{padding:12px;overflow:hidden}}.table-scroll{{overflow:auto;max-height:650px}}table{{width:100%;border-collapse:collapse;font-size:13px}}
-td,th{{text-align:left;padding:11px 14px;border-bottom:1px solid #e2e8f0;white-space:nowrap}}
-th{{background:#f8fafc;position:sticky;top:0}}tr:nth-child(even){{background:#f8fafc}}
-.notice{{padding:14px;background:#fff7ed;border-left:4px solid #c2410c}}code{{overflow-wrap:anywhere}}
-details{{margin-top:18px}}footer{{color:#64748b;font-size:13px;margin:22px 0}}
-</style></head><body><header><div class="eyebrow">reducto / metrics v{result.metrics_version}</div>
+<title>reducto · {title}</title><style>{_REPORT_STYLE}</style></head><body><header>
+<div class="navigation"><a class="brand" href="https://mementomorri.github.io/reducto/"><span aria-hidden="true">✦</span>reducto</a>
+<nav aria-label="Report navigation"><a href="#measurements">Measurements</a>
+<a href="https://github.com/mementomorri/reducto/blob/main/docs/METRICS.md">Metric guide</a>
+<a href="https://github.com/mementomorri/reducto">GitHub</a></nav></div>
+<div class="eyebrow">The Shrinking Charm / metrics v{result.metrics_version}</div>
 <h1>{title}</h1><p>{escape(_context(result))}</p>
-<p>Status: <strong>{'Complete' if result.complete else 'INCOMPLETE — see unavailable measurements'}</strong></p></header>
+<div class="status">Status: <strong>{'Complete' if result.complete else 'INCOMPLETE — see unavailable measurements'}</strong></div></header>
 <main><div class="cards">{cards}</div>{errors}{empty}{charts}
-<section><h2>All function measurements</h2>{notes}{_table(headers, rows, html=True)}</section>
+<section id="measurements"><h2>All function measurements</h2>{notes}{_table(headers, rows, html=True)}</section>
 <section><h2>Reading these results</h2><p>Lower complexity can make code easier to understand, but does not prove correctness.
 Added and removed functions are separate from changes to existing functions. A mixed result means one complexity metric rose while the other fell.
 Physical line counts include comments and blank lines; fewer lines alone are not an improvement verdict.</p>
