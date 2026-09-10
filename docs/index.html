@@ -117,7 +117,8 @@
         }
 
         .logo {
-            font-family: 'Cinzel', serif;
+            font-family: Georgia, serif;
+            text-transform: lowercase;
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--gold);
@@ -125,7 +126,6 @@
             align-items: center;
             gap: 12px;
             letter-spacing: 0.1em;
-            text-transform: lowercase;
         }
 
         .logo-icon {
@@ -253,7 +253,8 @@
         }
 
         .hero h1 {
-            font-family: 'Cinzel', serif;
+            font-family: Georgia, serif;
+            text-transform: lowercase;
             font-size: clamp(4rem, 12vw, 8rem);
             font-weight: 700;
             letter-spacing: 0.15em;
@@ -470,35 +471,6 @@
             border-color: var(--purple-glow);
             box-shadow: 0 8px 40px rgba(139, 92, 246, 0.15);
             transform: translateY(-4px);
-        }
-
-        .feature-icon {
-            width: 56px;
-            height: 56px;
-            background: linear-gradient(135deg, var(--bg-mystical) 0%, var(--bg-night) 100%);
-            border: 1px solid var(--border-magic);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.75rem;
-            margin-bottom: 20px;
-            position: relative;
-        }
-
-        .feature-icon::after {
-            content: '';
-            position: absolute;
-            inset: -1px;
-            border-radius: 8px;
-            background: linear-gradient(135deg, var(--purple-glow), var(--blue-magic));
-            z-index: -1;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .feature-card:hover .feature-icon::after {
-            opacity: 0.5;
         }
 
         .feature-card h3 {
@@ -800,7 +772,8 @@
         }
 
         .footer-logo {
-            font-family: 'Cinzel', serif;
+            font-family: Georgia, serif;
+            text-transform: lowercase;
             font-size: 1.5rem;
             font-weight: 700;
             color: var(--gold);
@@ -906,8 +879,8 @@
         <div class="container">
             <div class="header-content">
                 <a href="./" class="logo">
-                    <div class="logo-icon">
-                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <div class="logo-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" focusable="false">
                             <path d="M7.5 5.6L5 7l1.4-2.5L5 2l2.5 1.4L10 2 8.6 4.5 10 7 7.5 5.6zm12 9.8L22 14l-1.4 2.5L22 19l-2.5-1.4L17 19l1.4-2.5L17 14l2.5 1.4zM22 2l-1.4 2.5L22 7l-2.5-1.4L17 7l1.4-2.5L17 2l2.5 1.4L22 2zm-8.66 10.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49l2.34 2.34c.39.37.39 1.02 0 1.41L5.04 22.71c-.39.39-1.04.39-1.41 0l-2.34-2.34c-.39-.39-.39-1.02 0-1.41L12.96 7.29c.39-.39 1.04-.39 1.41 0z"/>
                         </svg>
                     </div>
@@ -957,32 +930,26 @@
                 <p class="section-subtitle">Practical tools for Python codebases</p>
                 <div class="features-grid">
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">🔮</div>
                         <h3>Duplication Detection</h3>
                         <p>Find similar functions across Python files with the optional embeddings extra. Generate shared-utility suggestions; originals and call sites are not rewritten.</p>
                     </div>
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">✨</div>
                         <h3>Experimental Idiom Proposals</h3>
                         <p>Propose comprehensions, None comparisons, truthiness, and membership rewrites. Start with dry-run: current rules can change behavior and require code review.</p>
                     </div>
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">📜</div>
                         <h3>Pattern Suggestions</h3>
                         <p>Generate advisory Factory, Strategy, Observer, and Singleton modules. Default templates are not automatically integrated into your existing code.</p>
                     </div>
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">👁️</div>
                         <h3>Complexity Scrying</h3>
                         <p>Measure functions with syntax-aware cyclomatic complexity and a custom nesting-weighted cognitive score. Hotspots use the cyclomatic threshold; lower scores do not prove correctness.</p>
                     </div>
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">🛡️</div>
                         <h3>Change-Impact Reports</h3>
                         <p>Compare whole functions in changed files at two Git revisions. Explore Markdown, JSON, and offline HTML reports; this site publishes the latest successful main-branch overview.</p>
                     </div>
                     <div class="feature-card" data-animate>
-                        <div class="feature-icon">⚡</div>
                         <h3>Optional Model Support</h3>
                         <p>Analysis and comparison need no LLM. Refactoring defaults to heuristics or templates; a configured model enables optional rewrites. Cloud models receive source code—local preference is not an enforced local-only mode.</p>
                     </div>

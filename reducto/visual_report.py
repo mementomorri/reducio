@@ -12,6 +12,11 @@ from reducto.models import AnalyzeResult, CompareResult, FunctionMetrics
 
 Result = AnalyzeResult | CompareResult
 
+# Keep this inline to preserve offline reports; parity with docs/index.html is tested.
+_LOGO_SVG = """<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" focusable="false">
+<path d="M7.5 5.6L5 7l1.4-2.5L5 2l2.5 1.4L10 2 8.6 4.5 10 7 7.5 5.6zm12 9.8L22 14l-1.4 2.5L22 19l-2.5-1.4L17 19l1.4-2.5L17 14l2.5 1.4zM22 2l-1.4 2.5L22 7l-2.5-1.4L17 7l1.4-2.5L17 2l2.5 1.4L22 2zm-8.66 10.78l2.44-2.44-2.12-2.12-2.44 2.44 2.12 2.12zm1.03-5.49l2.34 2.34c.39.37.39 1.02 0 1.41L5.04 22.71c-.39.39-1.04.39-1.41 0l-2.34-2.34c-.39-.39-.39-1.02 0-1.41L12.96 7.29c.39-.39 1.04-.39 1.41 0z"/>
+</svg>"""
+
 # Match docs/index.html without external fonts/assets: reports remain offline.
 _REPORT_STYLE = """
 :root{color-scheme:dark;--bg-void:#0a0a12;--bg-deep:#12101f;--bg-night:#1a1530;
@@ -24,8 +29,11 @@ a:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offs
 header{border-bottom:1px solid var(--border-magic);padding:24px max(24px,calc((100vw - 1240px)/2)) 40px;
 background:radial-gradient(ellipse at 75% 0,rgba(139,92,246,.2),transparent 65%),var(--bg-void)}
 .navigation{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:38px}
-.brand{font-family:'Cinzel',Georgia,serif;font-size:26px;font-weight:bold;letter-spacing:.1em}
-.brand span{color:var(--gold);text-shadow:0 0 18px var(--purple-glow);margin-right:10px}
+.brand{font-family:Georgia,serif;font-size:24px;font-weight:700;letter-spacing:.1em;
+text-transform:lowercase;display:flex;align-items:center;gap:12px;color:var(--gold)}
+.logo-icon{width:44px;height:44px;position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-icon::before{content:'';position:absolute;inset:0;background:radial-gradient(circle,var(--purple-glow),transparent 70%);opacity:.65}
+.logo-icon svg{width:28px;height:28px;fill:var(--gold);filter:drop-shadow(0 0 4px var(--gold));position:relative;z-index:2}
 nav{display:flex;gap:24px;flex-wrap:wrap;font:12px/1.6 'Cinzel',Georgia,serif;text-transform:uppercase;letter-spacing:.1em}
 nav a{color:var(--text-muted)}nav a:hover{color:var(--gold)}
 header p{color:var(--text-muted);overflow-wrap:anywhere;max-width:1100px;margin:14px 0}
@@ -441,7 +449,7 @@ def html_report(result: Result) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>reducto · {title}</title><style>{_REPORT_STYLE}</style></head><body><header>
-<div class="navigation"><a class="brand" href="https://mementomorri.github.io/reducto/"><span aria-hidden="true">✦</span>reducto</a>
+<div class="navigation"><a class="brand" href="https://mementomorri.github.io/reducto/"><span class="logo-icon" aria-hidden="true">{_LOGO_SVG}</span>reducto</a>
 <nav aria-label="Report navigation"><a href="#measurements">Measurements</a>
 <a href="https://github.com/mementomorri/reducto/blob/main/docs/METRICS.md">Metric guide</a>
 <a href="https://github.com/mementomorri/reducto">GitHub</a></nav></div>

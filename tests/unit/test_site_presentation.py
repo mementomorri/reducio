@@ -12,7 +12,7 @@ from typer.main import get_command
 from reducto.analysis import analyze_files
 from reducto.cli import app
 from reducto.models import AppConfig
-from reducto.visual_report import _REPORT_STYLE, _figures, html_report
+from reducto.visual_report import _LOGO_SVG, _REPORT_STYLE, _figures, html_report
 
 SITE = Path(__file__).resolve().parents[2] / "docs/index.html"
 PROJECT = "https://mementomorri.github.io/reducto/"
@@ -46,6 +46,31 @@ def test_landing_links_use_canonical_repo_and_project_path():
         else:
             assert urljoin(PROJECT, href).startswith(PROJECT)
     assert "./" in links.hrefs and "dashboard/" in links.hrefs
+
+
+def test_landing_has_no_emoji_feature_icons():
+    source = SITE.read_text()
+    assert "feature-icon" not in source
+    assert not re.search(r"[\U0001f300-\U0001faff\u2600-\u27bf\ufe0f]", source)
+
+
+def test_landing_and_dashboard_share_logo_and_lowercase_wordmark():
+    source = SITE.read_text()
+    report = html_report(analyze_files([], AppConfig()))
+    landing_logo = re.search(r'<div class="logo-icon"[^>]*>(.*?)</div>', source, re.S)[1]
+    assert re.findall(r'<path d="([^"]+)"', landing_logo) == re.findall(
+        r'<path d="([^"]+)"', _LOGO_SVG
+    )
+    assert _LOGO_SVG in report
+    for html, logo_class in ((source, "logo"), (report, "brand")):
+        brand = re.search(rf'<a [^>]*class="{logo_class}"[^>]*>(.*?)</a>', html, re.S)[1]
+        assert re.sub(r"<[^>]+>", "", brand).strip() == "reducto"
+    for selector in (".logo", ".hero h1", ".footer-logo"):
+        style = re.search(re.escape(selector) + r"\s*\{([^}]+)", source)[1]
+        assert "font-family: Georgia, serif" in style
+        assert "text-transform: lowercase" in style
+    assert "font-family:Georgia,serif" in _REPORT_STYLE
+    assert "text-transform:lowercase" in _REPORT_STYLE
 
 
 def test_report_palette_matches_landing_without_external_assets():
