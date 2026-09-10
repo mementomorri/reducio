@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="reducto - The Shrinking Charm for Your Code. Magically reduce code complexity while preserving functionality.">
+    <meta name="description" content="reducto - The Shrinking Charm for Your Code. Python complexity analysis, change-impact reports, and refactoring proposals.">
     <title>reducto - The Shrinking Charm for Your Code</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -932,14 +932,14 @@
                 <div class="hero-content">
                     <p class="spell-incantation">The Shrinking Charm</p>
                     <h1>reducto</h1>
-                    <p class="tagline">Semantic Code Compression</p>
-                    <p class="subtitle">Magically transform bloated codebases into elegant, minimal expressions while preserving every ounce of functionality.</p>
+                    <p class="tagline">Understand Complexity. Review Changes.</p>
+                    <p class="subtitle">Analyze Python code, compare committed revisions, and explore interactive reports. Refactoring proposals help you plan improvements; automatic edits remain experimental.</p>
                     <div class="cta-buttons">
                         <a href="#installation" class="btn btn-primary">
-                            <span>Cast the Spell</span>
+                            <span>Get Started</span>
                         </a>
-                        <a href="https://github.com/mementomorri/reducto" class="btn btn-secondary">
-                            <span>View Grimoire</span>
+                        <a href="dashboard/" class="btn btn-secondary">
+                            <span>Explore the Dashboard</span>
                         </a>
                     </div>
                 </div>
@@ -954,62 +954,69 @@
         <section id="features" class="features">
             <div class="container">
                 <h2 class="section-title">Magical Abilities</h2>
-                <p class="section-subtitle">Ancient spells for modern codebases</p>
+                <p class="section-subtitle">Practical tools for Python codebases</p>
                 <div class="features-grid">
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">🔮</div>
                         <h3>Duplication Detection</h3>
-                        <p>Peer through the veil of your codebase to find semantically similar incantations across files, revealing hidden echoes and redundancies.</p>
+                        <p>Find similar functions across Python files with the optional embeddings extra. Generate shared-utility suggestions; originals and call sites are not rewritten.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">✨</div>
-                        <h3>Idiomatic Transmutation</h3>
-                        <p>Transform verbose rituals into elegant patterns—Pythonic comprehensions, context managers, and more sacred traditions.</p>
+                        <h3>Experimental Idiom Proposals</h3>
+                        <p>Propose comprehensions, None comparisons, truthiness, and membership rewrites. Start with dry-run: current rules can change behavior and require code review.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">📜</div>
-                        <h3>Pattern Infusion</h3>
-                        <p>Channel ancient wisdom by injecting classic design patterns—Factory, Strategy, Observer—to bring order to chaotic realms.</p>
+                        <h3>Pattern Suggestions</h3>
+                        <p>Generate advisory Factory, Strategy, Observer, and Singleton modules. Default templates are not automatically integrated into your existing code.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">👁️</div>
                         <h3>Complexity Scrying</h3>
-                        <p>Gaze into the depths of your code to identify functions exceeding cyclomatic and cognitive thresholds—chaos before it consumes you.</p>
+                        <p>Measure functions with syntax-aware cyclomatic complexity and a custom nesting-weighted cognitive score. Hotspots use the cyclomatic threshold; lower scores do not prove correctness.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">🛡️</div>
-                        <h3>Protective Enchantments</h3>
-                        <p>Automatic checkpoints, rollback on test failure, and human approval for every change. Your code remains safe within the sanctuary.</p>
+                        <h3>Change-Impact Reports</h3>
+                        <p>Compare whole functions in changed files at two Git revisions. Explore Markdown, JSON, and offline HTML reports; this site publishes the latest successful main-branch overview.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <div class="feature-icon">⚡</div>
-                        <h3>Local-First Magic</h3>
-                        <p>Wield the power of local models through Ollama, or summon cloud familiars via OpenAI, Anthropic, and Google. Your secrets stay yours.</p>
+                        <h3>Optional Model Support</h3>
+                        <p>Analysis and comparison need no LLM. Refactoring defaults to heuristics or templates; a configured model enables optional rewrites. Cloud models receive source code—local preference is not an enforced local-only mode.</p>
                     </div>
                 </div>
             </div>
         </section>
 
+        <aside class="container" aria-label="Refactoring safety">
+            <p><strong>Automatic modification is not production-safe.</strong> Known behavior-changing rewrites and recovery defects remain.
+            Approval is per plan and can be bypassed with <code>--yes</code>. Keep an independent backup and review the
+            <a href="https://github.com/mementomorri/reducto/blob/main/docs/SAFETY.md">safety limits</a> before applying changes.
+            Missing capabilities are tracked as <a href="https://github.com/mementomorri/reducto/blob/main/ROADMAP.md#enhancement-opportunities">enhancement opportunities</a>.</p>
+        </aside>
+
         <section id="how-it-works" class="how-it-works">
             <div class="spell-circle"></div>
             <div class="container">
                 <h2 class="section-title">The Ritual</h2>
-                <p class="section-subtitle">Three sacred steps to code enlightenment</p>
+                <p class="section-subtitle">Measure first. Inspect proposals. Validate independently.</p>
                 <div class="steps">
                     <div class="step" data-animate>
                         <div class="step-number">I</div>
                         <h3>Scan</h3>
-                        <p>Peer into your codebase with Tree-sitter's ancient sight. Map the dependency web, identify complexity hotspots, and reveal hidden truths.</p>
+                        <p>Analyze Python functions and symbols, inspect hotspots, and compare committed changes. Dependency mapping and duplicate search are not part of the analyze command.</p>
                     </div>
                     <div class="step" data-animate>
                         <div class="step-number">II</div>
                         <h3>Plan</h3>
-                        <p>Consult the oracle—LLM-powered agents divine detailed refactoring plans, showing exactly what shall transform and the reasoning behind each change.</p>
+                        <p>Use dry-run to save a proposal without changing source files. Reports currently list descriptions; inspect the original and proposed code in session JSON before applying.</p>
                     </div>
                     <div class="step" data-animate>
                         <div class="step-number">III</div>
-                        <h3>Apply</h3>
-                        <p>Execute the transformation with sacred protections—automatic test validation, git checkpoints, and instant restoration if the ritual fails.</p>
+                        <h3>Review &amp; Validate</h3>
+                        <p>Apply only after reviewing the proposal, preferably in a disposable clean checkout. Syntax checks and rollback attempts are safeguards, not guarantees; test discovery, recovery, and behavior preservation have known limits.</p>
                     </div>
                 </div>
             </div>
@@ -1022,30 +1029,30 @@
                 <div class="install-options">
                     <div class="install-card" data-animate>
                         <h3>
-                            <span>Download Artifact</span>
-                            <span class="badge">Recommended</span>
+                            <span>Published Releases</span>
                         </h3>
-                        <p>Install from PyPI (Python 3.14+):</p>
-                        <pre><code><span class="code-comment"># Recommended</span>
+                        <p>For a released version, follow its release notes (Python 3.14+):</p>
+                        <pre><code><span class="code-comment"># Base package</span>
 <span class="code-command">pip install reducto</span>
 <span class="code-comment"># Optional semantic deduplication</span>
 <span class="code-command">pip install "reducto[embeddings]"</span></code></pre>
                         <p style="margin-top: 16px;">
-                            <a href="https://github.com/mementomorri/reducto/releases">Browse all artifacts →</a>
+                            <a href="https://github.com/mementomorri/reducto/releases">Browse releases and check included features →</a>
                         </p>
                     </div>
                     <div class="install-card" data-animate>
-                        <h3>Forge from Source</h3>
+                        <h3>Forge from Source <span class="badge">Latest Features</span></h3>
                         <p>Requires Python 3.14+:</p>
                         <pre><code><span class="code-comment"># Clone the sacred texts</span>
 <span class="code-command">git clone https://github.com/mementomorri/reducto.git</span>
 <span class="code-command">cd reducto</span>
 
 <span class="code-comment"># Install</span>
-<span class="code-command">pip install -e ".[embeddings]"</span>
+<span class="code-command">pip install -e ".[reports]"</span>
+<span class="code-comment"># Add .[embeddings] for semantic duplicate detection</span>
 
 <span class="code-comment"># Run</span>
-<span class="code-command">reducto analyze .</span></code></pre>
+<span class="code-command">reducto analyze reducto/ --report --format all</span></code></pre>
                     </div>
                 </div>
             </div>
@@ -1054,7 +1061,7 @@
         <section class="demo">
             <div class="container">
                 <h2 class="section-title">Witness the Magic</h2>
-                <p class="section-subtitle">A glimpse into the art of reduction</p>
+                <p class="section-subtitle">Example commands from a source checkout—not a benchmark or a promise of savings</p>
                 <div class="terminal" data-animate>
                     <div class="terminal-header">
                         <div class="terminal-dot red"></div>
@@ -1062,29 +1069,17 @@
                         <div class="terminal-dot green"></div>
                     </div>
                     <div class="terminal-body">
-                        <p><span class="terminal-prompt">$</span> reducto analyze .</p>
-                        <p class="terminal-output">Scrying repository: /home/wizard/project</p>
+                        <p><span class="terminal-prompt">$</span> reducto analyze reducto/ --report --format all</p>
+                        <p class="terminal-output"># Measure current Python files; print report paths.</p>
                         <br>
-                        <p class="terminal-output"><span class="terminal-highlight">=== Revelation ===</span></p>
-                        <p class="terminal-output">Total scrolls: <span class="terminal-highlight">127</span></p>
-                        <p class="terminal-output">Total symbols: <span class="terminal-highlight">892</span></p>
-                        <p class="terminal-output">Complexity hotspots: <span class="terminal-highlight">8</span></p>
-                        <p class="terminal-output">Potential echoes: <span class="terminal-highlight">4</span></p>
+                        <p><span class="terminal-prompt">$</span> reducto compare reducto/ --base HEAD~1 --head HEAD --report --format all</p>
+                        <p class="terminal-output"># Compare committed changes, ignoring working-tree edits.</p>
                         <br>
-                        <p class="terminal-output"><span class="terminal-highlight">--- Chaos Detected ---</span></p>
-                        <p class="terminal-output">  src/utils/parser.py:142 - parse_config (CC: 18)</p>
-                        <p class="terminal-output">  src/api/handlers.py:67 - handle_request (CC: 15)</p>
+                        <p><span class="terminal-prompt">$</span> reducto idiomatize reducto/ --dry-run</p>
+                        <p class="terminal-output"># Save an experimental proposal without changing source files.</p>
                         <br>
-                        <p class="terminal-output"><span class="terminal-highlight">--- Echoes Found ---</span></p>
-                        <p class="terminal-output">  Similarity: <span class="terminal-success">94.2%</span></p>
-                        <p class="terminal-output">    - src/auth/validator.py:23-45</p>
-                        <p class="terminal-output">    - src/api/validator.py:12-34</p>
-                        <br>
-                        <p><span class="terminal-prompt">$</span> reducto deduplicate --commit .</p>
-                        <p class="terminal-output">Weaving reduction spell...</p>
-                        <p class="terminal-output"><span class="terminal-success">Transformation complete!</span></p>
-                        <p class="terminal-output">Lines consumed: <span class="terminal-success">127</span></p>
-                        <p class="terminal-output">Changes inscribed to git.</p>
+                        <p class="terminal-output"># HTML dashboards need the reports extra.</p>
+                        <p class="terminal-output"># Use . or your source directory when analyzing another project.</p>
                     </div>
                 </div>
             </div>

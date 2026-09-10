@@ -1,11 +1,16 @@
 """Keep project links and standalone report styling aligned with the landing page."""
 
 import re
+import shlex
+from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin
 
+from typer.main import get_command
+
 from reducto.analysis import analyze_files
+from reducto.cli import app
 from reducto.models import AppConfig
 from reducto.visual_report import _REPORT_STYLE, _figures, html_report
 
@@ -63,3 +68,46 @@ def test_chart_backgrounds_and_text_match_dark_theme():
         assert figure.layout.plot_bgcolor == "#12101f"
         assert figure.layout.font.color == "#f0e6d3"
         assert figure.layout.title.font.color == "#f0d78c"
+
+
+def test_landing_demo_uses_supported_cli_commands_without_execution():
+    commands = re.findall(
+        r'<p><span class="terminal-prompt">\$</span> ([^<]+)</p>', SITE.read_text()
+    )
+    assert len(commands) == 3
+    cli = get_command(app)
+    for example in commands:
+        program, name, *args = shlex.split(unescape(example))
+        assert program == "reducto"
+        # Parsing validates flags and required arguments without applying any plan.
+        with cli.commands[name].make_context(name, args) as context:
+            if name == "idiomatize":
+                assert context.params["dry_run"] is True
+            else:
+                assert name in {"analyze", "compare"}
+                assert context.params["report"] is True
+                assert context.params["format"] == "all"
+
+
+def test_landing_copy_discloses_limits_and_links_enhancements():
+    source = SITE.read_text()
+    for old_claim in (
+        "preserving every ounce of functionality",
+        "Your secrets stay yours",
+        "instant restoration",
+        "deduplicate --commit",
+        "Lines consumed:",
+    ):
+        assert old_claim not in source
+    for disclosure in (
+        "Automatic modification is not production-safe",
+        "call sites are not rewritten",
+        "Cloud models receive source code",
+        "Hotspots use the cyclomatic threshold",
+        "reports",
+        "embeddings",
+        "ROADMAP.md#enhancement-opportunities",
+    ):
+        assert disclosure in source
+    roadmap = SITE.parent.parent / "ROADMAP.md"
+    assert "## Enhancement opportunities" in roadmap.read_text()

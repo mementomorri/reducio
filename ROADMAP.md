@@ -104,12 +104,43 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 | LiteLLM model routing (local Ollama / remote) | done | Opt-in via `--model`; tier config lives in `LLMRouter`. |
 | Config: `.reducto.yaml` + `REDUCTO_*` env overrides | done | |
 
+## Enhancement opportunities
+
+These opportunities capture the gap between the original landing-page claims and
+the tool. They are **not shipped capabilities or delivery commitments**. The
+landing page now describes current behavior; [ADVERTISING_AUDIT.md](docs/ADVERTISING_AUDIT.md)
+preserves the original comparison. Safety items remain release blockers, not
+optional polish. Ordered from immediate clarity/safety work to broader features:
+
+- [ ] **Review and result clarity:** show unified diffs before approval, session IDs,
+  actual apply outcomes and failure exit codes, and heuristic/model/fallback provenance.
+  Decide whether to expose the existing commit configuration as a supported CLI flag.
+- [ ] **Reliable recovery — release blocker:** preserve staged, unstaged, and
+  untracked pre-existing work; recover from validation/runner exceptions; distinguish
+  actual rollback success and tests passed/failed/not run. See TODO 22–24.
+- [ ] **Behavior-preserving idioms — release blocker:** fix literal, accumulator,
+  alias, and evaluation-order changes; define supported preconditions and test
+  behavior before/after. Skip unsupported cases. See TODO 19–21.
+- [ ] **Enforced local-only mode:** explicit remote consent, provider visibility,
+  safe prompt logging, and disclosure of model/embedding downloads.
+- [ ] **Cognitive threshold policy:** define how CC and cognitive thresholds select
+  findings, then apply it consistently to analysis, checks, comparisons, and charts.
+- [ ] **More validated idioms:** add narrowly scoped context-manager, enumerate,
+  f-string, and other transformations only with tested safety preconditions.
+- [ ] **Dependency/reference mapping:** resolve imports, symbols, and callers for
+  impact analysis; report ambiguity instead of guessing.
+- [ ] **Real deduplication and pattern integration:** use reference analysis to
+  rewrite imports/callers and remove originals only when validated. Measure actual
+  LOC/complexity changes; copied utilities and templates alone are not compression.
+- [ ] **Release parity checks:** test documented commands/extras against a selected
+  published release in a clean environment and provide release-specific guidance.
+
 ## Near-term (planned)
 
 - **More idioms (heuristic tail)** — remaining patterns in `test-python-code/python/style/non_idiomatic.py`
   that need multi-line body rewrites: `enumerate` (drop `range(len(...))`), f-strings, `with`-statement
-  context managers, `itertools.product`, `str.join`. Better handled holistically by the opt-in LLM rewrite
-  path; only add brittle regex versions if there is clear demand.
+  context managers, `itertools.product`, `str.join`. Require supported preconditions
+  and behavior tests; opt-in LLM output is not a substitute for validation.
 - **Real deduplication** — rewrite call sites to import the extracted util, not just emit the module.
   Safe interim options: rewrite only when duplicates share a name, or gate behind an explicit `--rewrite`
   flag. Needs the cross-file symbol layer below.

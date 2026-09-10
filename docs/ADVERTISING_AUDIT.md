@@ -2,25 +2,30 @@
 
 Reviewed against `85c2716` plus the dashboard style/link changes. Scope:
 `docs/index.html` and the implementation, not a verification of published PyPI
-packages or live provider integrations. The latest request fixes styling and
-links; **advertising copy is intentionally unchanged pending this review**.
+packages or live provider integrations. This document retains the original audit.
+
+**Follow-up:** the landing-page copy now describes current capabilities, labels
+automatic editing experimental, discloses privacy/recovery limits, and replaces
+the fictional terminal output with supported example commands. Outstanding tool
+work is tracked in [Enhancement opportunities](../ROADMAP.md#enhancement-opportunities).
+No refactoring behavior was changed by this copy update.
 
 ## Summary
 
-The page sells a behavior-preserving code compressor. Today the strongest
+The original page sold a behavior-preserving code compressor. Today the strongest
 delivered product is a Python analyzer with revision comparisons, dashboards,
 and refactoring proposals. Some transformations can be applied, but neither
 semantic preservation nor reliable recovery is established for all supported cases.
 
 An in-memory probe during this review still changed `return "x == None"` into
 `return "x is None"`; no target file was modified. This directly contradicts the
-hero's functionality-preservation claim, even though the rewritten Python parses.
+original hero's functionality-preservation claim, even though the rewritten Python parses.
 
 The dark/gold visual identity is retained. GitHub, clone, releases, issue and
 license links now target `mementomorri/reducto`; the logo uses a project-relative
 home link so it does not navigate out of `/reducto/` on GitHub Pages.
 
-## Claims and gaps
+## Original claims and remaining tool gaps
 
 | Page claim / section | What the tool actually does | Adjustment needed |
 | --- | --- | --- |
@@ -44,7 +49,10 @@ Evidence: [idiom rules](../reducto/agents/idiomatizer.py),
 [plan reporting](../reducto/reporter.py), [model opt-in/fallback](../reducto/agents/base.py),
 [model routing](../reducto/llm/router.py).
 
-## Tool changes to close the gaps
+## Original recommendations
+
+The copy/demo corrections below are now complete. Remaining tool enhancements
+are tracked in the roadmap rather than marked as delivered by this page update.
 
 Recommended order: quick clarity fixes first, then release-blocking safety work,
 then new capabilities. Larger work does not justify leaving unsafe claims live.
@@ -74,15 +82,15 @@ then new capabilities. Larger work does not justify leaving unsafe claims live.
 9. **Verify the release experience.** Install the selected release into a clean
    environment and exercise the documented commands/extras before advertising them.
 
-The existing analyzer, changed-file comparison, offline dashboards, and main-only
-Pages publishing deserve more space on the landing page: they are implemented
-capabilities the current marketing barely mentions. Clear Python-only scope and
-the optional `reports` / `embeddings` dependencies would also improve expectations.
+The updated page highlights the existing analyzer, changed-file comparison,
+offline dashboards, and main-only Pages publishing. It states Python-only scope
+and the optional `reports` / `embeddings` dependencies, and points users to source
+installation for the latest features without asserting published-release parity.
 
 Until the safety work is done, suggested positioning is: **Python complexity
 analysis, change-impact reports, and reviewable refactoring proposals.**
 
-## Verification of this presentation change
+## Verification of the original style/link change
 
 183 tests passed (80.90% coverage); Ruff, Black, and mypy passed. Both dashboards
 rendered in Chromium without page errors or external requests. Checked desktop
