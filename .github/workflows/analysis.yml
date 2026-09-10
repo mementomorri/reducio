@@ -70,6 +70,62 @@ jobs:
             echo "Reports unavailable; inspect the failed step above." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  publish-pages:
+    needs: overview
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download successful overview
+        uses: actions/download-artifact@v4
+        with:
+          name: reducto-overview
+          path: ci-reports/overview/
+
+      - name: Stage Pages site
+        shell: bash
+        run: |
+          shopt -s nullglob
+          reports=(ci-reports/overview/reducto-baseline-*.html)
+          if [ "${#reports[@]}" -ne 1 ]; then
+            echo "Expected exactly one overview dashboard" >&2
+            exit 1
+          fi
+          mkdir -p ci-reports/pages/dashboard
+          cp docs/index.html ci-reports/pages/index.html
+          cp "${reports[0]}" ci-reports/pages/dashboard/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ci-reports/pages/
+
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Dashboard link
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          echo "[Open the main-branch dashboard](${PAGE_URL%/}/dashboard/)" >> "$GITHUB_STEP_SUMMARY"
+
   comparison:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

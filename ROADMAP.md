@@ -21,6 +21,8 @@ remain. See [ASSESSMENT.md](docs/ASSESSMENT.md) and [TODO.md](TODO.md), items 19
 - Markdown/JSON/offline HTML from the same result; overview and comparison charts.
 - Independent overview and PR comparison jobs in the Analysis workflow, summaries
   and downloadable artifacts. Complexity verdicts are informational; actual errors fail.
+- Main-only GitHub Pages publication of the latest successful overview, preserving
+  the landing page and keeping PR/develop reports artifact-only.
 - Rules and use: [METRICS.md](docs/METRICS.md), [CI.md](docs/CI.md).
 
 The entries below record earlier delivered fixes. Their historical test counts
@@ -116,7 +118,7 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 
 - **Cross-file impact analysis** — re-introduce an LSP/symbol-graph layer *only when a command consumes it*
   (dead-code detection, safe-rename impact, real dedup rewrite).
-- **Further reporting** — historical trends, hosted dashboards, and optional PR comments.
+- **Further reporting** — historical trends, hosted PR previews, and optional PR comments.
 - **CI mode** — non-interactive `--ci` / pre-commit integration with meaningful exit codes.
 
 ## Vision (from DESIGN.md — not scheduled)

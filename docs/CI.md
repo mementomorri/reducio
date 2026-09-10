@@ -43,20 +43,46 @@ Without the `reports` extra, Markdown and JSON still work.
 
 ## This repository's GitHub Actions workflow
 
-[Analysis](../.github/workflows/analysis.yml) has two independent jobs:
+[Analysis](../.github/workflows/analysis.yml) has two analysis jobs and a main-only
+publishing job:
 
 - **overview:** on `main`/`develop` pushes and manual runs. Analyzes `reducto/`,
   checks structured results for actual functions, and includes the quality report.
 - **comparison:** on pull requests targeting `main`. Fetches full history and
   compares the PR merge base against the explicit PR head SHA, scoped to
   `reducto/`. It does not use GitHub's synthetic merge commit as the head.
+- **publish-pages:** after a successful overview, on `main` pushes or manual runs
+  explicitly selecting `main`. Reuses that run's HTML artifact, preserves the
+  landing page, and publishes the dashboard at `/dashboard/`. Never runs for PRs,
+  `develop`, or manual runs on other branches. Failed analysis does not replace
+  the last published dashboard. Only this job receives Pages deployment permissions.
 
 Open **Actions → Analysis → run → Summary** for the compact results. Download
 `reducto-overview` or `reducto-comparison` from the run's **Artifacts** section
 (also linked in the summary), unzip it, and open its `.html` file in a browser.
-The HTML dashboard is an artifact, not a GitHub-hosted interactive page.
+PR and `develop` dashboards remain download-only. The latest successful `main`
+overview is also hosted on GitHub Pages; its deployment summary includes a link.
 GitHub documents [Markdown job summaries](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-job-summary)
 and [workflow artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts).
+
+### Enable GitHub Pages once
+
+1. In `mementomorri/reducto`, open **Settings → Pages → Build and deployment**.
+2. Set **Source** to **GitHub Actions**.
+3. Push the workflow to `main`, or run **Actions → Analysis → Run workflow** with
+   branch **main** selected after the workflow is there.
+
+With the default project-domain configuration, bookmark
+[the dashboard](https://mementomorri.github.io/reducto/dashboard/). It becomes
+available after the first successful deployment. If a custom domain is configured,
+use the link in the deployment summary instead. No local server is needed.
+Optionally restrict the `github-pages` environment's deployment branches to `main`
+as an additional safeguard. Setup follows GitHub's
+[custom Pages workflow instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+The public site contains only the existing landing HTML and latest overview HTML;
+JSON, quality reports, and PR comparisons remain in Actions artifacts. Pages
+updates the existing site, not a historical report archive.
 
 Reports upload with `if: always()` so available partial results survive a failed
 analysis. Missing refs, unreadable/invalid source, or report errors fail the job;
