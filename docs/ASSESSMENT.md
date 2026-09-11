@@ -1,15 +1,37 @@
 # Implementation assessment
 
-Reviewed **2026-09-10**, against `main` at **`1e79b7b`** (`feat(cli): verbose
+Originally reviewed **2026-09-10**, against `main` at **`1e79b7b`** (`feat(cli): verbose
 listings and check reports`). Package version: **1.0.0**, Python **3.14+**.
 Canonical repository, confirmed by the maintainer: **`mementomorri/reducto`**.
 
-This assessment includes the implementation update below and the original audit.
+Updated **2026-09-11** for section 1 implementation on top of `2ca053b`.
+This assessment includes current implementation updates and the original audit.
 The actionable backlog is
 [TODO.md](../TODO.md), ordered from small corrections to larger decisions. Its
 order reflects effort; the release blockers below reflect severity.
 
-## Implementation update — metrics and CI reporting
+## Implementation update — CLI contracts and documentation
+
+TODO section 1 is implemented locally: ANSI-resilient help tests, canonical active
+links and local origin, truthful plan/session/report output, nonzero failed-apply
+exits, saved-plan dirty warnings, and consistent directory/configuration validation.
+Explicit CLI model/verbosity/preference overrides now win over environment, selected
+YAML, and defaults; services preserve resolved settings. `--no-verbose` disables
+details independently of `--quiet`. Invalid inputs exit 2 without configuration dumps.
+
+Safety/architecture/user/onboarding/testing docs now distinguish actual safeguards
+from planned capabilities. The installer is documented as checkout-based Bash;
+its unused `INSTALL_DIR` and absent installer CI remain item 12. No rollback or
+rewriting engine was changed. Items 19–24 remain safety blockers.
+
+Local verification: **266 tests passed, 85.15% coverage**; CLI coverage **83%**,
+configuration **100%**. Ruff, Black, mypy, and wheel/sdist build passed; tracked
+fixtures are unchanged. Details: [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md).
+Earlier remote inspection found Analysis/Pages and Installation successful but
+two colored-help test failures in CI at `c467841`; the local fix does not imply a
+new remote run succeeded. No push or remote workflow rerun was performed.
+
+## Earlier implementation update — metrics and CI reporting (historical)
 
 Implemented locally after the baseline commit:
 
@@ -30,7 +52,7 @@ Implemented locally after the baseline commit:
 - Fixture parse failures are explicit and tested; tracked fixtures are unchanged.
   The roadmap now distinguishes shipped features from incomplete modifier safety.
 
-Local verification: **169 tests passed, 80.88% coverage**; Ruff, Black, mypy, and
+Historical local verification: **169 tests passed, 80.88% coverage**; Ruff, Black, mypy, and
 wheel/sdist build passed. The metric engine reached 100% statement coverage.
 Browser inspection rendered all three overview and four comparison charts with
 **no page errors or external requests**. See [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md)
@@ -110,7 +132,12 @@ assessment:
 | Keywords in literals/comments affect complexity | AST metrics v2 ignore non-code text, superseding the earlier word-boundary fix. |
 | Unknown pattern names and file targets cause poor CLI behavior | Main commands validate repository directories; unknown pattern names exit 2. Session commands still need consistent validation. |
 | Missing reports produce an unhandled traceback | Report lookup handles missing reports and considers all generated report types for latest-report lookup. |
-| Idiomatize prints no apply result | It now prints success/failure, although failed application still exits 0. |
+| Missing/misleading CLI application outcomes | All four modifying commands now print actual returned success/failure; failed application exits 1. Plans say proposed, not applied. |
+| Saved-plan replay omits dirty-tree warning | Replay now uses the same warning and approval behavior; rollback itself remains unsafe. |
+| Default flags overwrite configuration | Explicit CLI settings now win over environment/file defaults; omitted settings and resolved service configuration are preserved. |
+| Missing/malformed config or invalid session target | Clear input errors exit 2; session targets are validated before storage creation. |
+| Colored help breaks flag assertions in CI | Help tests strip ANSI styling and exercise both normal and forced-color output. |
+| Repository/usage docs are inconsistent | Active links and local origin are canonical; flags and acceptance criteria reflect implemented versus planned behavior. |
 | Apply report LOC values are always zero | Successful application now populates before/after LOC totals. Complexity deltas are still absent. |
 
 The original suite had 120 tests; the 105/112-test figures in older documents
@@ -155,8 +182,8 @@ rollback, although the checkpoint may remain recoverable through Git's reflog.
 
 The existing test starts from `x = 1`, changes it to `x = 2` before checkpointing,
 and expects rollback to restore `x = 1`. It currently locks in the undesirable
-behavior. The saved-plan `apply` command also omits the dirty-tree warning used by
-the other modifying commands.
+behavior. Saved-plan `apply` now warns on dirty Git roots like the other modifying
+commands, but that does not fix rollback.
 
 Recovery needs to preserve staged, unstaged, and untracked user work. Tests must
 also cover newly created advisory files and failed restoration. The choice of
@@ -164,7 +191,7 @@ checkpoint, stash, or snapshot mechanism remains an implementation decision.
 
 Sources: [git_safety.py](../reducto/git_safety.py),
 [workspace.py](../reducto/workspace.py), [test_git.py](../tests/unit/test_git.py),
-[cli.py](../reducto/cli.py). Backlog: **TODO 09, 22**.
+[cli.py](../reducto/cli.py). Backlog: **TODO 22**; warning consistency (09) is fixed.
 
 ### 3. Exceptions can bypass recovery, and rollback status is optimistic
 
@@ -186,40 +213,39 @@ Sources: [workspace.py](../reducto/workspace.py),
 
 | Finding | Evidence and impact | TODO |
 | --- | --- | --- |
-| Failed application exits successfully | Reproduced with a stubbed failed apply result: `idiomatize`, `deduplicate`, `pattern`, and `apply` all exit 0. Pattern also ignores the result. | 07–08 |
 | Session IDs can escape storage paths | Reproduced by path resolution only: `../../../outside` resolves outside the configured session directory. File operations need ID/containment validation. | 15 |
-| Configuration is applied inconsistently | Default local-preference arguments overwrite YAML. Missing explicit config paths silently select defaults. The `cfg.verbose` handling is fixed. | 10–11, 28 |
+| Remaining configuration/CI policies | Precedence and validation are fixed; configurable finding gates and a broader noninteractive approval policy remain undecided. | 28 |
 | Reports and sessions use different roots | Reports default to the caller's working directory; sessions use the target repository. Docker's advertised data-directory variable is unused. | 13 |
 | Plans lack a convenient code preview | Dry-run reports and session display show descriptions; apply approval generally shows a count. Full original/modified text is available in session JSON. | 14 |
 | Advisory modules may be invalid or incomplete | Copied methods retain indentation/class dependencies; extracted functions may lack imports. Destination names can collide across source paths. | 18 |
 | Fallbacks can hide capability failures | Parser initialization failure yields no symbols. Failed LLM rewriting falls back to heuristics/templates without a clear user-facing explanation of the path used. | 17 |
-| Installer instructions do not match the script | Docs pipe to `sh`; the script uses Bash syntax and editable `.` installation, requiring a checkout. Installation CI does not exercise the script. | 12 |
-| Repository identity is inconsistent | The source clone example uses confirmed `mementomorri/reducto`; local origin remains `mementomorri/dehydrator`, and old installer/site links still need reconciliation. | 01 |
+| Installer implementation/testing gaps | Documentation now states checkout-based Bash installation; `INSTALL_DIR` is still unused and Installation CI does not exercise the script. | 12 |
 | Task-based model routing is not operational in the normal agent path | A configured model enables rewriting and bypasses tier selection. Tier-selection unit tests do not demonstrate task-based routing in an actual workflow. | 27 |
 
 The repository identity is a confirmed maintainer choice, not inferred from a
-remote lookup. No Git remote setting was changed during this review. The package
+remote lookup. The local origin URL now matches `mementomorri/reducto`; no hosted
+repository settings were changed. The package
 version and locally available tags alone do not establish what has been published.
 
 ## Test coverage and documentation gaps
 
-The CLI has subprocess smoke tests and new in-process analysis/comparison tests.
-Coverage now measures the latter, but not the subprocesses. Several older tests
+The CLI has subprocess smoke tests and in-process analysis/comparison and command
+contract tests. Coverage measures the latter, but not subprocesses. Several older tests
 assert exit status or syntax
 without asserting successful application or preserved runtime behavior; the
 reproductions above demonstrate why those distinctions matter.
 
-Add behavior comparisons for rewritten functions, approval-decline cases,
-failed-apply exit codes, dirty-state preservation, and runner/recovery exceptions.
+Approval-decline, failed-apply exit, and dirty-warning tests now exist. Still add
+behavior comparisons for rewritten functions, dirty-state preservation, and runner/recovery exceptions.
 Measure CLI execution either through subprocess coverage or focused `CliRunner`
 tests. Keep live provider/model integration results distinct from mocked tests.
 
-[TEST_RULES.md](TEST_RULES.md) also mixes implemented behavior with future goals:
+[TEST_RULES.md](TEST_RULES.md) now explicitly separates implemented behavior from goals:
 dependency mapping, side-by-side previews, before/after complexity deltas,
 duplicate-removal statistics, and task-based routing are not all implemented.
 Default pattern templates are advisory modules. Richer analysis/comparison reports
 are now implemented; apply preview improvements remain planned.
-Backlog: **TODO 02–05, 16**.
+Backlog: **TODO 16** (remaining coverage/behavior work).
 
 ## Roadmap position and next steps
 
@@ -230,11 +256,11 @@ for the remaining blockers rather than describing those individual fixes as abse
 
 Recommended sequencing:
 
-1. Finish repository links, stale documentation, and modifier CLI result/exit
-   handling. The CI parser assertion is fixed.
+1. Section 1 links, documentation, input validation, configuration precedence,
+   and CLI result/exit fixes are complete locally. Push/review CI separately.
 2. Resolve behavior-changing idioms and reliable recovery before promoting
    automatic modification as production-safe. Add tests for the concrete failures.
-3. Improve configuration, plan review, legacy report locations, and target test
+3. Improve plan review, legacy report locations, and target test
    execution. Shared metric correctness and revision reporting are implemented.
 4. Decide model-routing policy and the scope of real deduplication. Caller
    rewriting requires cross-file dependency/reference handling. Pre-commit

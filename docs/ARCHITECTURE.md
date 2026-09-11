@@ -33,7 +33,7 @@ User
 | `runner.py` | `pytest` / `unittest` for Python projects |
 | `session.py` | JSON persistence for `RefactorPlan` |
 | `reporter.py` | Markdown reports |
-| `config.py` | `.reducto.yaml` + env |
+| `config.py` | Validated YAML + environment; CLI applies explicit overrides last |
 | `models.py` | Pydantic models and `AppConfig` |
 | `agents/*` | Planning agents (idiomatize is Python-only) |
 | `llm/router.py` | LiteLLM tiers |
@@ -57,16 +57,25 @@ No target imports, LLM calls, tests, or working-tree edits. See [CI.md](CI.md).
 
 ### Deduplicate / idiomatize / pattern / check
 
-Same walk scope. Non-`.py` paths are never loaded. Idiomatize uses Python line heuristics only and
-emits **one whole-file change per file** (the diff is therefore file-relative). Deduplicate is
+Same default Python walk scope. Idiomatize uses Python heuristics by default, with
+optional configured-model rewriting, and emits **one whole-file change per file**.
+Named patterns also have an optional model path; default templates are advisory modules.
+Deduplicate is
 suggestion-only — it proposes a shared `utils/<symbol>_dedup.py` module and does not rewrite call sites.
 
 ### Apply
 
-`apply_changes_safe` is an all-or-nothing transaction: snapshot (git checkpoint, or in-memory copy on a
-non-git target) → apply diffs with **context validation** → **post-apply `ast.parse`** → run pytest (if
-the project looks like Python) → roll the whole batch back on *any* failure. Create diffs refuse to
-overwrite an existing file. See [SAFETY.md](SAFETY.md) for the full guarantees and limits.
+`apply_changes_safe` attempts a guarded batch: checkpoint/snapshot → context-validated
+diffs → syntax checks → target tests when selected → rollback on handled failures.
+Create diffs refuse existing files, but this is **not a reliable atomic transaction**:
+dirty Git rollback restores the wrong baseline, exceptions can bypass recovery,
+and reported rollback/test success has known limitations. See [SAFETY.md](SAFETY.md).
+All modifying CLI commands now print actual returned apply outcomes and exit 1 on
+failure; saved-plan replay uses the same dirty-tree warning as planning commands.
+
+CLI configuration resolves YAML → environment → explicit options. `App` copies
+an explicitly supplied resolved configuration without reapplying environment.
+This changes precedence, not model-routing tiers or local-only enforcement.
 
 ## Distribution
 

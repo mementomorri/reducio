@@ -1,6 +1,7 @@
 # Maintainer onboarding
 
-Guide for engineers maintaining **reducto** — a Python CLI that refactors **Python codebases** only.
+Guide for engineers maintaining **reducto** — Python analysis, revision reporting,
+and experimental refactoring. Automatic modification is not production-safe.
 
 - Vision: [DESIGN.md](DESIGN.md)
 - Architecture: [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -45,7 +46,10 @@ Optional: Ollama or cloud API keys for LLM-backed routing.
 
 ### Configuration
 
-`.reducto.yaml` / `~/.reducto.yaml` / `REDUCTO_*` env vars.
+Explicit CLI options override environment, then the selected YAML file, then
+defaults. An explicit `--config` must exist; otherwise discovery uses the first
+existing current-directory/user config, without merging. See the
+[configuration contract](README.md#configuration-precedence).
 
 ```yaml
 complexity_thresholds:
@@ -61,10 +65,15 @@ exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
 | `analyze` | `analyze` | Static; AST symbols and shared metrics v2 |
 | `compare` | Direct `compare_revisions` | Read-only Git snapshots; changed-file function deltas |
 | `deduplicate` | `deduplicate` | Embeddings on Python functions/methods |
-| `idiomatize` | `idiomatize` | Python heuristics only |
-| `pattern` | `pattern` | Template `.py` modules |
+| `idiomatize` | `idiomatize` | Python heuristics; optional configured-model rewrite |
+| `pattern` | `pattern` | Advisory modules for every default pattern; optional configured-model rewrite for named patterns |
 | `check` | `check` | Naming, function length, per-function cyclomatic complexity |
-| `apply` | `apply_plan` | Session JSON → safe apply |
+| `apply` | `apply_plan` | Session JSON → dirty-tree warning, approval, guarded apply with recovery limits |
+
+Use the [per-command flag table](README.md#flags): `pattern` selects its model
+through configuration/environment, not `--model`. Plans print session IDs;
+dry-runs print report paths. Failed application exits 1; invalid inputs exit 2.
+`--quiet` hides progress only, while `--no-verbose` disables detailed results.
 
 ## Extending
 

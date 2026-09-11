@@ -25,7 +25,7 @@ class PatternAgent(BaseAgent):
 
         return self._finalize_plan(
             changes,
-            f"Applied {pattern or 'detected'} design patterns to {len(changes)} locations.",
+            f"Proposed {pattern or 'detected'} design patterns for {len(changes)} locations.",
             "pattern",
             pattern=pattern if pattern else "auto-detect",
         )

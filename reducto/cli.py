@@ -11,9 +11,15 @@ import typer
 from reducto import __version__
 from reducto.analysis import analysis_configuration, analyze_files
 from reducto.compare import CompareError, compare_revisions
-from reducto.config import apply_env, load_config
+from reducto.config import ConfigError, apply_env, load_config
 from reducto.git_safety import GitSafety
-from reducto.models import AnalysisDiagnostic, AppConfig, CompareResult
+from reducto.models import (
+    AnalysisDiagnostic,
+    AppConfig,
+    CompareResult,
+    RefactorPlan,
+    RefactorResult,
+)
 from reducto.progress import progress
 from reducto.reporter import Reporter
 from reducto.session import SessionStore
@@ -40,18 +46,30 @@ _cfg: AppConfig | None = None
 
 
 def _get_cfg(
-    config: Path | None, verbose: bool, model: str, prefer_local: bool, prefer_remote: bool
+    config: Path | None,
+    verbose: bool | None = None,
+    model: str | None = None,
+    prefer_local: bool | None = None,
+    prefer_remote: bool = False,
 ) -> AppConfig:
     global _cfg
-    cfg = load_config(str(config) if config else None)
-    cfg.verbose = verbose or cfg.verbose
-    if model:
+    if prefer_local is True and prefer_remote:
+        typer.echo("Choose either --prefer-local or --prefer-remote, not both.", err=True)
+        raise typer.Exit(2)
+    try:
+        cfg = apply_env(load_config(str(config) if config is not None else None))
+    except ConfigError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
+    if verbose is not None:
+        cfg.verbose = verbose
+    if model is not None:
         cfg.model = model
     if prefer_remote:
         cfg.prefer_local = False
     elif prefer_local is not None:
         cfg.prefer_local = prefer_local
-    _cfg = apply_env(cfg)
+    _cfg = cfg
     return _cfg
 
 
@@ -79,14 +97,40 @@ def _run(coro):
     return asyncio.run(coro)
 
 
+def _show_plan(plan: RefactorPlan) -> None:
+    typer.echo(plan.description)
+    typer.echo(f"Session ID: {plan.session_id}")
+
+
+def _has_changes(plan: RefactorPlan) -> bool:
+    if not plan.changes:
+        typer.echo("No changes to apply.")
+        return False
+    return True
+
+
+def _show_apply_result(result: RefactorResult) -> None:
+    if not result.success:
+        typer.echo(
+            f"Failed: {result.error or 'Application failed without an error detail.'}", err=True
+        )
+        raise typer.Exit(1)
+    typer.echo("Applied.")
+
+
+def _dry_run_report(plan: RefactorPlan, cfg: AppConfig, command: str, path: Path) -> None:
+    report = Reporter(cfg).generate_dry_run(plan, command, str(path))
+    typer.echo(f"Dry run report: {report}")
+
+
 @app.command()
 def analyze(
     path: Path = typer.Argument(Path("."), help="Repository path"),
     config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
-    model: str = typer.Option("", "--model"),
-    prefer_local: bool = typer.Option(True, "--prefer-local"),
+    model: str | None = typer.Option(None, "--model"),
+    prefer_local: bool | None = typer.Option(None, "--prefer-local"),
     prefer_remote: bool = typer.Option(False, "--prefer-remote"),
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
@@ -149,11 +193,11 @@ def compare(
     ),
     output_dir: Path = typer.Option(Path(".reducto"), "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Compare functions in changed Python files at two committed revisions. Informational only."""
-    cfg = _get_cfg(config, verbose, "", True, False)
+    cfg = _get_cfg(config, verbose)
     root = _resolve_repo(path)
     try:
         with progress("Preparing revision comparison...", quiet=quiet):
@@ -201,31 +245,33 @@ def deduplicate(
     yes: bool = typer.Option(False, "--yes"),
     report: bool = typer.Option(False, "--report"),
     config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-    model: str = typer.Option("", "--model"),
+    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
+    model: str | None = typer.Option(None, "--model"),
     prefer_remote: bool = typer.Option(False, "--prefer-remote"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
-    cfg = _get_cfg(config, verbose, model, True, prefer_remote)
+    cfg = _get_cfg(config, verbose, model, prefer_remote=prefer_remote)
     cfg.pre_approve = yes
+    root = _resolve_repo(path)
     if not dry_run:
-        _check_git(str(path), cfg)
+        _check_git(root, cfg)
     with progress("Preparing duplicate detection...", quiet=quiet):
-        svc = _new_app(_resolve_repo(path), cfg)
+        svc = _new_app(root, cfg)
         plan = _run(svc.deduplicate(str(path)))
-    typer.echo(plan.description)
+    _show_plan(plan)
     if dry_run:
-        p = Reporter(cfg).generate_dry_run(plan, "deduplicate", str(path))
-        typer.echo(f"Dry run report: {p}")
+        _dry_run_report(plan, cfg, "deduplicate", path)
+        return
+    if not _has_changes(plan):
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
         result = svc.apply_plan(plan)
-    typer.echo("Applied." if result.success else f"Failed: {result.error}")
+    _show_apply_result(result)
     if report and result.success:
-        Reporter(cfg).generate(result)
+        typer.echo(f"Apply report: {Reporter(cfg).generate(result)}")
 
 
 @app.command()
@@ -234,27 +280,30 @@ def idiomatize(
     dry_run: bool = typer.Option(False, "--dry-run"),
     yes: bool = typer.Option(False, "--yes"),
     config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-    model: str = typer.Option("", "--model"),
+    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
+    model: str | None = typer.Option(None, "--model"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Rewrite code to idiomatic Python (e.g. list comprehensions)."""
-    cfg = _get_cfg(config, verbose, model, True, False)
+    cfg = _get_cfg(config, verbose, model)
     cfg.pre_approve = yes
+    root = _resolve_repo(path)
     if not dry_run:
-        _check_git(str(path), cfg)
+        _check_git(root, cfg)
     with progress("Preparing idiom proposals...", quiet=quiet):
-        svc = _new_app(_resolve_repo(path), cfg)
+        svc = _new_app(root, cfg)
         plan = _run(svc.idiomatize(str(path)))
-    typer.echo(plan.description)
+    _show_plan(plan)
     if dry_run:
-        Reporter(cfg).generate_dry_run(plan, "idiomatize", str(path))
+        _dry_run_report(plan, cfg, "idiomatize", path)
+        return
+    if not _has_changes(plan):
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
         result = svc.apply_plan(plan)
-    typer.echo("Applied." if result.success else f"Failed: {result.error}")
+    _show_apply_result(result)
 
 
 _PATTERNS = ("factory", "strategy", "observer", "singleton")
@@ -275,34 +324,37 @@ def pattern(
             f"Unknown pattern '{pattern_name}'. Choose from: {', '.join(_PATTERNS)}", err=True
         )
         raise typer.Exit(2)
-    cfg = _get_cfg(config, False, "", True, False)
+    cfg = _get_cfg(config)
     cfg.pre_approve = yes
+    root = _resolve_repo(path)
     if not dry_run:
-        _check_git(str(path), cfg)
+        _check_git(root, cfg)
     with progress("Preparing pattern suggestions...", quiet=quiet):
-        svc = _new_app(_resolve_repo(path), cfg)
+        svc = _new_app(root, cfg)
         plan = _run(svc.pattern(pattern_name, str(path)))
-    typer.echo(plan.description)
+    _show_plan(plan)
     if dry_run:
-        Reporter(cfg).generate_dry_run(plan, "pattern", str(path))
+        _dry_run_report(plan, cfg, "pattern", path)
         return
-    if not yes and plan.changes and not typer.confirm("Apply changes?", default=False):
+    if not _has_changes(plan):
+        return
+    if not yes and not typer.confirm("Apply changes?", default=False):
         raise typer.Exit(0)
-    if plan.changes:
-        with progress("Applying changes and validating...", quiet=quiet):
-            svc.apply_plan(plan)
+    with progress("Applying changes and validating...", quiet=quiet):
+        result = svc.apply_plan(plan)
+    _show_apply_result(result)
 
 
 @app.command()
 def check(
     path: Path = typer.Argument(Path(".")),
     config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
-    cfg = _get_cfg(config, verbose, "", True, False)
+    cfg = _get_cfg(config, verbose)
     with progress("Preparing quality check...", quiet=quiet):
         svc = _new_app(_resolve_repo(path), cfg)
         result = _run(svc.check(str(path)))
@@ -336,7 +388,7 @@ def apply(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Apply a previously saved plan by session ID."""
-    cfg = _get_cfg(config, False, "", True, False)
+    cfg = _get_cfg(config)
     cfg.pre_approve = yes
     root = Path(_resolve_repo(path))
     store = SessionStore(storage_dir=str(root / ".reducto" / "sessions"))
@@ -344,13 +396,17 @@ def apply(
     if not plan:
         typer.echo(f"Session not found: {session_id}", err=True)
         raise typer.Exit(1)
+    _show_plan(plan)
+    if not _has_changes(plan):
+        return
+    _check_git(str(root), cfg)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Preparing application...", quiet=quiet):
         svc = _new_app(str(root), cfg)
     with progress("Applying changes and validating...", quiet=quiet):
         result = svc.apply_plan(plan)
-    typer.echo("Success" if result.success else result.error)
+    _show_apply_result(result)
 
 
 @app.command("report")
@@ -359,7 +415,7 @@ def report_cmd(
     config: Path | None = typer.Option(None, "--config", "-c"),
 ):
     """Print a saved report (latest, or the given session ID)."""
-    cfg = _get_cfg(config, False, "", True, False)
+    cfg = _get_cfg(config)
     try:
         text = Reporter(cfg).load_latest(session_id)
     except FileNotFoundError:
@@ -373,7 +429,7 @@ app.add_typer(sessions_app, name="sessions")
 
 
 def _session_store(path: Path) -> SessionStore:
-    return SessionStore(storage_dir=str(path.resolve() / ".reducto" / "sessions"))
+    return SessionStore(storage_dir=str(Path(_resolve_repo(path)) / ".reducto" / "sessions"))
 
 
 @sessions_app.command("list")
@@ -407,7 +463,7 @@ def sessions_show(
 
 @sessions_app.command("cleanup")
 def sessions_cleanup(
-    days: int = typer.Option(7, help="Delete sessions older than N days"),
+    days: int = typer.Option(7, min=0, help="Delete sessions older than N days"),
     path: Path = typer.Option(Path("."), "--path", "-C", help="Repository path"),
 ):
     """Delete sessions older than N days."""

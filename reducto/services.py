@@ -34,7 +34,7 @@ from reducto.workspace import Workspace
 
 class App:
     def __init__(self, root: str, cfg: AppConfig | None = None):
-        self.cfg = apply_env(cfg or load_config())
+        self.cfg = cfg.model_copy(deep=True) if cfg is not None else apply_env(load_config())
         self.root = root
         self.workspace = Workspace(root, self.cfg)
         self.sessions = SessionStore(storage_dir=str(self.workspace.root / ".reducto" / "sessions"))

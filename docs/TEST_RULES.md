@@ -1,6 +1,8 @@
 # Test Rules
 
-Following the principles of Test-Driven Development (TDD) for the Semantic Compression Engine, the following test suite focuses on functional behavior and user-facing requirements. These tests verify that the application correctly interacts with the filesystem, models, and version control without assuming any specific internal implementation.
+Functional contracts and enhancement opportunities for reducto. Each case below
+states whether behavior is implemented, partial, or planned. A passing test of
+one example does not establish semantic safety for arbitrary refactors.
 
 Automated coverage and pytest layout: [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md). Maintainer setup: [ONBOARDING.md](ONBOARDING.md).
 
@@ -9,79 +11,111 @@ Automated coverage and pytest layout: [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATI
 ### Test Case: Initial Project Mapping
 
 **Scenario**: Run the tool in a directory containing multiple modules and shared utilities.
-**Expectation**: The tool must identify key classes, function signatures, and dependencies across the project. It should detect the project’s main entry points and export a summary or "map".
+**Status: partial.** Analysis reports function/class symbols and metrics.
+Dependency/reference graphs, rich signature mapping, and entry-point detection are planned.
 
 ### Test Case: Python-Only Recognition
 
 **Scenario**: Run the tool on a repository that contains `.py` files and other extensions (e.g. `.md`, `.json`).
-**Expectation**: The tool must process `.py` files with Python parsing and ignore non-Python sources.
+**Status: implemented.** Default analysis scope processes `.py` files; invalid
+Python produces explicit unavailable measurements rather than zero complexity.
 
 ## 2. Semantic Compression and Refactoring
 
 ### Test Case: Cross-File Deduplication Detection
 
 **Scenario**: Provide two files with semantically identical logic (e.g., identical input validation blocks) but different variable names.
-**Expectation**: The tool must identify these as redundant and suggest a refactoring plan to extract the logic into a shared utility.
+**Status: implemented as suggestions.** Optional embeddings identify similar
+functions and propose copied utility modules. Applying writes those modules, but
+does not remove originals or rewrite callers. Dependency/collision handling remains incomplete.
 
 ### Test Case: Idiomatic Transformation (Pythonic Alignment)
 
 **Scenario**: Run the tool on a file containing verbose procedural code (e.g., a multi-line for loop used for list creation).
-**Expectation**: The tool should propose replacing the block with a single-line list comprehension or a standard library equivalent.
+**Status: partial.** Existing heuristics propose comprehensions and selected
+other idioms; configured models can propose broader rewrites. Behavior preservation
+is incomplete; additional validated idioms are enhancement opportunities.
 
 ### Test Case: Design Pattern Injection
 
 **Scenario**: Run the tool on a file with complex, deeply nested if-else conditionals.
-**Expectation**: The tool must suggest a specific design pattern, such as the Strategy or Factory pattern, to simplify the branching logic.
+**Status: partial.** Default patterns generate new advisory modules, including
+singleton. A configured model can rewrite an applicable named-pattern module.
+Automatic template integration into callers is planned, not implemented.
 
 ## 3. Safety Protocols and Git Integration
 
 ### Test Case: Git-Native Checkpointing
 
 **Scenario**: Initiate a refactoring session on a project with uncommitted changes.
-**Expectation**: The tool must either warn the user to commit or stash current changes.
+**Status: implemented warning, incomplete recovery.** Modifying commands,
+including saved-plan replay, warn on dirty Git roots and request confirmation.
+`--yes` bypasses prompts, not warnings. Checkpoints stage all files; correct
+preservation of pre-existing staged/unstaged/untracked state remains a blocker.
 
 ### Test Case: Automatic Rollback on Test Failure
 
 **Scenario**: The tool applies a refactor that causes an existing project test (e.g., pytest) to fail.
-**Expectation**: Upon detecting a non-zero exit code from the test runner, the tool must warn the user and suggest reverting the file changes to the previous Git state before proceeding.
+**Status: partial.** Failed test results trigger an automatic rollback attempt,
+not merely a suggestion. Dirty Git rollback uses the wrong baseline, runner
+exceptions can bypass recovery, and restoration status is not reliably verified.
 
 ### Test Case: Human-in-the-Loop Approval
 
 **Scenario**: User requests a compression operation.
-**Expectation**: The tool must present a "Plan" mode showing a side-by-side diff of proposed changes and wait for a user confirmation (e.g., "y/n") before editing files in-place. Or proceed without approval if command flag with pre-approval is set.
+**Status: partial.** Approval is per nonempty plan and can be bypassed with
+`--yes`. CLI output includes session IDs and dry-run report paths; reports/show
+list descriptions. Unified/side-by-side previews remain planned; inspect persisted
+original/modified JSON manually. Empty plans are not applied.
 
 ### Test Case: Non-Destructive Apply
 
 **Scenario**: Apply a plan that would land an edit somewhere other than the top of a file, that no longer matches the on-disk file, that yields invalid Python, or that creates a module whose path already exists.
-**Expectation**: Edits must land at their true location (no file ever made invalid that was valid before); a diff whose context does not match must fail rather than apply blindly; any syntactically broken result must roll the whole batch back even on a repo with no tests; and a "create" change must never overwrite or prepend into an existing file. The all-or-nothing rollback holds on both git and non-git targets. (See [SAFETY.md](SAFETY.md).)
+**Status: partial.** File-relative diffs validate context, create diffs reject
+existing files, and syntax failures trigger recovery on handled paths. Reliable
+atomic recovery on all Git/non-Git paths is not implemented. See [SAFETY.md](SAFETY.md).
 
 ## 4. Model Orchestration and Performance
 
 ### Test Case: Model Provider Switching
 
 **Scenario**: Configure the tool to use a local Ollama instance for simple tasks and a remote Claude model for architectural planning, if both enabled.
-**Expectation**: The tool must correctly route requests based on the user's config.yaml or CLI flags, ensuring the local model handles small-scope edits while the remote model handles multi-file reasoning.
+**Status: partial.** Explicit model/preference configuration exists. CLI settings
+override environment, then the selected YAML file, then defaults. Normal agent
+rewrites require a selected model; task-based tier routing and enforced local-only
+execution are planned. Router unit tests do not demonstrate task-based production routing.
 
 ### Test Case: Functional Parity Validation (Pass@1)
 
 **Scenario**: Apply a refactor to a core business logic function.
-**Expectation**: After the refactor, the function must pass 100% of its original unit tests to ensure no regression in external behavior.
+**Status: planned safety criterion.** Target tests are attempted, but selection
+and passed/failed/not-run reporting have known defects. Passing available tests
+alone does not prove equivalence. Behavior-preserving rewrites remain release blockers.
 
 ## 5. Reporting and Metrics
 
 ### Test Case: Complexity Reduction Report
 
 **Scenario**: Execute the tool with the --report flag.
-**Expectation**: The tool must generate a document (Markdown) summarizing the delta in Lines of Code (LOC), Cyclomatic Complexity, and "Cognitive Complexity" scores before and after the session.
+**Status: implemented for revisions, partial for apply sessions.** `analyze` and
+`compare` produce Markdown/JSON/HTML with shared AST metrics; comparison includes
+whole-function deltas in changed files. Legacy apply-session reports contain LOC
+only, not before/after complexity. Cognitive is a custom reducto score.
 
 ### Test Case: Duplicate Removal Statistics
 
 **Scenario**: Run a deduplication session across a large project.
-**Expectation**: The final report must specify exactly which redundant blocks were removed and how much total "Technical Debt" volume was eliminated.
+**Status: planned.** Deduplication does not remove duplicate blocks today, so no
+removal/savings claim is justified. Real extraction and measured impact require
+caller/import rewriting and validation first.
 
 ## 6. User-Flow Integration
 
 ### Test Case: CLI Flow Continuity
 
-**Scenario**: Navigate to a project folder and run reducto --deduplicate.
-**Expectation**: The application must successfully complete the loop: Scan -> Propose Plan -> User approves (skip if flag set to pre-approve) -> Edit In-Place -> Run Tests -> Commit to Git (Optional).
+**Scenario**: Navigate to a project folder and run `reducto deduplicate .`.
+**Status: partial.** Scan → persist proposal → approval (or `--yes`) → apply
+advisory modules → attempt validation/tests → optional result commit. Existing
+checkpoint commits are separate from that optional result commit. Failed returned
+applications exit 1 with a reason; successful applications and ordinary declined
+approval exit 0. Input errors exit 2. Remaining workflow safety limits are above.

@@ -4,6 +4,9 @@ import ast
 import subprocess
 import sys
 
+import pytest
+from click import unstyle
+
 
 def _parses(path) -> bool:
     try:
@@ -29,18 +32,32 @@ def test_help():
     assert "analyze" in r.stdout
 
 
-def test_analyze_help_flags():
+@pytest.mark.parametrize("force_color", [False, True])
+def test_analyze_help_flags(monkeypatch, force_color):
+    (
+        monkeypatch.setenv("FORCE_COLOR", "1")
+        if force_color
+        else monkeypatch.delenv("FORCE_COLOR", raising=False)
+    )
     r = _run_cli("analyze", "--help")
     assert r.returncode == 0
-    assert "--verbose" in r.stdout and "-v" in r.stdout
-    assert "--report" in r.stdout and "-r" in r.stdout
+    output = unstyle(r.stdout)
+    assert "--verbose" in output and "-v" in output
+    assert "--report" in output and "-r" in output
 
 
-def test_check_help_flags():
+@pytest.mark.parametrize("force_color", [False, True])
+def test_check_help_flags(monkeypatch, force_color):
+    (
+        monkeypatch.setenv("FORCE_COLOR", "1")
+        if force_color
+        else monkeypatch.delenv("FORCE_COLOR", raising=False)
+    )
     r = _run_cli("check", "--help")
     assert r.returncode == 0
-    assert "--verbose" in r.stdout and "-v" in r.stdout
-    assert "--report" in r.stdout and "-r" in r.stdout
+    output = unstyle(r.stdout)
+    assert "--verbose" in output and "-v" in output
+    assert "--report" in output and "-r" in output
 
 
 def test_analyze_sample_repo(sample_repo):
@@ -110,10 +127,30 @@ def test_idiomatize_never_breaks_valid_python(sample_repo):
     assert not regressions, f"idiomatize corrupted valid files: {regressions}"
 
 
-def test_deduplicate_sample_repo(sample_repo):
-    r = _run_cli("deduplicate", str(sample_repo / "duplicates"), "--yes")
+def test_deduplicate_sample_repo_dry_run(sample_repo):
+    # The corpus includes an existing proposed destination; exercise planning,
+    # not an application that used to hide its create-over-existing failure.
+    r = _run_cli("deduplicate", str(sample_repo / "duplicates"), "--dry-run")
     assert r.returncode == 0
     assert "duplicate" in r.stdout.lower()
+    assert "Dry run report:" in r.stdout
+    assert "Session ID:" in r.stdout
+
+
+def test_pattern_collision_reports_failure_on_stderr(tmp_path):
+    source = tmp_path / "sample.py"
+    original = "def sample(x):\n" + "    if x: x -= 1\n" * 5 + "    return x\n"
+    source.write_text(original)
+    destination = tmp_path / "strategies" / "sample_strategy.py"
+    destination.parent.mkdir()
+    destination.write_text("# Existing user module\n")
+    result = _run_cli("pattern", "strategy", str(tmp_path), "--yes", "--quiet", cwd=tmp_path)
+    assert result.returncode == 1
+    assert "Failed: refusing to create over existing file" in result.stderr
+    assert "Applied." not in result.stdout
+    assert "Proposed strategy" in result.stdout
+    assert source.read_text() == original
+    assert destination.read_text() == "# Existing user module\n"
 
 
 def test_apply_unknown_session_exits_1(sample_repo):

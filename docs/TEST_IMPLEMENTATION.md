@@ -41,9 +41,10 @@ Shared fixtures live in `tests/conftest.py` (`fixture_repo_root`, `fixture_files
 
 ## Apply-safety regression tests
 
-These lock the apply/rollback guarantees described in [SAFETY.md](SAFETY.md):
+These exercise specific safeguards described in [SAFETY.md](SAFETY.md), not
+universal behavior-preservation or recovery guarantees:
 
-| Guarantee | Test |
+| Checked case | Test |
 |-----------|------|
 | Idiomatize apply lands at correct lines; docstring intact | `tests/unit/test_apply_idiomatize.py` |
 | No valid `.py` becomes invalid after `idiomatize --yes` | `tests/e2e/test_cli_smoke.py::test_idiomatize_never_breaks_valid_python` |
@@ -60,14 +61,24 @@ mypy reducto/ --ignore-missing-imports
 ```
 
 Coverage target: `reducto/` package (minimum 60% in CI; see `pyproject.toml`).
-Latest local run: **169 tests / 80.88% coverage** (2026-09-10). The pre-metrics-v2
-baseline was 120 tests / 72.16%. See [ASSESSMENT.md](ASSESSMENT.md).
+Latest local run: **266 tests passed / 85.15% coverage** (2026-09-11, section 1
+implementation on top of `2ca053b`). CLI statement coverage is **83%**, and
+configuration coverage is **100%**. Ruff, Black, mypy, and wheel/sdist build passed;
+tracked fixtures are unchanged. This is local verification, not a new remote CI run.
+Historical snapshots: 193 tests / 80.87% after progress reporting, 169 / 80.88%
+after metrics/reporting, and 120 / 72.16% before metrics v2. See [ASSESSMENT.md](ASSESSMENT.md).
 
 Metric contracts are in `tests/unit/test_metrics_v2.py`; isolated Git comparisons
 (including dirty-tree preservation, renames, invalid revisions/source, and empty
 changes) in `test_compare.py`; report agreement, escaping, optional dependencies,
 and in-process CLI exit behavior in `test_visual_report.py`. CLI subprocess smoke
 tests remain; the new `CliRunner` tests are included in coverage.
+
+`test_cli_contracts.py` covers actual returned apply outcomes, empty/declined
+plans, saved-plan dirty warnings, dry-run paths/session IDs, configuration
+precedence, and invalid inputs. `test_config.py` covers configuration errors and
+resolved service settings. Help tests run with normal and forced-color output;
+strip ANSI styling before checking option spelling, not from the actual CLI.
 
 ## CI analysis job
 

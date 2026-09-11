@@ -25,6 +25,17 @@ remain. See [ASSESSMENT.md](docs/ASSESSMENT.md) and [TODO.md](TODO.md), items 19
   the landing page and keeping PR/develop reports artifact-only.
 - Rules and use: [METRICS.md](docs/METRICS.md), [CI.md](docs/CI.md).
 
+### CLI clarity and configuration — implemented
+
+- Plans say proposed, expose session IDs and dry-run paths, skip empty application,
+  and return nonzero on failed apply. Saved-plan replay warns about dirty Git state.
+- Configuration precedence: explicit CLI → environment → selected YAML → defaults;
+  services preserve resolved settings. `--no-verbose` disables detail; `--quiet`
+  controls progress independently. Invalid configurations/targets exit 2 cleanly.
+- Progress stages/heartbeats, canonical repository links, CI setup guide, and
+  normal/forced-color help regression tests. Safety docs state remaining limits.
+- These changes complete TODO section 1, not the behavior/recovery safety milestone.
+
 The entries below record earlier delivered fixes. Their historical test counts
 are not the current suite size, and individual guards do not prove semantic safety.
 
@@ -112,8 +123,9 @@ landing page now describes current behavior; [ADVERTISING_AUDIT.md](docs/ADVERTI
 preserves the original comparison. Safety items remain release blockers, not
 optional polish. Ordered from immediate clarity/safety work to broader features:
 
-- [ ] **Review and result clarity:** show unified diffs before approval, session IDs,
-  actual apply outcomes and failure exit codes, and heuristic/model/fallback provenance.
+- [ ] **Review and result clarity:** session IDs, report paths, actual returned apply
+  outcomes and failure exit codes are implemented. Remaining: unified diffs before
+  approval and heuristic/model/fallback provenance.
   Decide whether to expose the existing commit configuration as a supported CLI flag.
 - [ ] **Reliable recovery — release blocker:** preserve staged, unstaged, and
   untracked pre-existing work; recover from validation/runner exceptions; distinguish

@@ -98,6 +98,7 @@ class DeduplicatorAgent(BaseAgent):
             modified=primary.content,
             description=(
                 f"Proposed shared util for '{primary.symbol_name}' from {len(group)} sites "
-                "(suggestion only — not auto-applied; call sites are not rewritten)"
+                "(suggestion only; applying writes the utility module; "
+                "originals and call sites are not rewritten)"
             ),
         )
