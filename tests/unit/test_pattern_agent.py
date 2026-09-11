@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from reducto.agents.pattern import PatternAgent
-from reducto.models import AppConfig, FileInfo, PatternRequest
-from reducto.workspace import Workspace
+from reducio.agents.pattern import PatternAgent
+from reducio.models import AppConfig, FileInfo, PatternRequest
+from reducio.workspace import Workspace
 
 
 class _FakeLLM:

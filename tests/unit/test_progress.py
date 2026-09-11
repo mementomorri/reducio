@@ -9,8 +9,8 @@ from threading import enumerate as threads
 import pytest
 from typer.testing import CliRunner
 
-from reducto.cli import app
-from reducto.progress import _Progress, progress, status
+from reducio.cli import app
+from reducio.progress import _Progress, progress, status
 
 
 @pytest.mark.parametrize("fail", [False, True])
@@ -35,7 +35,7 @@ def test_heartbeat_during_work_and_cleanup(monkeypatch, fail):
                 raise RuntimeError("analysis failed")
     except RuntimeError:
         assert fail
-    assert not any(thread.name == "reducto-progress" for thread in threads())
+    assert not any(thread.name == "reducio-progress" for thread in threads())
     saved = stream.getvalue()
     status("Must not leak after context exit")
     assert stream.getvalue() == saved
@@ -49,7 +49,7 @@ def test_library_silence_and_nested_quiet(capsys):
         status("Restored")
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "[reducto] Outer\n[reducto] Restored\n"
+    assert captured.err == "[reducio] Outer\n[reducio] Restored\n"
 
 
 def test_cli_progress_precedes_initialization(monkeypatch, tmp_path):
@@ -66,11 +66,11 @@ def test_cli_progress_precedes_initialization(monkeypatch, tmp_path):
         assert messages == ["Preparing analysis..."]
         raise RuntimeError("initialization failed")
 
-    monkeypatch.setattr("reducto.cli._new_app", slow_initialization)
+    monkeypatch.setattr("reducio.cli._new_app", slow_initialization)
     result = CliRunner().invoke(app, ["analyze", str(tmp_path)])
     assert isinstance(result.exception, RuntimeError)
     assert str(result.exception) == "initialization failed"
-    assert not any(thread.name == "reducto-progress" for thread in threads())
+    assert not any(thread.name == "reducio-progress" for thread in threads())
 
 
 @pytest.mark.parametrize("command", ["analyze", "check"])
@@ -80,7 +80,7 @@ def test_cli_progress_preserves_stdout_and_quiet_errors(tmp_path, command):
 
     def run(*options):
         return subprocess.run(
-            [sys.executable, "-m", "reducto.cli", command, str(tmp_path), *options],
+            [sys.executable, "-m", "reducio.cli", command, str(tmp_path), *options],
             capture_output=True,
             text=True,
             timeout=60,
@@ -97,4 +97,4 @@ def test_cli_progress_preserves_stdout_and_quiet_errors(tmp_path, command):
     failed = run("--quiet")
     assert failed.returncode == 1
     assert failed.stderr
-    assert "[reducto]" not in failed.stderr
+    assert "[reducio]" not in failed.stderr

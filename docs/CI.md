@@ -7,12 +7,12 @@ For a copy-paste workflow for another repository, start with the short
 
 ```bash
 pip install -e ".[reports]"  # from a source checkout; adds Plotly
-reducto analyze reducto/ --report --format all --output-dir ci-reports/overview
-reducto compare reducto/ --base HEAD~1 --head HEAD --report --format all --output-dir ci-reports/comparison
+reducio analyze reducio/ --report --format all --output-dir ci-reports/overview
+reducio compare reducio/ --base HEAD~1 --head HEAD --report --format all --output-dir ci-reports/comparison
 ```
 
 In another installed target project, use `.` or its source directory in place of
-`reducto/`. No LLM or embeddings are needed. `analyze` reads current files;
+`reducio/`. No LLM or embeddings are needed. `analyze` reads current files;
 `compare` reads **committed Git blobs**, ignoring staged/unstaged/untracked edits.
 It does not check out revisions, import target modules, or run target tests.
 The optional directory target must exist in the current checkout.
@@ -22,7 +22,7 @@ For a branch comparison, resolve a merge base explicitly:
 
 ```bash
 git fetch origin main
-reducto compare . --base "$(git merge-base origin/main HEAD)" --head HEAD --report --format all
+reducio compare . --base "$(git merge-base origin/main HEAD)" --head HEAD --report --format all
 ```
 
 Include/exclude patterns and thresholds come from one current configuration on
@@ -38,11 +38,11 @@ to make that choice explicit. See [METRICS.md](METRICS.md) for counting rules.
 | HTML | Offline interactive dashboard: distributions, scatter, rankings, comparison charts, complete table |
 | JSON | Complete versioned measurements for automation |
 
-`--report` alone writes Markdown under `<target>/.reducto/`.
+`--report` alone writes Markdown under `<target>/.reducio/`.
 `--format markdown\|html\|json\|all` selects formats **when `--report` is present**.
 `--output-dir` overrides report locations; an explicit relative path is caller-relative.
-Use `reducto report -C /path/to/target` to read the latest Markdown report, adding
-the same `--output-dir` when overridden. Sessions stay under the target's `.reducto/sessions/`.
+Use `reducio report -C /path/to/target` to read the latest Markdown report, adding
+the same `--output-dir` when overridden. Sessions stay under the target's `.reducio/sessions/`.
 Old reports are not migrated or searched in other directories. Analysis/comparison files have
 timestamped names; HTML includes its own JavaScript and needs no server/CDN.
 Without the `reports` extra, Markdown and JSON still work.
@@ -59,11 +59,11 @@ is explicitly enabled. Progress stops before interactive approval prompts.
 [Analysis](../.github/workflows/analysis.yml) has two analysis jobs and a main-only
 publishing job:
 
-- **overview:** on `main`/`develop` pushes and manual runs. Analyzes `reducto/`,
+- **overview:** on `main`/`develop` pushes and manual runs. Analyzes `reducio/`,
   checks structured results for actual functions, and includes the quality report.
 - **comparison:** on pull requests targeting `main`. Fetches full history and
   compares the PR merge base against the explicit PR head SHA, scoped to
-  `reducto/`. It does not use GitHub's synthetic merge commit as the head.
+  `reducio/`. It does not use GitHub's synthetic merge commit as the head.
 - **publish-pages:** after a successful overview, on `main` pushes or manual runs
   explicitly selecting `main`. Reuses that run's HTML artifact, preserves the
   landing page, and publishes the dashboard at `/dashboard/`. Never runs for PRs,
@@ -71,7 +71,7 @@ publishing job:
   the last published dashboard. Only this job receives Pages deployment permissions.
 
 Open **Actions → Analysis → run → Summary** for the compact results. Download
-`reducto-overview` or `reducto-comparison` from the run's **Artifacts** section
+`reducio-overview` or `reducio-comparison` from the run's **Artifacts** section
 (also linked in the summary), unzip it, and open its `.html` file in a browser.
 PR and `develop` dashboards remain download-only. The latest successful `main`
 overview is also hosted on GitHub Pages; its deployment summary includes a link.
@@ -80,13 +80,13 @@ and [workflow artifacts](https://docs.github.com/en/actions/concepts/workflows-a
 
 ### Enable GitHub Pages once
 
-1. In `mementomorri/reducto`, open **Settings → Pages → Build and deployment**.
+1. In `mementomorri/reducio`, open **Settings → Pages → Build and deployment**.
 2. Set **Source** to **GitHub Actions**.
 3. Push the workflow to `main`, or run **Actions → Analysis → Run workflow** with
    branch **main** selected after the workflow is there.
 
 With the default project-domain configuration, bookmark
-[the dashboard](https://mementomorri.github.io/reducto/dashboard/). It becomes
+[the dashboard](https://mementomorri.github.io/reducio/dashboard/). It becomes
 available after the first successful deployment. If a custom domain is configured,
 use the link in the deployment summary instead. No local server is needed.
 Optionally restrict the `github-pages` environment's deployment branches to `main`
@@ -103,7 +103,7 @@ complexity regressions and quality findings alone do not. Docs-only changes yiel
 a successful empty comparison. Branch-protection rules are not changed by this
 workflow update. A failure before report generation is explained in job logs.
 
-To reuse the workflow elsewhere, install a trusted reducto version/source checkout
+To reuse the workflow elsewhere, install a trusted reducio version/source checkout
 and change the target to that project's source directory. The measurement engine
 parses rather than executes source, but installing a package/workflow still runs
 code: keep normal PR permissions and do not use privileged `pull_request_target`

@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from reducto.agents.analyzer import AnalyzerAgent
-from reducto.agents.deduplicator import DeduplicatorAgent
-from reducto.agents.idiomatizer import IdiomatizerAgent
-from reducto.agents.pattern import PatternAgent
-from reducto.models import (
+from reducio.agents.analyzer import AnalyzerAgent
+from reducio.agents.deduplicator import DeduplicatorAgent
+from reducio.agents.idiomatizer import IdiomatizerAgent
+from reducio.agents.pattern import PatternAgent
+from reducio.models import (
     AnalyzeRequest,
     CodeBlock,
     ComplexityMetrics,
@@ -19,9 +19,9 @@ from reducto.models import (
     Language,
     PatternRequest,
 )
-from reducto.repo import detect_language
-from reducto.reporter import Reporter
-from reducto.workspace import Workspace
+from reducio.repo import detect_language
+from reducio.reporter import Reporter
+from reducio.workspace import Workspace
 
 FIXTURE = Path(__file__).resolve().parents[2] / "test-python-code" / "python"
 
@@ -72,7 +72,7 @@ async def test_deduplicate_groups_extracted_validator_blocks():
         )
     )
     assert plan.changes
-    from reducto.plan_review import advisory_path
+    from reducio.plan_review import advisory_path
 
     assert plan.changes[0].path == advisory_path(
         "utils", "auth_validator.py", "validate_email_address_6_dedup"
@@ -139,9 +139,9 @@ async def test_pattern_strategy_on_complex_conditionals():
 
 
 def test_reporter_writes_markdown(tmp_path):
-    from reducto.models import AnalyzeResult
+    from reducio.models import AnalyzeResult
 
-    out = tmp_path / ".reducto"
+    out = tmp_path / ".reducio"
     path = Reporter(output_dir=str(out)).generate_baseline(
         AnalyzeResult(total_files=1, total_symbols=2, hotspots=[], symbols=[])
     )

@@ -1,6 +1,6 @@
 """Tests for code_utils helpers."""
 
-from reducto.utils.code_utils import find_python_block_end
+from reducio.utils.code_utils import find_python_block_end
 
 
 def test_find_python_block_end_uses_indent():

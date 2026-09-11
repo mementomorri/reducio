@@ -1,6 +1,6 @@
 """Pydantic model tests."""
 
-from reducto.models import (
+from reducio.models import (
     CodeBlock,
     FileChange,
     FileInfo,

@@ -2,8 +2,8 @@
 
 from datetime import datetime
 
-from reducto.models import FileChange, RefactorPlan
-from reducto.session import SessionStore
+from reducio.models import FileChange, RefactorPlan
+from reducio.session import SessionStore
 
 
 def test_save_plan_metadata_includes_session_id(tmp_path):

@@ -85,7 +85,7 @@ jobs:
       - name: Build PyApp executable
         env:
           PYAPP_PROJECT_PATH: ${{ steps.package.outputs.wheel }}
-          PYAPP_EXEC_SPEC: reducto.cli:app
+          PYAPP_EXEC_SPEC: reducio.cli:app
           PYAPP_PYTHON_VERSION: '3.14'
           PYAPP_DISTRIBUTION_VARIANT_CPU: v1
           PYAPP_PROJECT_FEATURES: reports,embeddings

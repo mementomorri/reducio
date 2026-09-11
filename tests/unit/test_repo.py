@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from reducto.models import Language
-from reducto.repo import detect_language, walk
+from reducio.models import Language
+from reducio.repo import detect_language, walk
 
 
 def test_detect_language():

@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from typer.testing import CliRunner
 
-from reducto.cli import app
-from reducto.models import AppConfig, FileChange, RefactorPlan, RefactorResult
-from reducto.session import SessionStore
+from reducio.cli import app
+from reducio.models import AppConfig, FileChange, RefactorPlan, RefactorResult
+from reducio.session import SessionStore
 
 COMMANDS = ["deduplicate", "idiomatize", "pattern", "apply"]
 
@@ -17,7 +17,7 @@ COMMANDS = ["deduplicate", "idiomatize", "pattern", "apply"]
 @pytest.fixture
 def cli_case(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    for key in ("REDUCTO_MODEL", "REDUCTO_VERBOSE", "REDUCTO_PREFER_LOCAL"):
+    for key in ("REDUCIO_MODEL", "REDUCIO_VERBOSE", "REDUCIO_PREFER_LOCAL"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     plan = RefactorPlan(
@@ -40,7 +40,7 @@ def cli_case(tmp_path, monkeypatch):
         ),
     )
     factory = Mock(return_value=service)
-    monkeypatch.setattr("reducto.cli._new_app", factory)
+    monkeypatch.setattr("reducio.cli._new_app", factory)
     SessionStore().save_plan(plan)
 
     def invoke(command, *options, input=None):
@@ -115,8 +115,8 @@ def test_dry_run_reports_and_session_ids(cli_case, command, empty):
     ],
 )
 def test_saved_plan_dirty_warning(cli_case, monkeypatch, options, answer, code, applied):
-    monkeypatch.setattr("reducto.cli.GitSafety.is_repo", lambda self: True)
-    monkeypatch.setattr("reducto.cli.GitSafety.is_clean", lambda self: False)
+    monkeypatch.setattr("reducio.cli.GitSafety.is_repo", lambda self: True)
+    monkeypatch.setattr("reducio.cli.GitSafety.is_clean", lambda self: False)
     result = cli_case.invoke("apply", *options, input=answer)
     assert result.exit_code == code, result.output
     assert "Warning: uncommitted changes" in result.output
@@ -135,7 +135,7 @@ def test_session_targets_validated_before_storage(tmp_path, command, target_kind
     result = CliRunner().invoke(app, [*command, "--path", str(target)])
     assert result.exit_code == 2
     assert "Not a directory" in result.output
-    assert not (target / ".reducto").exists()
+    assert not (target / ".reducio").exists()
     if target_kind == "missing":
         assert not target.exists()
 
@@ -145,7 +145,7 @@ def test_negative_cleanup_age_does_not_create_storage(tmp_path):
         app, ["sessions", "cleanup", "--path", str(tmp_path), "--days", "-1"]
     )
     assert result.exit_code == 2
-    assert not (tmp_path / ".reducto").exists()
+    assert not (tmp_path / ".reducio").exists()
 
 
 @pytest.mark.parametrize(
@@ -163,7 +163,7 @@ def test_invalid_explicit_config_is_clean_error(tmp_path, monkeypatch, command):
     assert result.exit_code == 2
     assert "Configuration file not found" in result.output
     assert "Traceback" not in result.output
-    assert not (tmp_path / ".reducto").exists()
+    assert not (tmp_path / ".reducio").exists()
 
 
 @pytest.mark.parametrize(
@@ -173,37 +173,37 @@ def test_invalid_explicit_config_is_clean_error(tmp_path, monkeypatch, command):
         (
             [],
             {
-                "REDUCTO_MODEL": "env-model",
-                "REDUCTO_PREFER_LOCAL": "true",
-                "REDUCTO_VERBOSE": "false",
+                "REDUCIO_MODEL": "env-model",
+                "REDUCIO_PREFER_LOCAL": "true",
+                "REDUCIO_VERBOSE": "false",
             },
             ("env-model", True, False),
         ),
         (
             ["--model", "cli-model", "--prefer-local", "-v"],
             {
-                "REDUCTO_MODEL": "env-model",
-                "REDUCTO_PREFER_LOCAL": "false",
-                "REDUCTO_VERBOSE": "false",
+                "REDUCIO_MODEL": "env-model",
+                "REDUCIO_PREFER_LOCAL": "false",
+                "REDUCIO_VERBOSE": "false",
             },
             ("cli-model", True, True),
         ),
         (
             ["--model", "", "--prefer-remote", "--no-verbose"],
             {
-                "REDUCTO_MODEL": "env-model",
-                "REDUCTO_PREFER_LOCAL": "true",
-                "REDUCTO_VERBOSE": "true",
+                "REDUCIO_MODEL": "env-model",
+                "REDUCIO_PREFER_LOCAL": "true",
+                "REDUCIO_VERBOSE": "true",
             },
             ("", False, False),
         ),
     ],
 )
 def test_cli_configuration_precedence(cli_case, monkeypatch, options, environment, expected):
-    Path(".reducto.yaml").write_text("model: file-model\nprefer_local: false\nverbose: true\n")
+    Path(".reducio.yaml").write_text("model: file-model\nprefer_local: false\nverbose: true\n")
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    from reducto.analysis import analyze_files
+    from reducio.analysis import analyze_files
 
     cli_case.service.analyze = AsyncMock(return_value=analyze_files([], AppConfig()))
     result = cli_case.invoke("analyze", *options)

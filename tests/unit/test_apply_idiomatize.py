@@ -3,8 +3,8 @@ correct lines and never corrupt the top of the file."""
 
 import ast
 
-from reducto.models import AppConfig
-from reducto.services import App
+from reducio.models import AppConfig
+from reducio.services import App
 
 CONTENT = '''"""Module docstring that must survive."""
 

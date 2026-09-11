@@ -11,7 +11,7 @@ from scripts import smoke_pypi
 
 @pytest.mark.parametrize("matching", [True, False])
 def test_pypi_gate_requires_exact_artifact_bytes(tmp_path, monkeypatch, matching):
-    wheel = tmp_path / "reducto_code-1.0.0-py3-none-any.whl"
+    wheel = tmp_path / "reducio-1.0.0-py3-none-any.whl"
     wheel.write_bytes(b"expected artifact")
     monkeypatch.setattr(
         smoke_pypi, "package_metadata", lambda *args: {"version": "1.0.0", "wheel": str(wheel)}
@@ -43,5 +43,5 @@ def test_pypi_gate_requires_exact_artifact_bytes(tmp_path, monkeypatch, matching
         assert not checked
         assert not any("install" in command for command in commands)
     download = next(command for command in commands if "download" in command)
-    assert "reducto-code==1.0.0" in download
+    assert "reducio==1.0.0" in download
     assert download[download.index("--index-url") + 1] == "https://pypi.org/simple"

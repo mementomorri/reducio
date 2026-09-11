@@ -2,11 +2,11 @@
 
 import pytest
 
-from reducto.agents.quality_checker import QualityCheckerAgent
-from reducto.analysis import analyze_files
-from reducto.metrics import get_complexity, line_decisions, measure_functions
-from reducto.models import AppConfig, FileInfo
-from reducto.workspace import Workspace
+from reducio.agents.quality_checker import QualityCheckerAgent
+from reducio.analysis import analyze_files
+from reducio.metrics import get_complexity, line_decisions, measure_functions
+from reducio.models import AppConfig, FileInfo
+from reducio.workspace import Workspace
 
 
 @pytest.mark.parametrize(

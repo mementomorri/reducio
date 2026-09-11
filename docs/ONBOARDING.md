@@ -1,6 +1,6 @@
 # Maintainer onboarding
 
-Guide for engineers maintaining **reducto** — Python analysis, revision reporting,
+Guide for engineers maintaining **reducio** — Python analysis, revision reporting,
 and experimental refactoring. Automatic modification is not production-safe.
 
 - Vision: [DESIGN.md](DESIGN.md)
@@ -11,7 +11,7 @@ and experimental refactoring. Automatic modification is not production-safe.
 
 ## Scope
 
-- **Tool implementation:** Python 3.14+ package under `reducto/`
+- **Tool implementation:** Python 3.14+ package under `reducio/`
 - **Target code:** `.py` files only (`include_patterns` default `["*.py"]`)
 - **Tests on apply:** `pytest` or `unittest` when the target repo is a Python project
 
@@ -21,12 +21,12 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 
 | Path | Purpose |
 |------|---------|
-| `reducto/` | Shipped package |
-| `reducto/cli.py` | Typer entrypoint |
-| `reducto/services.py` | `App` orchestration |
-| `reducto/workspace.py` | Repo I/O, parse, apply, git, tests |
-| `reducto/parse.py` | tree-sitter-python |
-| `reducto/agents/` | Analyzer, deduplicator, idiomatizer, pattern, quality |
+| `reducio/` | Shipped package |
+| `reducio/cli.py` | Typer entrypoint |
+| `reducio/services.py` | `App` orchestration |
+| `reducio/workspace.py` | Repo I/O, parse, apply, git, tests |
+| `reducio/parse.py` | tree-sitter-python |
+| `reducio/agents/` | Analyzer, deduplicator, idiomatizer, pattern, quality |
 | `tests/` | pytest (unit, scenario, e2e) |
 | `test-python-code/python/` | Fixture corpus |
 | `docs/README.md` | Primary user documentation |
@@ -34,11 +34,11 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 ## Development setup
 
 ```bash
-cd /path/to/reducto
+cd /path/to/reducio
 python3.14 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev,embeddings,reports]"
-reducto version
+reducio version
 pytest tests/ -v
 ```
 
@@ -77,9 +77,9 @@ dry-runs print report paths. Failed application exits 1; invalid inputs exit 2.
 Diff previews and provenance appear in terminal output, dry-run Markdown, and
 `sessions show`. Selected-model failures stop by default; `--allow-fallback`
 explicitly permits heuristic/template fallback. Incomplete plans cannot apply.
-Reports and sessions live under `<target>/.reducto`; use `report -C TARGET` for lookup.
+Reports and sessions live under `<target>/.reducio`; use `report -C TARGET` for lookup.
 
-Distribution name: `reducto-code`; CLI/import: `reducto`. Editable installation
+Distribution name: `reducio`; CLI/import: `reducio`. Editable installation
 above is for contributors. Public usage routes are CI, PyPI, and Releases executables.
 
 ## Extending
@@ -101,17 +101,17 @@ counting rules. Fixtures are validated by pytest, including known parse failures
 ## Smoke
 
 ```bash
-reducto analyze test-python-code/python -v
-reducto deduplicate test-python-code/python --dry-run
+reducio analyze test-python-code/python -v
+reducio deduplicate test-python-code/python --dry-run
 ```
 
 ## Debugging
 
 | Issue | Start here |
 |-------|------------|
-| CLI | `reducto/cli.py` |
-| Empty plan | `reducto/agents/*` |
-| Parse/symbols | `reducto/parse.py`, `reducto/repo.py` |
-| Apply/rollback | `reducto/workspace.py`, `diff.py`, `runner.py` (see [SAFETY.md](SAFETY.md)) |
-| LLM | `reducto/llm/router.py` |
-| Sessions | `.reducto/sessions/`, `session.py` |
+| CLI | `reducio/cli.py` |
+| Empty plan | `reducio/agents/*` |
+| Parse/symbols | `reducio/parse.py`, `reducio/repo.py` |
+| Apply/rollback | `reducio/workspace.py`, `diff.py`, `runner.py` (see [SAFETY.md](SAFETY.md)) |
+| LLM | `reducio/llm/router.py` |
+| Sessions | `.reducio/sessions/`, `session.py` |

@@ -13,7 +13,7 @@ from scripts import pyapp_release
 COMMIT = "abcdef1234567890abcdef1234567890abcdef12"
 
 
-def make_wheel(directory, version="1.2.3", name="reducto-code"):
+def make_wheel(directory, version="1.2.3", name="reducio"):
     directory.mkdir(parents=True, exist_ok=True)
     wheel = directory / f"{name.replace('-', '_')}-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
@@ -29,8 +29,8 @@ def make_wheel(directory, version="1.2.3", name="reducto-code"):
 def test_metadata_names_commit_and_preserves_package_version(tmp_path, version, prerelease):
     wheel = make_wheel(tmp_path, version)
     package = pyapp_release.package_metadata(tmp_path, COMMIT)
-    assert package["release_name"] == "reducto-abcdef1"
-    assert package["binary_name"] == "reducto-abcdef1-linux-x86_64"
+    assert package["release_name"] == "reducio-abcdef1"
+    assert package["binary_name"] == "reducio-abcdef1-linux-x86_64"
     assert package["version"] == version
     assert package["prerelease"] == prerelease
     assert package["wheel"] == str(wheel.resolve())
@@ -46,7 +46,7 @@ def test_rejects_ambiguous_or_wrong_wheels(tmp_path):
     with pytest.raises(ValueError, match="exactly one"):
         pyapp_release.package_metadata(tmp_path, COMMIT)
     make_wheel(tmp_path, name="another")
-    with pytest.raises(ValueError, match="must contain reducto"):
+    with pytest.raises(ValueError, match="must contain reducio"):
         pyapp_release.package_metadata(tmp_path, COMMIT)
     make_wheel(tmp_path)
     with pytest.raises(ValueError, match="exactly one"):

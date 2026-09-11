@@ -7,10 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from reducto.agents.deduplicator import DeduplicatorAgent
-from reducto.agents.idiomatizer import IdiomatizerAgent
-from reducto.agents.pattern import PatternAgent
-from reducto.models import (
+from reducio.agents.deduplicator import DeduplicatorAgent
+from reducio.agents.idiomatizer import IdiomatizerAgent
+from reducio.agents.pattern import PatternAgent
+from reducio.models import (
     AppConfig,
     DeduplicateRequest,
     FileChange,
@@ -19,13 +19,13 @@ from reducto.models import (
     PatternRequest,
     RefactorPlan,
 )
-from reducto.parse import ParserError
-from reducto.plan_review import advisory_path, plan_preview, terminal_text, validate_plan
-from reducto.reporter import Reporter
-from reducto.services import App
-from reducto.session import SessionStore
-from reducto.storage import StorageError
-from reducto.workspace import Workspace
+from reducio.parse import ParserError
+from reducio.plan_review import advisory_path, plan_preview, terminal_text, validate_plan
+from reducio.reporter import Reporter
+from reducio.services import App
+from reducio.session import SessionStore
+from reducio.storage import StorageError
+from reducio.workspace import Workspace
 
 
 @pytest.mark.parametrize("fallback", [False, True])
@@ -47,7 +47,7 @@ async def test_pattern_model_failure_requires_explicit_fallback(tmp_path, fallba
 
 
 def test_parser_initialization_error_is_not_cached(monkeypatch):
-    from reducto import parse
+    from reducio import parse
 
     original_import = builtins.__import__
     attempts = []
@@ -67,7 +67,7 @@ def test_parser_initialization_error_is_not_cached(monkeypatch):
 
 
 async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatch, caplog):
-    import reducto.llm.router as router
+    import reducio.llm.router as router
 
     caplog.set_level("INFO")
     monkeypatch.setattr(
@@ -135,7 +135,7 @@ async def test_model_failure_is_explicit_and_persisted(tmp_path, reply, fallback
     llm.complete = AsyncMock(
         **({"side_effect": reply} if isinstance(reply, Exception) else {"return_value": reply})
     )
-    store = SessionStore(str(tmp_path / ".reducto/sessions"))
+    store = SessionStore(str(tmp_path / ".reducio/sessions"))
     source = "def f(x):\n    return x == None\n"
     agent = IdiomatizerAgent(ws, llm, store)
     plan = await agent.idiomatize(
@@ -207,7 +207,7 @@ def outer(x):
 
 
 async def test_parser_failure_is_incomplete_but_ast_analysis_works(tmp_path, monkeypatch):
-    from reducto import parse
+    from reducio import parse
 
     monkeypatch.setattr(parse, "_parser", MagicMock(side_effect=ParserError("unavailable")))
     (tmp_path / "a.py").write_text("def f():\n    return 1\n")

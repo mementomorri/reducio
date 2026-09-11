@@ -4,15 +4,15 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from reducto.agents.deduplicator import DeduplicatorAgent
-from reducto.models import (
+from reducio.agents.deduplicator import DeduplicatorAgent
+from reducio.models import (
     CodeBlock,
     ComplexityMetrics,
     DeduplicateRequest,
     FileInfo,
     Language,
 )
-from reducto.workspace import Workspace
+from reducio.workspace import Workspace
 
 
 @pytest.mark.asyncio
@@ -37,7 +37,7 @@ async def test_dedup_plan_uses_utils_stub_path(tmp_path):
         DeduplicateRequest(path=str(tmp_path), files=[FileInfo(path="a.py", content=block.content)])
     )
     assert plan.changes
-    from reducto.plan_review import advisory_path
+    from reducio.plan_review import advisory_path
 
     assert plan.changes[0].path == advisory_path("utils", "a.py", "validate_email_1_dedup")
     assert plan.changes[0].original == ""

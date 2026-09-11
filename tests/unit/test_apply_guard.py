@@ -2,8 +2,8 @@
 
 import pytest
 
-from reducto.models import FileChange, RefactorPlan
-from reducto.services import App
+from reducio.models import FileChange, RefactorPlan
+from reducio.services import App
 
 
 @pytest.mark.asyncio

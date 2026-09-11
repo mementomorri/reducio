@@ -1,4 +1,4 @@
-"""E2E smoke tests for the reducto CLI (hermetic — never mutate the tracked corpus)."""
+"""E2E smoke tests for the reducio CLI (hermetic — never mutate the tracked corpus)."""
 
 import ast
 import subprocess
@@ -18,7 +18,7 @@ def _parses(path) -> bool:
 
 def _run_cli(*args: str, cwd=None) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, "-m", "reducto.cli", *args],
+        [sys.executable, "-m", "reducio.cli", *args],
         capture_output=True,
         text=True,
         timeout=180,
@@ -88,7 +88,7 @@ def test_analyze_report_writes_baseline(sample_repo):
     r = _run_cli("analyze", ".", "-r", cwd=sample_repo)
     assert r.returncode == 1
     assert "Baseline report:" in r.stdout
-    assert list((sample_repo / ".reducto").glob("reducto-baseline-*.md"))
+    assert list((sample_repo / ".reducio").glob("reducio-baseline-*.md"))
 
 
 def test_check_verbose_lists_issues(sample_repo):
@@ -102,7 +102,7 @@ def test_check_report_writes_markdown(sample_repo):
     r = _run_cli("check", ".", "-r", cwd=sample_repo)
     assert r.returncode == 1
     assert "Quality report:" in r.stdout
-    reports = list((sample_repo / ".reducto").glob("reducto-check-*.md"))
+    reports = list((sample_repo / ".reducio").glob("reducio-check-*.md"))
     assert reports
     text = reports[0].read_text()
     assert "long_function" in text or "high_complexity" in text
@@ -116,7 +116,7 @@ def test_idiomatize_sample_repo(sample_repo):
 def test_idiomatize_never_breaks_valid_python(sample_repo):
     # ROADMAP P0 guard: the apply path used to drop snippet edits at line 1 and
     # corrupt files. No file that parsed before may fail to parse after.
-    py_files = [p for p in sample_repo.rglob("*.py") if ".reducto" not in p.parts]
+    py_files = [p for p in sample_repo.rglob("*.py") if ".reducio" not in p.parts]
     valid_before = {p for p in py_files if _parses(p)}
     assert valid_before  # corpus has real Python to protect
 
@@ -141,7 +141,7 @@ def test_pattern_collision_reports_failure_on_stderr(tmp_path):
     source = tmp_path / "sample.py"
     original = "def sample(x):\n" + "    if x: x -= 1\n" * 5 + "    return x\n"
     source.write_text(original)
-    from reducto.plan_review import advisory_path
+    from reducio.plan_review import advisory_path
 
     destination = tmp_path / advisory_path("strategies", "sample.py", "strategy")
     destination.parent.mkdir()

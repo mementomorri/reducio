@@ -1,5 +1,5 @@
 [project]
-name = "reducto-code"
+name = "reducio"
 version = "1.0.0"
 description = "Semantic code compression engine"
 requires-python = ">=3.14"
@@ -39,18 +39,18 @@ dev = [
 ]
 
 [project.scripts]
-reducto = "reducto.cli:app"
+reducio = "reducio.cli:app"
 
 [project.urls]
-Repository = "https://github.com/mementomorri/reducto"
-Documentation = "https://github.com/mementomorri/reducto/blob/main/docs/README.md"
+Repository = "https://github.com/mementomorri/reducio"
+Documentation = "https://github.com/mementomorri/reducio/blob/main/docs/README.md"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["reducto"]
+packages = ["reducio"]
 
 [tool.ruff]
 line-length = 100
@@ -61,7 +61,7 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["E501", "F841", "W291", "W293"]
 
 [tool.ruff.lint.per-file-ignores]
-"reducto/metrics.py" = ["N802", "N815"] # ast.NodeVisitor dispatch requires visit_NodeName
+"reducio/metrics.py" = ["N802", "N815"] # ast.NodeVisitor dispatch requires visit_NodeName
 
 [tool.black]
 line-length = 100
@@ -75,7 +75,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=reducto --cov-report=term-missing --cov-fail-under=60"
+addopts = "--cov=reducio --cov-report=term-missing --cov-fail-under=60"
 markers = [
     "embeddings: requires sentence-transformers model download",
 ]

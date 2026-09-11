@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from reducto.models import ComplexityMetrics
+from reducio.models import ComplexityMetrics
 
 FIXTURE_REPO = Path(__file__).resolve().parents[1] / "test-python-code" / "python"
 
@@ -18,9 +18,9 @@ def fixture_repo_root() -> Path:
 
 @pytest.fixture
 def fixture_files():
-    # Relies on walk() excluding .reducto/dotdirs so this stays Python-only;
+    # Relies on walk() excluding .reducio/dotdirs so this stays Python-only;
     # if that exclusion regresses, scenario tests fail (intended signal).
-    from reducto.repo import walk
+    from reducio.repo import walk
 
     return walk(str(FIXTURE_REPO))
 
@@ -32,7 +32,7 @@ def sample_repo(tmp_path: Path) -> Path:
     shutil.copytree(
         FIXTURE_REPO,
         dest,
-        ignore=shutil.ignore_patterns(".reducto", "__pycache__"),
+        ignore=shutil.ignore_patterns(".reducio", "__pycache__"),
     )
     return dest
 

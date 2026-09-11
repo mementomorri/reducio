@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from reducto.compare import CompareError, compare_revisions
-from reducto.models import AppConfig
+from reducio.compare import CompareError, compare_revisions
+from reducio.models import AppConfig
 
 
 def git(root, *args):

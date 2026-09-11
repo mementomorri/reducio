@@ -2,7 +2,7 @@
 
 import pytest
 
-from reducto.diff import DiffError, apply_unified_diff
+from reducio.diff import DiffError, apply_unified_diff
 
 
 def test_apply_simple_hunk():

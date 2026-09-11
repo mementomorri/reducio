@@ -25,7 +25,7 @@ jobs:
         run: pip install -e ".[reports]"
 
       - name: Analyze package
-        run: reducto analyze reducto/ --report --format all --output-dir ci-reports/overview -v
+        run: reducio analyze reducio/ --report --format all --output-dir ci-reports/overview -v
 
       - name: Validate structured result
         run: |
@@ -42,14 +42,14 @@ jobs:
 
       - name: Quality check
         run: |
-          reducto check reducto/ --report --output-dir ci-reports/overview
+          reducio check reducio/ --report --output-dir ci-reports/overview
 
       - name: Upload overview
         id: reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reducto-overview
+          name: reducio-overview
           path: ci-reports/overview/
           if-no-files-found: warn
 
@@ -91,14 +91,14 @@ jobs:
       - name: Download successful overview
         uses: actions/download-artifact@v4
         with:
-          name: reducto-overview
+          name: reducio-overview
           path: ci-reports/overview/
 
       - name: Stage Pages site
         shell: bash
         run: |
           shopt -s nullglob
-          reports=(ci-reports/overview/reducto-baseline-*.html)
+          reports=(ci-reports/overview/reducio-baseline-*.html)
           if [ "${#reports[@]}" -ne 1 ]; then
             echo "Expected exactly one overview dashboard" >&2
             exit 1
@@ -154,7 +154,7 @@ jobs:
           BASE_SHA: ${{ steps.revisions.outputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          reducto compare reducto/ --base "$BASE_SHA" --head "$HEAD_SHA" \
+          reducio compare reducio/ --base "$BASE_SHA" --head "$HEAD_SHA" \
             --report --format all --output-dir ci-reports/comparison -v
 
       - name: Upload comparison
@@ -162,7 +162,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: reducto-comparison
+          name: reducio-comparison
           path: ci-reports/comparison/
           if-no-files-found: warn
 

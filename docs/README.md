@@ -1,4 +1,4 @@
-# reducto
+# reducio
 
 **Semantic code compression for Python codebases**
 
@@ -6,7 +6,7 @@ Analyze Python complexity, compare revisions, and review experimental refactorin
 proposals. Automatic modification is **not production-safe**: behavior-changing
 rewrites and recovery defects remain. See [SAFETY.md](SAFETY.md).
 
-reducto is a **Python 3.14+** CLI and library. It only analyzes and refactors **`.py` files** in target repositories.
+reducio is a **Python 3.14+** CLI and library. It only analyzes and refactors **`.py` files** in target repositories.
 
 ## Install
 
@@ -17,35 +17,47 @@ comparisons. Reports appear in job summaries and downloadable artifacts.
 
 ### 2. PyPI
 
-The distribution is **`reducto-code`**; the command and Python import remain
-`reducto`. Do not install the unrelated [PyPI `reducto` SDK](https://pypi.org/project/reducto/).
-No `reducto-code` release was present on PyPI when checked on 2026-09-11; the
+The distribution, command, and Python import are all **`reducio`**.
+No `reducio` release was present on PyPI when checked on 2026-09-11; the
 following commands become available after the first successful publication:
 
 ```bash
-pip install reducto-code
-pip install "reducto-code[reports]"     # interactive HTML dashboards
-pip install "reducto-code[embeddings]"  # semantic duplicate detection
-reducto analyze . --report
+pip install reducio
+pip install "reducio[reports]"     # interactive HTML dashboards
+pip install "reducio[embeddings]"  # semantic duplicate detection
+reducio analyze . --report
 ```
 
 Release CI verifies the exact published wheel hash and its installed CLI outside
 the checkout before allowing executable publication. Maintainers must configure
-PyPI Trusted Publishing for the `reducto-code` project before tagging a release.
+PyPI Trusted Publishing for the `reducio` project before tagging a release.
+
+The GitHub Trusted Publisher must use owner `mementomorri`, repository `reducio`,
+workflow filename `publish.yml`, and no environment (the current workflow has none).
+Update any pending publisher registered before the repository rename to match.
+
+### Upgrading from the previous name
+
+Use `reducio` instead of `reducto` in commands/imports and `REDUCIO_*` instead
+of `REDUCTO_*` environment variables. Configuration is now `.reducio.yaml`, and
+reports/sessions use `.reducio/`. Existing `.reducto` files are left untouched;
+copy any configuration or sessions you want to retain to the new locations.
+There are no legacy command/import aliases. The repository and Pages links use
+`mementomorri/reducio` and `https://mementomorri.github.io/reducio/`.
 
 ### 3. GitHub Releases executable
 
 After successful PyPI verification, tagged releases built by Publish provide a Linux x64 executable
 with `reports` and `embeddings` enabled. Download the executable and matching
-`.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducto/releases).
-The release title is `reducto-<sha7>`; its existing `v*` tag remains the package's
+`.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducio/releases).
+The release title is `reducio-<sha7>`; its existing `v*` tag remains the package's
 release tag. Replace `abcdef1` below with the seven-character commit identifier:
 
 ```bash
-sha256sum --check reducto-abcdef1-linux-x86_64.sha256
-chmod +x reducto-abcdef1-linux-x86_64
-./reducto-abcdef1-linux-x86_64 --help
-./reducto-abcdef1-linux-x86_64 analyze . --report --format all
+sha256sum --check reducio-abcdef1-linux-x86_64.sha256
+chmod +x reducio-abcdef1-linux-x86_64
+./reducio-abcdef1-linux-x86_64 --help
+./reducio-abcdef1-linux-x86_64 analyze . --report --format all
 ```
 
 The executable is built on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl,
@@ -87,14 +99,14 @@ documented separately in [ONBOARDING.md](ONBOARDING.md).
 Run commands from the root of a **Python project** (with `.py` sources):
 
 ```bash
-reducto analyze .              # Complexity hotspots and symbols
-reducto compare . --base HEAD~1 # Changed-file complexity vs a committed revision
-reducto deduplicate .          # Similar blocks → proposed utils modules
-reducto idiomatize .           # Pythonic heuristics (comprehensions, etc.)
-reducto pattern factory .      # Design-pattern templates
-reducto check .                # Naming, function length, cyclomatic-complexity issues
-reducto apply <session-id>     # Apply a saved plan
-reducto sessions list          # List saved sessions
+reducio analyze .              # Complexity hotspots and symbols
+reducio compare . --base HEAD~1 # Changed-file complexity vs a committed revision
+reducio deduplicate .          # Similar blocks → proposed utils modules
+reducio idiomatize .           # Pythonic heuristics (comprehensions, etc.)
+reducio pattern factory .      # Design-pattern templates
+reducio check .                # Naming, function length, cyclomatic-complexity issues
+reducio apply <session-id>     # Apply a saved plan
+reducio sessions list          # List saved sessions
 ```
 
 ### Plan modes
@@ -127,7 +139,7 @@ Flags are command-specific, not global:
 | `report` | `--config` / `-c`, `--path` / `-C`, `--output-dir`; optional positional session ID |
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
 
-`pattern` has no `--model` flag; set `model` in configuration or `REDUCTO_MODEL`.
+`pattern` has no `--model` flag; set `model` in configuration or `REDUCIO_MODEL`.
 Selected-model failures stop planning by default (exit 1). `--allow-fallback`
 explicitly permits fallback, with a warning and recorded provenance. A valid
 unchanged model response is not a failure and does not trigger heuristics.
@@ -140,9 +152,9 @@ produce incomplete reports. See [Reports and CI](CI.md) and [Metrics v2](METRICS
 
 Generated plans print `Session ID: …`; dry-runs print `Dry run report: …`.
 Full unified diffs print before approval, including `--yes`, and in `sessions show`.
-Reports default to `<target>/.reducto`; sessions remain in its `sessions/` directory.
+Reports default to `<target>/.reducio`; sessions remain in its `sessions/` directory.
 Explicit relative `--output-dir` paths are relative to the caller's working directory
-and do not move sessions. Use `reducto report -C /path/to/target` for retrieval;
+and do not move sessions. Use `reducio report -C /path/to/target` for retrieval;
 specify the same `--output-dir` when overridden. Old reports are not migrated or
 automatically searched. Incomplete plans remain inspectable but cannot be applied.
 An empty plan skips application. Successful application and ordinary declined
@@ -158,11 +170,11 @@ settings; `--no-verbose` overrides enabled verbosity and `--model ""` clears a
 configured model. This replaces the previous environment-over-CLI behavior.
 
 `--config` selects exactly that file; otherwise use the first existing
-`.reducto.yaml` in the current working directory, then `~/.reducto.yaml`.
+`.reducio.yaml` in the current working directory, then `~/.reducio.yaml`.
 Files are not merged and discovery is not relative to a separate analysis target.
 An empty file is valid; a missing explicit file or malformed configuration fails.
-The supported environment settings are `REDUCTO_MODEL`, `REDUCTO_VERBOSE`, and
-`REDUCTO_PREFER_LOCAL`. Boolean values accept true/false, yes/no, on/off, or 1/0
+The supported environment settings are `REDUCIO_MODEL`, `REDUCIO_VERBOSE`, and
+`REDUCIO_PREFER_LOCAL`. Boolean values accept true/false, yes/no, on/off, or 1/0
 (case-insensitive); empty values are ignored, other values fail.
 
 For library callers, an explicit `AppConfig` passed to `App` is copied and used
@@ -172,7 +184,7 @@ to bypass prompts; other modifier configuration policies remain separate work.
 
 ## Architecture
 
-Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (LiteLLM + optional embeddings). Plans persist under `.reducto/sessions/`.
+Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (LiteLLM + optional embeddings). Plans persist under `.reducio/sessions/`.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md).
 

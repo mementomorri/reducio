@@ -1,7 +1,7 @@
 """Regression guards for the tree-sitter `Language` shadow bug (commit efb9188)."""
 
-from reducto.models import Language
-from reducto.parse import _parser, get_symbols
+from reducio.models import Language
+from reducio.parse import _parser, get_symbols
 
 
 def test_parser_builds_not_shadowed():

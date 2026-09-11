@@ -1,7 +1,7 @@
 """Unit tests for parsing."""
 
-from reducto.models import Language
-from reducto.parse import get_complexity, get_symbols
+from reducio.models import Language
+from reducio.parse import get_complexity, get_symbols
 
 
 def test_get_complexity_counts_branches():

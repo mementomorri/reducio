@@ -2,7 +2,7 @@
 
 Originally reviewed **2026-09-10**, against `main` at **`1e79b7b`** (`feat(cli): verbose
 listings and check reports`). Package version: **1.0.0**, Python **3.14+**.
-Canonical repository, confirmed by the maintainer: **`mementomorri/reducto`**.
+Canonical repository, confirmed by the maintainer: **`mementomorri/reducio`**.
 
 Updated **2026-09-11** for section 1 implementation on top of `2ca053b`.
 This assessment includes current implementation updates and the original audit.
@@ -15,7 +15,7 @@ order reflects effort; the release blockers below reflect severity.
 **Section 2 follow-up:** target-local reports, unified previews, safe session paths,
 explicit planning failures/provenance, bounded advisory preflight, and subprocess
 coverage are now implemented. Installation is limited to GitHub CI, the
-`reducto-code` PyPI distribution, and PyApp executables; CLI/import stay `reducto`.
+`reducio` PyPI distribution, and PyApp executables; CLI/import stay `reducio`.
 First public publication/Trusted Publishing setup remain operational follow-ups.
 The snapshot below describes the earlier section 1 work; current verification is
 recorded in [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md): **328 passed,
@@ -49,7 +49,7 @@ Implemented locally after the baseline commit:
 - Mandatory **metrics v2**: AST decisions, independent functions/methods, no class
   double-counting, uncapped hotspot counts, physical LOC, explicit parse failures.
   `analyze`, `check`, and `compare` share these rules; cognitive is explicitly a
-  custom Reducto score, not Sonar-compatible. See [METRICS.md](METRICS.md).
+  custom Reducio score, not Sonar-compatible. See [METRICS.md](METRICS.md).
 - **`compare`** reads committed changed-file blobs without checkout or target
   execution. It matches qualified function names and Git-detected file renames;
   additions/removals are separate from matched-function deltas.
@@ -92,12 +92,12 @@ The following checks ran locally during this review, using the existing Python
 | Check | Result |
 | --- | --- |
 | `pytest -q` | 120 passed; 72.16% coverage; 60% coverage gate passed |
-| `ruff check reducto/ --no-cache` | Passed |
-| `black --check reducto/` | Passed; 27 source files unchanged |
-| `mypy reducto/ --ignore-missing-imports` | Passed; notes about unchecked untyped function bodies |
-| `reducto version` | `reducto 1.0.0` |
-| `reducto analyze reducto/ -v` | 27 files, 215 symbols, 20 reported hotspots |
-| `reducto check reducto/` | 58 issues: 0 critical, 51 warning, 7 info |
+| `ruff check reducio/ --no-cache` | Passed |
+| `black --check reducio/` | Passed; 27 source files unchanged |
+| `mypy reducio/ --ignore-missing-imports` | Passed; notes about unchecked untyped function bodies |
+| `reducio version` | `reducio 1.0.0` |
+| `reducio analyze reducio/ -v` | 27 files, 215 symbols, 20 reported hotspots |
+| `reducio check reducio/` | 58 issues: 0 critical, 51 warning, 7 info |
 
 The counts above came from the old metric engine. They are not comparable to v2;
 both sides of a new revision comparison are remeasured with the current engine.
@@ -123,7 +123,7 @@ the implementation update above records subsequent application changes.
 | Apply safeguards | Context-validated diffs, create-over-existing rejection, syntax checks, definition-name checks, and rollback attempts on handled failures exist. They have the limitations below. |
 
 Analysis and dry-run modes leave target source code unchanged, but can create
-`.reducto` directories, reports, and saved plans. They are not strictly free of
+`.reducio` directories, reports, and saved plans. They are not strictly free of
 filesystem writes.
 
 The architecture remains one Python process: Typer CLI → `App` services →
@@ -180,8 +180,8 @@ make `== None` differ from `is None`. Loop-variable scope, aliases, and complete
 loop bodies also need explicit handling. These broader cases require focused
 behavior tests before declaring the rules safe.
 
-Sources: [idiomatizer.py](../reducto/agents/idiomatizer.py),
-[apply guard](../reducto/services.py). Backlog: **TODO 19–21, 26**.
+Sources: [idiomatizer.py](../reducio/agents/idiomatizer.py),
+[apply guard](../reducio/services.py). Backlog: **TODO 19–21, 26**.
 
 ### 2. Git rollback restores the wrong baseline for dirty targets
 
@@ -200,9 +200,9 @@ Recovery needs to preserve staged, unstaged, and untracked user work. Tests must
 also cover newly created advisory files and failed restoration. The choice of
 checkpoint, stash, or snapshot mechanism remains an implementation decision.
 
-Sources: [git_safety.py](../reducto/git_safety.py),
-[workspace.py](../reducto/workspace.py), [test_git.py](../tests/unit/test_git.py),
-[cli.py](../reducto/cli.py). Backlog: **TODO 22**; warning consistency (09) is fixed.
+Sources: [git_safety.py](../reducio/git_safety.py),
+[workspace.py](../reducio/workspace.py), [test_git.py](../tests/unit/test_git.py),
+[cli.py](../reducio/cli.py). Backlog: **TODO 22**; warning consistency (09) is fixed.
 
 ### 3. Exceptions can bypass recovery, and rollback status is optimistic
 
@@ -217,8 +217,8 @@ rollback status must reflect what actually happened. The runner also uses bare
 `python` and can report test success when no tests ran; interpreter selection and
 passed/failed/not-run outcomes need an explicit contract.
 
-Sources: [workspace.py](../reducto/workspace.py),
-[runner.py](../reducto/runner.py). Backlog: **TODO 23–24**.
+Sources: [workspace.py](../reducio/workspace.py),
+[runner.py](../reducio/runner.py). Backlog: **TODO 23–24**.
 
 ## Other current defects and inconsistencies
 
@@ -226,15 +226,15 @@ Sources: [workspace.py](../reducto/workspace.py),
 | --- | --- | --- |
 | Session path isolation — fixed locally | IDs/containment are validated before cache or file access, symlinks rejected, filename/metadata identities checked. Unsafe listings are skipped with warnings. This is not a concurrent hostile-filesystem sandbox. | 15 |
 | Remaining configuration/CI policies | Precedence and validation are fixed; configurable finding gates and a broader noninteractive approval policy remain undecided. | 28 |
-| Report roots — fixed locally | Default reports and sessions share the target's `.reducto`. Explicit output directories remain caller-relative; report lookup accepts `-C`. | 13 |
+| Report roots — fixed locally | Default reports and sessions share the target's `.reducio`. Explicit output directories remain caller-relative; report lookup accepts `-C`. | 13 |
 | Plan previews — fixed locally | Dry-run Markdown, session display, and pre-apply output include unified diffs, diagnostics, and provenance, including with `--yes`. | 14 |
 | Advisory preflight — bounded fix implemented | Only self-contained top-level functions are extracted. Generated paths are source-qualified; syntax and destination conflicts are checked before application and replay. This does not prove semantic equivalence. | 18 |
 | Silent planning failures — fixed locally | Parser/required embeddings and selected-model failures make plans incomplete. Explicit `--allow-fallback` permits logged heuristic/template fallback. Incomplete plans cannot apply. | 17 |
-| Distribution identity — fixed locally, first publication pending | The maintainer chose `reducto-code`; CLI/import stay `reducto`. Its PyPI endpoint returned 404 on 2026-09-11 (not a reservation guarantee). Configure Trusted Publishing before the first release. Only CI, PyPI, and Releases executables remain supported routes. | 12 |
+| Distribution identity — fixed locally, first publication pending | The maintainer chose `reducio`; CLI/import stay `reducio`. Its PyPI endpoint returned 404 on 2026-09-11 (not a reservation guarantee). Configure Trusted Publishing before the first release. Only CI, PyPI, and Releases executables remain supported routes. | 12 |
 | Task-based model routing is not operational in the normal agent path | A configured model enables rewriting and bypasses tier selection. Tier-selection unit tests do not demonstrate task-based routing in an actual workflow. | 27 |
 
 The repository identity is a confirmed maintainer choice, not inferred from a
-remote lookup. The local origin URL now matches `mementomorri/reducto`; no hosted
+remote lookup. The local origin URL now matches `mementomorri/reducio`; no hosted
 repository settings were changed. The package
 version and locally available tags alone do not establish what has been published.
 

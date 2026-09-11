@@ -2,8 +2,8 @@
 
 import pytest
 
-from reducto.runner import TestResult as RunnerTestResult
-from reducto.workspace import PathEscapeError, Workspace
+from reducio.runner import TestResult as RunnerTestResult
+from reducio.workspace import PathEscapeError, Workspace
 
 
 def test_path_escape(tmp_path):

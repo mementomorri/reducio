@@ -1,6 +1,6 @@
 """Session metadata characterization (legacy JSON survives refactors)."""
 
-from reducto.session import SessionStore
+from reducio.session import SessionStore
 
 _LEGACY_SESSION_JSON = """{
   "metadata": {

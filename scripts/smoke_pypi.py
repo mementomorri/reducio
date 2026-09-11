@@ -15,12 +15,12 @@ from scripts.smoke_pyapp import EMBEDDING_CHECK, check_cli
 
 def smoke(wheel_directory: Path, commit: str) -> None:
     package = package_metadata(wheel_directory, commit)
-    with tempfile.TemporaryDirectory(prefix="reducto-pypi-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="reducio-pypi-") as temporary:
         root = Path(temporary)
         env = {
             k: v
             for k, v in os.environ.items()
-            if not k.startswith(("PYTHON", "PIP_", "REDUCTO_", "HF_"))
+            if not k.startswith(("PYTHON", "PIP_", "REDUCIO_", "HF_"))
         }
         env.update(
             PIP_CONFIG_FILE=os.devnull,
@@ -55,7 +55,7 @@ def smoke(wheel_directory: Path, commit: str) -> None:
             "--only-binary=:all:",
             "--dest",
             str(root / "download"),
-            f"reducto-code=={version}",
+            f"reducio=={version}",
         )
         wheels = list((root / "download").glob("*.whl"))
         assert len(wheels) == 1 and digest(wheels[0]) == digest(
@@ -70,7 +70,7 @@ def smoke(wheel_directory: Path, commit: str) -> None:
             "https://pypi.org/simple",
             f"{wheels[0]}[reports,embeddings]",
         )
-        check_cli(run, str(root / "venv/bin/reducto"), root, version)
+        check_cli(run, str(root / "venv/bin/reducio"), root, version)
         run(python, "-I", "-c", EMBEDDING_CHECK, version)
         print("Published PyPI installation verified", flush=True)
 

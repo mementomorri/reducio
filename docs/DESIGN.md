@@ -1,6 +1,6 @@
-# **reducto** Engineering the Autonomous Code Compression Utility: A Professional Framework for Semantic Refactoring
+# **reducio** Engineering the Autonomous Code Compression Utility: A Professional Framework for Semantic Refactoring
 
-> **Implementation (v1.0):** Python 3.14+ CLI (`reducto-code` distribution, `reducto` command/import). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the experimental modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are implemented. First publication is pending; see the user guide: [README.md](README.md). Shipped vs planned: [ROADMAP.md](../ROADMAP.md).
+> **Implementation (v1.0):** Python 3.14+ CLI (`reducio` distribution, `reducio` command/import). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the experimental modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are implemented. First publication is pending; see the user guide: [README.md](README.md). Shipped vs planned: [ROADMAP.md](../ROADMAP.md).
 >
 > - **Maintain the code:** [ONBOARDING.md](ONBOARDING.md)
 > - **Module layout and flows:** [ARCHITECTURE.md](ARCHITECTURE.md)

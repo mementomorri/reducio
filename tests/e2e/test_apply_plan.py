@@ -5,8 +5,8 @@ import sys
 
 import pytest
 
-from reducto.models import FileChange, RefactorPlan
-from reducto.services import App
+from reducio.models import FileChange, RefactorPlan
+from reducio.services import App
 
 
 @pytest.mark.asyncio
@@ -31,7 +31,7 @@ async def test_apply_plan_no_tests(temp_git_repo):
 
 def test_cli_check_smoke():
     r = subprocess.run(
-        [sys.executable, "-m", "reducto.cli", "check", "test-python-code/python"],
+        [sys.executable, "-m", "reducio.cli", "check", "test-python-code/python"],
         capture_output=True,
         text=True,
         timeout=120,

@@ -13,9 +13,9 @@ No refactoring behavior was changed by this copy update.
 **Section 2 follow-up (2026-09-11):** unified previews, persisted planning provenance,
 explicit capability failures, and bounded advisory preflight are implemented.
 The table below is the original audit, not the current status of those fixes.
-The PyPI name `reducto` belongs to an unrelated SDK; the maintainer selected
-`reducto-code` instead. Installation copy distinguishes the distribution from the
-CLI/import and flags the first publication as pending. See [TODO.md](../TODO.md).
+The original PyPI name was occupied by an unrelated SDK. The maintainer ultimately
+selected `reducio` for the distribution, CLI, import, and repository. Installation
+copy flags the first publication as pending. See [TODO.md](../TODO.md).
 
 ## Summary
 
@@ -29,8 +29,8 @@ An in-memory probe during this review still changed `return "x == None"` into
 original hero's functionality-preservation claim, even though the rewritten Python parses.
 
 The dark/gold visual identity is retained. GitHub, clone, releases, issue and
-license links now target `mementomorri/reducto`; the logo uses a project-relative
-home link so it does not navigate out of `/reducto/` on GitHub Pages.
+license links now target `mementomorri/reducio`; the logo uses a project-relative
+home link so it does not navigate out of `/reducio/` on GitHub Pages.
 
 ## Original claims and remaining tool gaps
 
@@ -48,13 +48,13 @@ home link so it does not navigate out of `/reducto/` on GitHub Pages.
 | Local-first: secrets stay local | Cloud models receive module source in prompts; local preference is not a no-network/privacy policy. | Add an enforced local-only mode, provider disclosure, explicit remote consent, and prompt-log/redaction rules. Model/embedding downloads need separate disclosure. |
 | Installation: advertised experience available from PyPI | Source implements reports/comparison, but this review has not established parity with the published package. | Test the advertised install against a pinned release; link release-specific docs and disclose optional extras. |
 
-Evidence: [idiom rules](../reducto/agents/idiomatizer.py),
-[apply/recovery](../reducto/workspace.py), [Git checkpoints](../reducto/git_safety.py),
-[test runner](../reducto/runner.py), [CLI](../reducto/cli.py),
-[deduplication](../reducto/agents/deduplicator.py),
-[patterns](../reducto/agents/pattern.py), [analysis](../reducto/analysis.py),
-[plan reporting](../reducto/reporter.py), [model opt-in/fallback](../reducto/agents/base.py),
-[model routing](../reducto/llm/router.py).
+Evidence: [idiom rules](../reducio/agents/idiomatizer.py),
+[apply/recovery](../reducio/workspace.py), [Git checkpoints](../reducio/git_safety.py),
+[test runner](../reducio/runner.py), [CLI](../reducio/cli.py),
+[deduplication](../reducio/agents/deduplicator.py),
+[patterns](../reducio/agents/pattern.py), [analysis](../reducio/analysis.py),
+[plan reporting](../reducio/reporter.py), [model opt-in/fallback](../reducio/agents/base.py),
+[model routing](../reducio/llm/router.py).
 
 ## Original recommendations
 

@@ -3,14 +3,14 @@
 The checks and known limits when applying a refactor plan. **Automatic modification
 is not production-safe, behavior-preserving, or reliably reversible.** This is the
 core of the modifier lane (`idiomatize` / `pattern` / `deduplicate` apply, and `apply <session_id>`).
-The implementation lives in `reducto/workspace.py`, `reducto/diff.py`, and `reducto/services.py`.
+The implementation lives in `reducio/workspace.py`, `reducio/diff.py`, and `reducio/services.py`.
 
 ## Plan / apply split
 
 A command never edits files directly. It produces a `RefactorPlan` — a list of `FileChange`s, each
 carrying the **full** `original` and `modified` text plus a `session_id` — and `SessionStore` persists
-it as JSON under `<repo>/.reducto/sessions/` *at creation time*. Applying is a separate phase
-(`App.apply_plan`), so `reducto apply <session_id>` can replay a plan from disk in a later invocation.
+it as JSON under `<repo>/.reducio/sessions/` *at creation time*. Applying is a separate phase
+(`App.apply_plan`), so `reducio apply <session_id>` can replay a plan from disk in a later invocation.
 
 `services._change_to_diff` converts each `FileChange` to a unified diff (splitting on `"\n"` so the
 diff's line numbers line up exactly with the applier), then `Workspace.apply_changes_safe` applies the
@@ -69,7 +69,7 @@ The implementation attempts a guarded batch, not a guaranteed atomic transaction
   the batch via the create-over-existing guard rather than concatenating; partial
   writes may remain if recovery fails.
 - **The git checkpoint uses `git add -A`.** On a *dirty* repo, your pre-existing uncommitted work is
-  folded into the "reducto checkpoint" commit, and rollback (`git reset` to the checkpoint's parent)
+  folded into the "reducio checkpoint" commit, and rollback (`git reset` to the checkpoint's parent)
   discards it from the working tree. The checkpoint may be recoverable through
   `git reflog`, but staged/unstaged distinctions are not preserved. Clean targets
   still face exceptional-recovery and newly-created-file defects. Modifying commands,

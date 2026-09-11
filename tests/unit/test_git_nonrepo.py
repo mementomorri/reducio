@@ -2,7 +2,7 @@
 
 import pytest
 
-from reducto.git_safety import GitError, GitSafety
+from reducio.git_safety import GitError, GitSafety
 
 
 def test_checkpoint_requires_repo(tmp_path):

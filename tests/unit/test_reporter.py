@@ -2,7 +2,7 @@
 
 import pytest
 
-from reducto.models import (
+from reducio.models import (
     AnalyzeResult,
     ComplexityHotspot,
     ComplexityMetrics,
@@ -10,14 +10,14 @@ from reducto.models import (
     RefactorPlan,
     RefactorResult,
 )
-from reducto.reporter import Reporter
+from reducio.reporter import Reporter
 
 
 def test_generate_baseline_with_hotspots(tmp_path):
     hs = ComplexityHotspot(
         file="a.py", line=1, symbol="f", cyclomatic_complexity=12, cognitive_complexity=7
     )
-    path = Reporter(output_dir=str(tmp_path / ".reducto")).generate_baseline(
+    path = Reporter(output_dir=str(tmp_path / ".reducio")).generate_baseline(
         AnalyzeResult(total_files=1, total_symbols=3, hotspots=[hs], symbols=[])
     )
     text = path.read_text()
@@ -28,7 +28,7 @@ def test_generate_baseline_with_hotspots(tmp_path):
 
 
 def test_generate_check_writes_issues(tmp_path):
-    path = Reporter(output_dir=str(tmp_path / ".reducto")).generate_check(
+    path = Reporter(output_dir=str(tmp_path / ".reducio")).generate_check(
         {
             "total_issues": 1,
             "critical": 1,
@@ -51,11 +51,11 @@ def test_generate_check_writes_issues(tmp_path):
     assert "long_function" in text
     assert "a.py" in text
     assert "split / extract" in text
-    assert path.name.startswith("reducto-check-")
+    assert path.name.startswith("reducio-check-")
 
 
 def test_generate_check_empty(tmp_path):
-    path = Reporter(output_dir=str(tmp_path / ".reducto")).generate_check(
+    path = Reporter(output_dir=str(tmp_path / ".reducio")).generate_check(
         {"total_issues": 0, "critical": 0, "warning": 0, "info": 0, "issues": []}
     )
     text = path.read_text()
@@ -69,7 +69,7 @@ def test_generate_dry_run(tmp_path):
         changes=[FileChange(path="x.py", original="", modified="y", description="do x")],
         description="plan",
     )
-    out = Reporter(output_dir=str(tmp_path / ".reducto")).generate_dry_run(plan, "idiomatize", "p")
+    out = Reporter(output_dir=str(tmp_path / ".reducio")).generate_dry_run(plan, "idiomatize", "p")
     text = out.read_text()
     assert "Command: idiomatize" in text
     assert "+++ b/x.py" in text and "+y" in text
@@ -85,17 +85,17 @@ def test_generate_report(tmp_path):
         metrics_before=ComplexityMetrics(lines_of_code=10),
         metrics_after=ComplexityMetrics(lines_of_code=4),
     )
-    out = Reporter(output_dir=str(tmp_path / ".reducto")).generate(res)
+    out = Reporter(output_dir=str(tmp_path / ".reducio")).generate(res)
     text = out.read_text()
     assert "Reduced: 6" in text
     assert "Success: True" in text
 
 
 def test_load_latest_roundtrip(tmp_path):
-    reporter = Reporter(output_dir=str(tmp_path / ".reducto"))
+    reporter = Reporter(output_dir=str(tmp_path / ".reducio"))
     reporter.generate(
         RefactorResult(session_id="sess1", success=True, changes=[], tests_passed=True)
     )
-    assert "reducto Report" in reporter.load_latest()
+    assert "reducio Report" in reporter.load_latest()
     with pytest.raises(FileNotFoundError):
         reporter.load_latest("nope")

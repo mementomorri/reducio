@@ -33,10 +33,10 @@ def package_metadata(wheel_directory: Path, commit: str) -> dict[str, str]:
         if len(metadata_files) != 1:
             raise ValueError("Expected exactly one wheel METADATA file")
         metadata = BytesParser().parsebytes(archive.read(metadata_files[0]))
-    if canonicalize_name(metadata["Name"]) != "reducto-code":
-        raise ValueError("The published wheel must contain reducto-code")
+    if canonicalize_name(metadata["Name"]) != "reducio":
+        raise ValueError("The published wheel must contain reducio")
     version = Version(metadata["Version"])
-    name = f"reducto-{commit[:7]}"
+    name = f"reducio-{commit[:7]}"
     return {
         "wheel": str(wheel),
         "commit": commit,
@@ -65,13 +65,13 @@ def digest(path: Path) -> str:
 
 def release_notes(package: dict[str, str]) -> str:
     binary = package["binary_name"]
-    return f"""Linux x64 executable for Reducto {package['version']}.
+    return f"""Linux x64 executable for Reducio {package['version']}.
 
 Commit: {package['commit']}
 
 Includes HTML reports and semantic embeddings (`reports,embeddings`). Built with
 PyApp 0.29.0 on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl is not supported.
-The executable embeds the same Reducto wheel published to PyPI by this workflow.
+The executable embeds the same Reducio wheel published to PyPI by this workflow.
 
 Download `{binary}` and `{binary}.sha256` into the same directory, then run:
 
@@ -101,7 +101,7 @@ def publish(package: dict[str, str], tag: str, repo: str, asset_directory: Path)
     checksum.write_text(f"{digest(binary)}  {binary.name}\n")
     assets = [binary, checksum]
     release = find_release(repo, tag)
-    with tempfile.TemporaryDirectory(prefix="reducto-release-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="reducio-release-") as temporary:
         staging = Path(temporary)
         if release is None:
             notes = staging / "notes.md"

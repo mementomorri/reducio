@@ -1,7 +1,7 @@
 # Metrics v2
 
 `analyze`, `check`, and `compare` share the Python AST metric engine in
-`reducto/metrics.py`. These scores replace the old text/indentation heuristics;
+`reducio/metrics.py`. These scores replace the old text/indentation heuristics;
 **do not compare v2 numbers to old reports**. Comparison remeasures both revisions
 with the same installed engine and current configuration.
 
@@ -40,10 +40,10 @@ Start at **1 per function**, then add:
 `else`, `try`, `finally`, `return`, calls, and pattern alternatives (`case 1 | 2`)
 add no separate decision. An unguarded wildcard/capture case adds none. Decisions
 inside expressions still count. Comments, docstrings, and string contents never
-count. This is Reducto's explicit cyclomatic convention, not a promise of exact
+count. This is Reducio's explicit cyclomatic convention, not a promise of exact
 agreement with other analyzers.
 
-## Reducto cognitive score
+## Reducio cognitive score
 
 Starts at **0**. This custom, nesting-weighted score is **not Sonar-compatible**.
 

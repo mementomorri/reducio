@@ -7,10 +7,10 @@ import re
 import pytest
 from typer.testing import CliRunner
 
-from reducto.analysis import analyze_files
-from reducto.cli import app
-from reducto.models import AppConfig, CompareResult, FileInfo
-from reducto.visual_report import (
+from reducio.analysis import analyze_files
+from reducio.cli import app
+from reducio.models import AppConfig, CompareResult, FileInfo
+from reducio.visual_report import (
     ReportError,
     ReportFormat,
     html_report,
@@ -53,7 +53,7 @@ def test_default_is_markdown_without_plotly(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_plotly)
     assert write_reports(overview(), tmp_path)[0].suffix == ".md"
     assert write_reports(overview(), tmp_path, ReportFormat.JSON)[0].suffix == ".json"
-    with pytest.raises(ReportError, match=r"reducto-code\[reports\]"):
+    with pytest.raises(ReportError, match=r"reducio\[reports\]"):
         html_report(overview())
 
 

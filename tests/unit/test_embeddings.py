@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from reducto.embeddings.service import EmbeddingService
-from reducto.models import CodeBlock, ComplexityMetrics, Language
+from reducio.embeddings.service import EmbeddingService
+from reducio.models import CodeBlock, ComplexityMetrics, Language
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,4 @@
-# reducto Roadmap
+# reducio Roadmap
 
 What is shipped today versus what is planned. This is the actionable index;
 [`docs/DESIGN.md`](docs/DESIGN.md) holds the long-form product vision.
@@ -46,12 +46,12 @@ are not the current suite size, and individual guards do not prove semantic safe
 the whole file (clobbering the docstring/imports), and `_apply_hunk` never checked context.
 
 **Fix (shipped):**
-1. `reducto/agents/idiomatizer.py` — collect every idiom as a line span, apply spans to a copy of the
+1. `reducio/agents/idiomatizer.py` — collect every idiom as a line span, apply spans to a copy of the
    file in reverse order, and emit **one** `FileChange` per file with full-file `original`/`modified`.
    Diffs are now file-relative and multi-edit drift is impossible.
-2. `reducto/diff.py` — `_apply_hunk` verifies context (` `) and removed (`-`) lines against the target
+2. `reducio/diff.py` — `_apply_hunk` verifies context (` `) and removed (`-`) lines against the target
    and raises `DiffError` on mismatch, so a stale/misaligned diff fails loudly and rolls back.
-3. `reducto/services.py` — `_change_to_diff` splits on `"\n"` so `difflib` line numbers line up exactly
+3. `reducio/services.py` — `_change_to_diff` splits on `"\n"` so `difflib` line numbers line up exactly
    with the applier.
 
 **Guarded by:** `tests/unit/test_apply_idiomatize.py` (edit lands at the right lines, docstring intact,
@@ -111,9 +111,9 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 | `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold. |
 | Unified thresholds | done | `check` and `analyze` both read `AppConfig.complexity_thresholds`. |
 | Apply — checkpoints, validated diffs, syntax checks, rollback attempts | partial safety | Dirty-state preservation and exceptional recovery remain blockers. |
-| Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducto/sessions/`. |
+| Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducio/sessions/`. |
 | LiteLLM model routing (local Ollama / remote) | done | Opt-in via `--model`; tier config lives in `LLMRouter`. |
-| Config: `.reducto.yaml` + `REDUCTO_*` env overrides | done | |
+| Config: `.reducio.yaml` + `REDUCIO_*` env overrides | done | |
 
 ## Enhancement opportunities
 

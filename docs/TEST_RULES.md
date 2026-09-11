@@ -1,6 +1,6 @@
 # Test Rules
 
-Functional contracts and enhancement opportunities for reducto. Each case below
+Functional contracts and enhancement opportunities for reducio. Each case below
 states whether behavior is implemented, partial, or planned. A passing test of
 one example does not establish semantic safety for arbitrary refactors.
 
@@ -102,7 +102,7 @@ alone does not prove equivalence. Behavior-preserving rewrites remain release bl
 **Status: implemented for revisions, partial for apply sessions.** `analyze` and
 `compare` produce Markdown/JSON/HTML with shared AST metrics; comparison includes
 whole-function deltas in changed files. Legacy apply-session reports contain LOC
-only, not before/after complexity. Cognitive is a custom reducto score.
+only, not before/after complexity. Cognitive is a custom reducio score.
 
 ### Test Case: Duplicate Removal Statistics
 
@@ -115,7 +115,7 @@ caller/import rewriting and validation first.
 
 ### Test Case: CLI Flow Continuity
 
-**Scenario**: Navigate to a project folder and run `reducto deduplicate .`.
+**Scenario**: Navigate to a project folder and run `reducio deduplicate .`.
 **Status: partial.** Scan → persist proposal → approval (or `--yes`) → apply
 advisory modules → attempt validation/tests → optional result commit. Existing
 checkpoint commits are separate from that optional result commit. Failed returned

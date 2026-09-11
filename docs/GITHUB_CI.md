@@ -1,14 +1,14 @@
-# Add reducto to GitHub CI
+# Add reducio to GitHub CI
 
-Create `.github/workflows/reducto.yml` in your Python repository:
+Create `.github/workflows/reducio.yml` in your Python repository:
 
-For now CI installs this repository directly until the first `reducto-code`
-release is published. The command remains `reducto`; the public PyPI name
-`reducto` belongs to an unrelated SDK. After a verified release, replace the
-install step with `pip install "reducto-code[reports]==VERSION"`, using its exact version.
+For now CI installs this repository directly until the first `reducio`
+release is published. The package and command are both `reducio`.
+After a verified release, replace the
+install step with `pip install "reducio[reports]==VERSION"`, using its exact version.
 
 ```yaml
-name: reducto
+name: reducio
 on:
   push:
     branches: [main]
@@ -31,8 +31,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - name: Install reducto
-        run: pip install "reducto-code[reports] @ git+https://github.com/mementomorri/reducto.git@main"
+      - name: Install reducio
+        run: pip install "reducio[reports] @ git+https://github.com/mementomorri/reducio.git@main"
       - name: Analyze main or compare a pull request
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -41,9 +41,9 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "pull_request" ]; then
             MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
-            reducto compare . --base "$MERGE_BASE" --head "$HEAD_SHA" --report --format all --output-dir ci-reports
+            reducio compare . --base "$MERGE_BASE" --head "$HEAD_SHA" --report --format all --output-dir ci-reports
           else
-            reducto analyze . --report --format all --output-dir ci-reports
+            reducio analyze . --report --format all --output-dir ci-reports
           fi
       - name: Job summary
         if: always()
@@ -55,22 +55,22 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: reducto-reports
+          name: reducio-reports
           path: ci-reports/
           if-no-files-found: warn
 ```
 
 Commit and push to `main`, open a PR targeting `main`, or select **Actions →
-reducto → Run workflow** once the workflow is on your default branch. Change
+reducio → Run workflow** once the workflow is on your default branch. Change
 `main` and the `.` analysis target if your branch/source directory differs.
-For reproducible runs, replace the install URL's `@main` with a reviewed reducto
+For reproducible runs, replace the install URL's `@main` with a reviewed reducio
 commit SHA. No model, embeddings, API key, or target-project install is needed.
 Use `pull_request`, not `pull_request_target`; do not add secrets to PR analysis.
 
 ## View the results
 
-- **Actions → reducto → run → Summary:** rendered Markdown results.
-- **Artifacts → reducto-reports:** download and unzip; open `.html` in your
+- **Actions → reducio → run → Summary:** rendered Markdown results.
+- **Artifacts → reducio-reports:** download and unzip; open `.html` in your
   browser for interactive charts. JSON contains the complete measurements.
 - **Job logs:** live stages and a heartbeat every five seconds during long work.
   Add `--quiet` to hide progress (results and errors still print).

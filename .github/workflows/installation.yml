@@ -15,8 +15,8 @@ jobs:
         with:
           python-version: '3.14'
       - run: pip install -e ".[embeddings]"
-      - run: reducto version
-      - run: python -c "import reducto; print(reducto.__version__)"
+      - run: reducio version
+      - run: python -c "import reducio; print(reducio.__version__)"
 
   wheel:
     runs-on: ubuntu-latest
@@ -26,4 +26,4 @@ jobs:
         with:
           python-version: '3.14'
       - run: pip install build && python -m build
-      - run: pip install dist/*.whl && reducto --help
+      - run: pip install dist/*.whl && reducio --help

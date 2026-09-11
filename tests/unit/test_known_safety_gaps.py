@@ -2,11 +2,11 @@
 
 import pytest
 
-from reducto.agents.idiomatizer import IdiomatizerAgent
-from reducto.models import FileChange, FileInfo, IdiomatizeRequest, RefactorPlan
-from reducto.services import App
-from reducto.session import SessionStore
-from reducto.workspace import Workspace
+from reducio.agents.idiomatizer import IdiomatizerAgent
+from reducio.models import FileChange, FileInfo, IdiomatizeRequest, RefactorPlan
+from reducio.services import App
+from reducio.session import SessionStore
+from reducio.workspace import Workspace
 
 
 @pytest.mark.xfail(

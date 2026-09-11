@@ -9,13 +9,13 @@ from urllib.parse import urljoin
 
 from typer.main import get_command
 
-from reducto.analysis import analyze_files
-from reducto.cli import app
-from reducto.models import AppConfig
-from reducto.visual_report import _LOGO_SVG, _REPORT_STYLE, _figures, html_report
+from reducio.analysis import analyze_files
+from reducio.cli import app
+from reducio.models import AppConfig
+from reducio.visual_report import _LOGO_SVG, _REPORT_STYLE, _figures, html_report
 
 SITE = Path(__file__).resolve().parents[2] / "docs/index.html"
-PROJECT = "https://mementomorri.github.io/reducto/"
+PROJECT = "https://mementomorri.github.io/reducio/"
 
 
 class Links(HTMLParser):
@@ -36,14 +36,14 @@ def test_landing_links_use_canonical_repo_and_project_path():
     source = SITE.read_text()
     links = Links()
     links.feed(source)
-    assert "alexkarsten/reducto" not in source
-    assert "github.com/mementomorri/reducto/blob/main/docs/GITHUB_CI.md" in source
+    assert "alexkarsten/reducio" not in source
+    assert "github.com/mementomorri/reducio/blob/main/docs/GITHUB_CI.md" in source
     assert "Forge from Source" not in source
     for href in links.hrefs:
         if href.startswith("#"):
             assert href[1:] in links.ids
         elif href.startswith("https://github.com/"):
-            assert href.startswith("https://github.com/mementomorri/reducto")
+            assert href.startswith("https://github.com/mementomorri/reducio")
         else:
             assert urljoin(PROJECT, href).startswith(PROJECT)
     assert "./" in links.hrefs and "dashboard/" in links.hrefs
@@ -65,7 +65,7 @@ def test_landing_and_dashboard_share_logo_and_lowercase_wordmark():
     assert _LOGO_SVG in report
     for html, logo_class in ((source, "logo"), (report, "brand")):
         brand = re.search(rf'<a [^>]*class="{logo_class}"[^>]*>(.*?)</a>', html, re.S)[1]
-        assert re.sub(r"<[^>]+>", "", brand).strip() == "reducto"
+        assert re.sub(r"<[^>]+>", "", brand).strip() == "reducio"
     for selector in (".logo", ".hero h1", ".footer-logo"):
         style = re.search(re.escape(selector) + r"\s*\{([^}]+)", source)[1]
         assert "font-family: Georgia, serif" in style
@@ -104,7 +104,7 @@ def test_landing_demo_uses_supported_cli_commands_without_execution():
     cli = get_command(app)
     for example in commands:
         program, name, *args = shlex.split(unescape(example))
-        assert program == "reducto"
+        assert program == "reducio"
         # Parsing validates flags and required arguments without applying any plan.
         with cli.commands[name].make_context(name, args) as context:
             if name == "idiomatize":

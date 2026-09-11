@@ -1,8 +1,8 @@
 """Unit tests for LLMRouter model selection (the tier/local/remote routing gotcha)."""
 
-import reducto.llm.router as router_mod
-from reducto.llm.router import LLMRouter
-from reducto.models import ModelTier
+import reducio.llm.router as router_mod
+from reducio.llm.router import LLMRouter
+from reducio.models import ModelTier
 
 
 def test_model_override_bypasses_tier():

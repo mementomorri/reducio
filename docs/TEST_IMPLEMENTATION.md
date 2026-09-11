@@ -2,6 +2,11 @@
 
 Requires **Python 3.14+** (matches CI and `pyproject.toml`).
 
+Rename verification: the `reducio` package/CLI passes **328 tests, 5 strict expected
+failures, 91.43% coverage**. Ruff, Black, mypy, wheel/sdist build, and the installed
+CLI passed; the wheel contains the `reducio` namespace and entry point. No publish
+or push was performed.
+
 New contributors: start with [ONBOARDING.md](ONBOARDING.md) for environment setup, then use this file for test commands and CI mapping.
 
 ## Run tests
@@ -55,12 +60,12 @@ universal behavior-preservation or recovery guarantees:
 ## Lint
 
 ```bash
-ruff check reducto/
-black --check reducto/
-mypy reducto/ --ignore-missing-imports
+ruff check reducio/
+black --check reducio/
+mypy reducio/ --ignore-missing-imports
 ```
 
-Coverage target: `reducto/` package (minimum 60% in CI; see `pyproject.toml`).
+Coverage target: `reducio/` package (minimum 60% in CI; see `pyproject.toml`).
 Latest section 2 run (2026-09-11, on top of `7d36387`): **328 passed, 5 strict
 expected failures, 91.43% coverage**; CLI **92%**, configuration **100%**. Ruff,
 Black, mypy, wheel/sdist build, and installed-wheel CLI/report smoke passed.

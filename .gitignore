@@ -7,8 +7,8 @@
 *.dll
 *.so
 *.dylib
-/reducto$
-!/reducto/
+/reducio$
+!/reducio/
 
 # Test binary, built with `go test -c`
 *.test
@@ -64,6 +64,8 @@ ENV/
 
 
 AGENTS.md
+.reducio*
+.reducio/
+# Preserve ignored reports/configuration from before the rename.
 .reducto*
-.reducto/
 ci-reports/

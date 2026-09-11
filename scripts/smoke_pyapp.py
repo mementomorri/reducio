@@ -16,12 +16,12 @@ import math
 import sys
 from pathlib import Path
 
-import reducto
-from reducto.embeddings.service import EmbeddingService
+import reducio
+from reducio.embeddings.service import EmbeddingService
 
 assert sys.version_info[:2] == (3, 14), sys.version
-assert importlib.metadata.version('reducto-code') == sys.argv[1]
-assert Path(reducto.__file__).is_relative_to(Path(sys.prefix))
+assert importlib.metadata.version('reducio') == sys.argv[1]
+assert Path(reducio.__file__).is_relative_to(Path(sys.prefix))
 
 async def check():
     service = EmbeddingService()
@@ -42,7 +42,7 @@ asyncio.run(check())
 
 def check_cli(run, executable: str, root: Path, version: str) -> None:
     """Same public CLI contract for the PyPI installation and PyApp binary."""
-    assert run(executable, "version", capture=True).stdout.strip() == f"reducto {version}"
+    assert run(executable, "version", capture=True).stdout.strip() == f"reducio {version}"
     target = root / "contract-target"
     target.mkdir()
     source = target / "sample.py"
@@ -95,9 +95,9 @@ def check_cli(run, executable: str, root: Path, version: str) -> None:
         executable, "report", "-C", str(target), "--config", str(config), capture=True
     ).stdout
     for suffix in ("md", "json", "html"):
-        assert list((target / ".reducto").glob(f"*.{suffix}")), suffix
+        assert list((target / ".reducio").glob(f"*.{suffix}")), suffix
     run(executable, "idiomatize", str(target), "--config", str(config), "--dry-run", "--quiet")
-    session = json.loads(next((target / ".reducto/sessions").glob("*.json")).read_text())["plan"]
+    session = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())["plan"]
     assert session["complete"] and session["provenance"]
     run(executable, "sessions", "show", session["session_id"], "-C", str(target))
     assert source.read_text() == "def value():\n    return 2\n"
@@ -105,18 +105,18 @@ def check_cli(run, executable: str, root: Path, version: str) -> None:
 
 def smoke(executable: Path, version: str) -> None:
     executable = executable.resolve(strict=True)
-    with tempfile.TemporaryDirectory(prefix="reducto-pyapp-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="reducio-pyapp-smoke-") as temporary:
         root = Path(temporary)
         install = root / "installation"
         env = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith(("PYTHON", "REDUCTO_", "PYAPP_", "HF_"))
+            if not key.startswith(("PYTHON", "REDUCIO_", "PYAPP_", "HF_"))
             and key not in {"VIRTUAL_ENV", "CONDA_PREFIX"}
         }
         env.update(
             {
-                "PYAPP_INSTALL_DIR_REDUCTO-CODE": str(install),
+                "PYAPP_INSTALL_DIR_REDUCIO": str(install),
                 "XDG_CONFIG_HOME": str(root / "config"),
                 "XDG_CACHE_HOME": str(root / "cache"),
                 "XDG_DATA_HOME": str(root / "data"),
@@ -141,7 +141,7 @@ def smoke(executable: Path, version: str) -> None:
         run(str(executable), "--help")
         installed_python = install / "bin/python"
         assert installed_python.is_file(), "PyApp did not create its own Python environment"
-        assert run(str(executable), "version", capture=True).stdout.strip() == f"reducto {version}"
+        assert run(str(executable), "version", capture=True).stdout.strip() == f"reducio {version}"
         fixture = root / "fixture"
         fixture.mkdir()
         (fixture / "sample.py").write_text("def add(a, b):\n    return a + b\n")
@@ -169,7 +169,7 @@ def smoke(executable: Path, version: str) -> None:
         check_cli(run, str(executable), root, version)
         print("Checking real embeddings and Chroma (first use downloads the model)", flush=True)
         run(str(installed_python), "-I", "-c", EMBEDDING_CHECK, version)
-        assert run(str(executable), "version", capture=True).stdout.strip() == f"reducto {version}"
+        assert run(str(executable), "version", capture=True).stdout.strip() == f"reducio {version}"
         print("PyApp smoke checks passed", flush=True)
 
 

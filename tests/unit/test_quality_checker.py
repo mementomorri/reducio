@@ -2,8 +2,8 @@
 
 import pytest
 
-from reducto.agents.quality_checker import QualityCheckerAgent
-from reducto.models import FileInfo, Language
+from reducio.agents.quality_checker import QualityCheckerAgent
+from reducio.models import FileInfo, Language
 
 
 def _long_python_body() -> str:
@@ -55,8 +55,8 @@ async def test_check_flags_high_complexity_function():
 
 @pytest.mark.asyncio
 async def test_check_uses_config_thresholds(tmp_path):
-    from reducto.models import AppConfig
-    from reducto.workspace import Workspace
+    from reducio.models import AppConfig
+    from reducio.workspace import Workspace
 
     cfg = AppConfig()
     cfg.complexity_thresholds.cyclomatic_complexity = 2
@@ -67,7 +67,7 @@ async def test_check_uses_config_thresholds(tmp_path):
 
 
 def test_detect_language_via_repo():
-    from reducto.repo import detect_language
+    from reducio.repo import detect_language
 
     assert detect_language("a.py") == Language.PYTHON
     assert detect_language("b.js") == Language.UNKNOWN

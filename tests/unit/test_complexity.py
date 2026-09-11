@@ -1,6 +1,6 @@
 """Cognitive complexity is distinct from cyclomatic and nesting-weighted."""
 
-from reducto.parse import get_complexity
+from reducio.parse import get_complexity
 
 
 def test_cognitive_grows_with_nesting():

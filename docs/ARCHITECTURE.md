@@ -1,4 +1,4 @@
-# reducto Architecture
+# reducio Architecture
 
 Python 3.14+ CLI for semantic compression of **Python source code**. One process: Typer CLI, in-process `Workspace`, optional embeddings.
 
@@ -6,14 +6,14 @@ Python 3.14+ CLI for semantic compression of **Python source code**. One process
 
 ```
 User
-  → reducto.cli (Typer)
-       → reducto.services.App
+  → reducio.cli (Typer)
+       → reducio.services.App
             → Workspace (repo walk *.py, parse, diff, git, pytest)
             → Agents (analyze, deduplicate, idiomatize, pattern, check)
             → LLMRouter (LiteLLM; Ollama local-first)
             → EmbeddingService ([embeddings] extra)
-            → SessionStore (.reducto/sessions)
-            → Reporter (.reducto/*.md)
+            → SessionStore (.reducio/sessions)
+            → Reporter (.reducio/*.md)
 ```
 
 ## Package map
@@ -79,11 +79,11 @@ This changes precedence, not model-routing tiers or local-only enforcement.
 
 ## Distribution
 
-- PyPI: `reducto`, entrypoint `reducto.cli:app`
+- PyPI: `reducio`, entrypoint `reducio.cli:app`
 - **Python 3.14+**
 - Extras: `embeddings`, `reports`, `dev`
 - Supported usage: GitHub CI (primary), PyPI, and a PyApp executable in GitHub Releases.
-  The distribution is `reducto-code`; CLI/import remain `reducto`. See [installation status](README.md#2-pypi).
+  The distribution is `reducio`; CLI/import remain `reducio`. See [installation status](README.md#2-pypi).
 
 ## External dependencies
 

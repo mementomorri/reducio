@@ -4,9 +4,9 @@ import ast
 
 import pytest
 
-from reducto.agents.idiomatizer import IdiomatizerAgent
-from reducto.models import AppConfig, FileInfo, IdiomatizeRequest
-from reducto.workspace import Workspace
+from reducio.agents.idiomatizer import IdiomatizerAgent
+from reducio.models import AppConfig, FileInfo, IdiomatizeRequest
+from reducio.workspace import Workspace
 
 
 async def _idioms(tmp_path, content: str, llm=None, model: str = ""):

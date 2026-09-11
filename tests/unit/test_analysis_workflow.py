@@ -85,7 +85,7 @@ def test_pages_staging_requires_one_report_and_preserves_landing(tmp_path, repor
     reports = tmp_path / "ci-reports/overview"
     reports.mkdir(parents=True)
     for index in range(report_count):
-        (reports / f"reducto-baseline-{index}.html").write_text("<html>Dashboard</html>")
+        (reports / f"reducio-baseline-{index}.html").write_text("<html>Dashboard</html>")
     (reports / "private.json").write_text("not part of the public site")
     step = next(s for s in pages_job()["steps"] if s.get("name") == "Stage Pages site")
     result = subprocess.run(

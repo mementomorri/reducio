@@ -2,7 +2,7 @@
 
 import pytest
 
-from reducto.git_safety import GitSafety
+from reducio.git_safety import GitSafety
 
 
 @pytest.mark.xfail(strict=True, reason="TODO 22: rollback loses pre-existing uncommitted work")

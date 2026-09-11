@@ -2,9 +2,9 @@
 
 import pytest
 
-from reducto.agents.analyzer import AnalyzerAgent
-from reducto.models import AnalyzeRequest, AppConfig, FileInfo
-from reducto.workspace import Workspace
+from reducio.agents.analyzer import AnalyzerAgent
+from reducio.models import AnalyzeRequest, AppConfig, FileInfo
+from reducio.workspace import Workspace
 
 
 def _ws(tmp_path, threshold: int) -> Workspace:
