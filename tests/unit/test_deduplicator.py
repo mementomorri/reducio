@@ -37,7 +37,9 @@ async def test_dedup_plan_uses_utils_stub_path(tmp_path):
         DeduplicateRequest(path=str(tmp_path), files=[FileInfo(path="a.py", content=block.content)])
     )
     assert plan.changes
-    assert plan.changes[0].path == "utils/validate_email_dedup.py"
+    from reducto.plan_review import advisory_path
+
+    assert plan.changes[0].path == advisory_path("utils", "a.py", "validate_email_1_dedup")
     assert plan.changes[0].original == ""
     # P1: honest labeling — it suggests, it does not rewrite call sites.
     assert "suggestion only" in plan.changes[0].description

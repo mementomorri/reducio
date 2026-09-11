@@ -979,7 +979,7 @@
                     <div class="step" data-animate>
                         <div class="step-number">II</div>
                         <h3>Plan</h3>
-                        <p>Use dry-run to save a proposal without changing source files. Reports currently list descriptions; inspect the original and proposed code in session JSON before applying.</p>
+                        <p>Use dry-run to save a proposal without changing source files. Review unified diffs, diagnostics, and the planning method in terminal output, Markdown reports, or saved sessions.</p>
                     </div>
                     <div class="step" data-animate>
                         <div class="step-number">III</div>
@@ -1020,31 +1020,24 @@
                 <p class="section-subtitle">Begin your journey into code alchemy</p>
                 <div class="install-options">
                     <div class="install-card" data-animate>
+                        <h3>GitHub CI <span class="badge">Recommended</span></h3>
+                        <p>Analyze main and compare pull requests. Read Markdown summaries, download interactive dashboards, or publish main-only reports to Pages.</p>
+                        <p><a href="https://github.com/mementomorri/reducto/blob/main/docs/GITHUB_CI.md">Set up GitHub CI →</a></p>
+                    </div>
+                    <div class="install-card" data-animate>
                         <h3>
-                            <span>Published Releases</span>
+                            <span>PyPI</span>
                         </h3>
-                        <p>For a released version, follow its release notes (Python 3.14+):</p>
-                        <pre><code><span class="code-comment"># Base package</span>
-<span class="code-command">pip install reducto</span>
-<span class="code-comment"># Optional semantic deduplication</span>
-<span class="code-command">pip install "reducto[embeddings]"</span></code></pre>
+                        <p>Requires Python 3.14+. Install the <code>reducto-code</code> distribution; the command remains <code>reducto</code>. First publication is pending. Do not install the unrelated <code>reducto</code> SDK.</p>
                         <p style="margin-top: 16px;">
-                            <a href="https://github.com/mementomorri/reducto/releases">Browse releases and check included features →</a>
+                            <a href="https://github.com/mementomorri/reducto/blob/main/docs/README.md#2-pypi">Check installation status →</a>
                         </p>
                     </div>
                     <div class="install-card" data-animate>
-                        <h3>Forge from Source <span class="badge">Latest Features</span></h3>
-                        <p>Requires Python 3.14+:</p>
-                        <pre><code><span class="code-comment"># Clone the sacred texts</span>
-<span class="code-command">git clone https://github.com/mementomorri/reducto.git</span>
-<span class="code-command">cd reducto</span>
-
-<span class="code-comment"># Install</span>
-<span class="code-command">pip install -e ".[reports]"</span>
-<span class="code-comment"># Add .[embeddings] for semantic duplicate detection</span>
-
-<span class="code-comment"># Run</span>
-<span class="code-command">reducto analyze reducto/ --report --format all</span></code></pre>
+                        <h3>GitHub Releases Executable</h3>
+                        <p>PyApp packages a Linux x64 executable with reports and embeddings. First launch downloads Python and dependencies; Git is still needed for revision comparisons.</p>
+                        <p>Publication is gated by verified PyPI installation and executable smoke checks. Available after the first successful release.</p>
+                        <p><a href="https://github.com/mementomorri/reducto/releases">Browse releases →</a></p>
                     </div>
                 </div>
             </div>

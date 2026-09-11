@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
 from reducto.models import AnalyzeResult, AppConfig, RefactorPlan, RefactorResult
+from reducto.plan_review import plan_preview, terminal_text
+from reducto.storage import StorageError, checked_file, read_text, validate_session_id, write_text
 
 
 def _md_cell(value: object) -> str:
@@ -13,9 +17,22 @@ def _md_cell(value: object) -> str:
 
 
 class Reporter:
-    def __init__(self, cfg: AppConfig | None = None, output_dir: str = ".reducto"):
+    def __init__(
+        self,
+        cfg: AppConfig | None = None,
+        output_dir: str | Path | None = None,
+        *,
+        target: str | Path = ".",
+    ):
         self.cfg = cfg or AppConfig()
-        self.output_dir = Path(output_dir)
+        self.output_dir = (
+            Path(output_dir) if output_dir is not None else Path(target).resolve() / ".reducto"
+        )
+
+    def _path(self, name: str) -> Path:
+        path = checked_file(self.output_dir, name)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        return path
 
     def generate_baseline(self, result: AnalyzeResult) -> Path:
         from reducto.analysis import analysis_configuration
@@ -26,9 +43,8 @@ class Reporter:
         return write_reports(result, self.output_dir)[0]
 
     def generate_check(self, result: dict) -> Path:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         name = f"reducto-check-{datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
-        path = self.output_dir / name
+        path = self._path(name)
         lines = [
             "# reducto Quality Check Report\n",
             f"**Generated:** {datetime.now().isoformat()}\n\n",
@@ -63,26 +79,20 @@ class Reporter:
                     )
                     + " |\n"
                 )
-        path.write_text("".join(lines))
+        write_text(path, "".join(lines))
         return path
 
     def generate_dry_run(self, plan: RefactorPlan, command: str, path: str) -> Path:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        out = self.output_dir / f"reducto-dryrun-{plan.session_id[:8]}.md"
-        body = [
-            f"# Dry Run: {command}\n\n",
-            f"**Path:** {path}\n\n",
-            f"**Description:** {plan.description}\n\n",
-            f"**Changes:** {len(plan.changes)}\n\n",
-        ]
-        for i, c in enumerate(plan.changes, 1):
-            body.append(f"{i}. `{c.path}` — {c.description}\n")
-        out.write_text("".join(body))
+        out = self._path(f"reducto-dryrun-{validate_session_id(plan.session_id)}.md")
+        preview = terminal_text(f"Command: {command}\nPath: {path}\n" + plan_preview(plan))
+        fence = "`" * max(
+            3, max((len(m.group()) + 1 for m in re.finditer(r"`+", preview)), default=3)
+        )
+        write_text(out, f"# reducto dry-run review\n\n{fence}diff\n{preview}\n{fence}\n")
         return out
 
     def generate(self, result: RefactorResult) -> Path:
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        out = self.output_dir / f"reducto-report-{result.session_id}.md"
+        out = self._path(f"reducto-report-{validate_session_id(result.session_id)}.md")
         loc_before = result.metrics_before.lines_of_code
         loc_after = result.metrics_after.lines_of_code
         content = (
@@ -92,20 +102,25 @@ class Reporter:
             f"Reduced: {loc_before - loc_after}\n\n"
             f"Success: {result.success}\nTests passed: {result.tests_passed}\n"
         )
-        out.write_text(content)
+        write_text(out, content)
         return out
 
     def load_latest(self, session_id: str = "") -> str:
         if session_id:
-            p = self.output_dir / f"reducto-report-{session_id}.md"
-            if p.exists():
-                return p.read_text()
+            validate_session_id(session_id)
+            for kind in ("report", "dryrun"):
+                p = checked_file(self.output_dir, f"reducto-{kind}-{session_id}.md")
+                if p.exists():
+                    return read_text(p)
             raise FileNotFoundError(session_id)
-        reports = sorted(
-            self.output_dir.glob("reducto-*.md"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
+        reports = []
+        for candidate in self.output_dir.glob("reducto-*.md"):
+            try:
+                p = checked_file(self.output_dir, candidate.name)
+                reports.append((p.stat().st_mtime, p))
+            except StorageError, OSError:
+                logging.getLogger(__name__).warning("Skipping unsafe report file")
+        reports.sort(reverse=True)
         if not reports:
             raise FileNotFoundError("no reports found")
-        return reports[0].read_text()
+        return read_text(reports[0][1])

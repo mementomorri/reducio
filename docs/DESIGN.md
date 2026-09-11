@@ -1,6 +1,6 @@
 # **reducto** Engineering the Autonomous Code Compression Utility: A Professional Framework for Semantic Refactoring
 
-> **Implementation (v1.0):** Python 3.14+ CLI (`pip install reducto`). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are shipped and tested. User guide: [README.md](README.md); shipped vs planned: [ROADMAP.md](../ROADMAP.md).
+> **Implementation (v1.0):** Python 3.14+ CLI (`reducto-code` distribution, `reducto` command/import). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the experimental modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are implemented. First publication is pending; see the user guide: [README.md](README.md). Shipped vs planned: [ROADMAP.md](../ROADMAP.md).
 >
 > - **Maintain the code:** [ONBOARDING.md](ONBOARDING.md)
 > - **Module layout and flows:** [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -302,4 +302,3 @@ As the project progresses, the focus must remain on "Safety and Trust." Develope
 45. Deep Agent CLI: Building Intelligent Coding Assistants with Persistent Memory | FlowHunt, дата последнего обращения: февраля 18, 2026, [https://www.flowhunt.io/blog/deep-agent-cli-intelligent-coding-assistants-persistent-memory/](https://www.flowhunt.io/blog/deep-agent-cli-intelligent-coding-assistants-persistent-memory/)
 46. FlightVin/automated-refactoring: LLM based workflow that opens pull requests based on detected design smells \- GitHub, дата последнего обращения: февраля 18, 2026, [https://github.com/FlightVin/automated-refactoring](https://github.com/FlightVin/automated-refactoring)
 47. Common workflows \- Claude Code Docs, дата последнего обращения: февраля 18, 2026, [https://code.claude.com/docs/en/common-workflows](https://code.claude.com/docs/en/common-workflows)
-

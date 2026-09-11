@@ -53,7 +53,7 @@ def test_default_is_markdown_without_plotly(tmp_path, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_plotly)
     assert write_reports(overview(), tmp_path)[0].suffix == ".md"
     assert write_reports(overview(), tmp_path, ReportFormat.JSON)[0].suffix == ".json"
-    with pytest.raises(ReportError, match=r"reducto\[reports\]"):
+    with pytest.raises(ReportError, match=r"reducto-code\[reports\]"):
         html_report(overview())
 
 

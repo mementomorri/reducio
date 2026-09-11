@@ -5,8 +5,9 @@ Pattern agent for applying design patterns.
 import os
 import re
 
-from reducto.agents.base import BaseAgent
-from reducto.models import FileChange, PatternRequest, RefactorPlan
+from reducto.agents.base import BaseAgent, ModelRewriteError
+from reducto.models import FileChange, PatternRequest, PlanningProvenance, RefactorPlan
+from reducto.plan_review import advisory_path, identifier
 from reducto.session import SessionStore
 
 
@@ -15,12 +16,16 @@ class PatternAgent(BaseAgent):
         super().__init__(workspace, llm_router, session_store)
 
     async def apply_pattern(self, request: PatternRequest) -> RefactorPlan:
+        self._begin_plan(request.allow_fallback)
         pattern = request.pattern.lower()
-        if pattern in _DESIGN_PATTERNS:
-            changes = await self._apply_design_pattern(request.files, pattern)
-        elif pattern == "":
-            changes = await self._detect_and_suggest_patterns(request.files)
-        else:
+        try:
+            if pattern in _DESIGN_PATTERNS:
+                changes = await self._apply_design_pattern(request.files, pattern)
+            elif pattern == "":
+                changes = await self._detect_and_suggest_patterns(request.files)
+            else:
+                changes = []
+        except ModelRewriteError:
             changes = []
 
         return self._finalize_plan(
@@ -38,26 +43,33 @@ class PatternAgent(BaseAgent):
             if not detect(content):
                 continue
             if self._llm_enabled():
-                change = await self._llm_rewrite(
-                    content,
-                    path,
-                    f"Refactor this Python module to use the {pattern} design pattern "
-                    "idiomatically, preserving behaviour.",
-                    f"LLM {pattern} refactor",
-                )
-                if change:
-                    changes.append(change)
+                try:
+                    change = await self._llm_rewrite(
+                        content,
+                        path,
+                        f"Refactor this Python module to use the {pattern} design pattern "
+                        "idiomatically, preserving behaviour.",
+                        f"LLM {pattern} refactor",
+                    )
+                    if change:
+                        changes.append(change)
                     continue
+                except ModelRewriteError:
+                    if not self.allow_fallback:
+                        raise
             # Every pattern writes a NEW advisory module (original=""); never overwrite the
             # source file — that discarded the original code (singleton used to do this).
             module = _module_name(path)
             changes.append(
                 FileChange(
-                    path=f"{subdir}/{module}_{pattern}.py",
+                    path=advisory_path(subdir, path, pattern),
                     original="",
                     modified=template_fn(path),
                     description=f"Extract into {pattern.title()} pattern",
                 )
+            )
+            self.provenance.append(
+                PlanningProvenance(file=path, engine="template", outcome="proposed")
             )
         return changes
 
@@ -72,7 +84,7 @@ class PatternAgent(BaseAgent):
             if _has_complex_conditionals(content):
                 changes.append(
                     FileChange(
-                        path=f"strategies/{module}_strategy.py",
+                        path=advisory_path("strategies", path, "strategy"),
                         original="",
                         modified=_generate_strategy_template(path),
                         description="Suggest Strategy pattern for complex conditionals",
@@ -81,12 +93,15 @@ class PatternAgent(BaseAgent):
             if _has_conditional_instantiation(content):
                 changes.append(
                     FileChange(
-                        path=f"factories/{module}_factory.py",
+                        path=advisory_path("factories", path, "factory"),
                         original="",
                         modified=_generate_factory_template(path),
                         description="Suggest Factory pattern for conditional instantiation",
                     )
                 )
+            self.provenance.append(
+                PlanningProvenance(file=path, engine="template", outcome="scanned")
+            )
         return changes
 
 
@@ -123,7 +138,7 @@ def _has_global_state(content: str) -> bool:
 
 def _module_name(path: str) -> str:
     name, _ = os.path.splitext(os.path.basename(path))
-    return name
+    return identifier(name)
 
 
 def _generate_strategy_template(path: str) -> str:

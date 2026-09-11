@@ -82,7 +82,8 @@ This changes precedence, not model-routing tiers or local-only enforcement.
 - PyPI: `reducto`, entrypoint `reducto.cli:app`
 - **Python 3.14+**
 - Extras: `embeddings`, `reports`, `dev`
-- Docker: `.[embeddings]`, `ENTRYPOINT ["reducto"]`
+- Supported usage: GitHub CI (primary), PyPI, and a PyApp executable in GitHub Releases.
+  The distribution is `reducto-code`; CLI/import remain `reducto`. See [installation status](README.md#2-pypi).
 
 ## External dependencies
 

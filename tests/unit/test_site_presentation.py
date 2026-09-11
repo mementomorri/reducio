@@ -37,7 +37,8 @@ def test_landing_links_use_canonical_repo_and_project_path():
     links = Links()
     links.feed(source)
     assert "alexkarsten/reducto" not in source
-    assert "github.com/mementomorri/reducto.git" in source
+    assert "github.com/mementomorri/reducto/blob/main/docs/GITHUB_CI.md" in source
+    assert "Forge from Source" not in source
     for href in links.hrefs:
         if href.startswith("#"):
             assert href[1:] in links.ids

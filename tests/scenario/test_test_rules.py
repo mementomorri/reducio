@@ -72,7 +72,11 @@ async def test_deduplicate_groups_extracted_validator_blocks():
         )
     )
     assert plan.changes
-    assert plan.changes[0].path == "utils/validate_email_address_dedup.py"
+    from reducto.plan_review import advisory_path
+
+    assert plan.changes[0].path == advisory_path(
+        "utils", "auth_validator.py", "validate_email_address_6_dedup"
+    )
     assert plan.changes[0].original == ""
 
 

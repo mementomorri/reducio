@@ -3,31 +3,44 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
-import tree_sitter_python as tspython
-from tree_sitter import Language as TSLanguage
-from tree_sitter import Parser
+if TYPE_CHECKING:
+    from tree_sitter import Parser
 
 from reducto.metrics import get_complexity as get_complexity
 from reducto.models import Language, Symbol
 
 
+class ParserError(RuntimeError):
+    pass
+
+
 @lru_cache(maxsize=1)
-def _parser() -> Parser | None:
+def _parser() -> Parser:
     try:
+        import tree_sitter_python as tspython
+        from tree_sitter import Language as TSLanguage
+        from tree_sitter import Parser
+
         language = TSLanguage(tspython.language())
         return Parser(language)
     except Exception:
-        return None
+        raise ParserError(
+            "Python symbol parser could not initialize; check tree-sitter dependencies"
+        ) from None
 
 
 def get_symbols(content: str, path: str, language: Language = Language.PYTHON) -> list[Symbol]:
     if language != Language.PYTHON:
         return []
     parser = _parser()
-    if not parser:
-        return []
-    tree = parser.parse(content.encode())
+    try:
+        tree = parser.parse(content.encode())
+    except Exception:
+        raise ParserError("Python symbol parser failed") from None
+    if tree.root_node.has_error:
+        raise ParserError("Source contains invalid Python syntax")
     lines = content.split("\n")
     return _walk_python(tree.root_node, content.encode(), path, lines)
 

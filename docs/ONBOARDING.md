@@ -74,6 +74,13 @@ Use the [per-command flag table](README.md#flags): `pattern` selects its model
 through configuration/environment, not `--model`. Plans print session IDs;
 dry-runs print report paths. Failed application exits 1; invalid inputs exit 2.
 `--quiet` hides progress only, while `--no-verbose` disables detailed results.
+Diff previews and provenance appear in terminal output, dry-run Markdown, and
+`sessions show`. Selected-model failures stop by default; `--allow-fallback`
+explicitly permits heuristic/template fallback. Incomplete plans cannot apply.
+Reports and sessions live under `<target>/.reducto`; use `report -C TARGET` for lookup.
+
+Distribution name: `reducto-code`; CLI/import: `reducto`. Editable installation
+above is for contributors. Public usage routes are CI, PyPI, and Releases executables.
 
 ## Extending
 

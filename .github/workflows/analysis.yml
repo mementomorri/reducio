@@ -42,8 +42,7 @@ jobs:
 
       - name: Quality check
         run: |
-          reducto check reducto/ --report
-          cp .reducto/reducto-check-*.md ci-reports/overview/
+          reducto check reducto/ --report --output-dir ci-reports/overview
 
       - name: Upload overview
         id: reports

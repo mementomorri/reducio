@@ -10,20 +10,32 @@ reducto is a **Python 3.14+** CLI and library. It only analyzes and refactors **
 
 ## Install
 
-### Published releases
+### 1. GitHub CI (recommended)
 
-Check the selected [release's notes](https://github.com/mementomorri/reducto/releases)
-for included features; published-package parity with this checkout is not verified.
+Use the [GitHub CI setup guide](GITHUB_CI.md) for main-branch dashboards and PR
+comparisons. Reports appear in job summaries and downloadable artifacts.
+
+### 2. PyPI
+
+The distribution is **`reducto-code`**; the command and Python import remain
+`reducto`. Do not install the unrelated [PyPI `reducto` SDK](https://pypi.org/project/reducto/).
+No `reducto-code` release was present on PyPI when checked on 2026-09-11; the
+following commands become available after the first successful publication:
 
 ```bash
-pip install reducto
-# semantic deduplication (ChromaDB + embeddings):
-pip install "reducto[embeddings]"
+pip install reducto-code
+pip install "reducto-code[reports]"     # interactive HTML dashboards
+pip install "reducto-code[embeddings]"  # semantic duplicate detection
+reducto analyze . --report
 ```
 
-### Linux executable
+Release CI verifies the exact published wheel hash and its installed CLI outside
+the checkout before allowing executable publication. Maintainers must configure
+PyPI Trusted Publishing for the `reducto-code` project before tagging a release.
 
-Tagged releases built by the Publish workflow also provide a Linux x64 executable
+### 3. GitHub Releases executable
+
+After successful PyPI verification, tagged releases built by Publish provide a Linux x64 executable
 with `reports` and `embeddings` enabled. Download the executable and matching
 `.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducto/releases).
 The release title is `reducto-<sha7>`; its existing `v*` tag remains the package's
@@ -53,14 +65,6 @@ that workflow run. It reuses the saved wheel without republishing to PyPI. Relea
 retries upload missing assets and skip identical assets; differing existing
 assets fail rather than being overwritten. Existing release notes are preserved.
 
-### From source
-
-```bash
-git clone https://github.com/mementomorri/reducto.git
-cd reducto
-pip install -e ".[embeddings]"
-```
-
 ### Optional extras
 
 | Extra | Purpose |
@@ -69,25 +73,8 @@ pip install -e ".[embeddings]"
 | `reports` | Self-contained interactive HTML dashboards (Plotly); Markdown/JSON need no extra |
 | `dev` | pytest, ruff, black, mypy (contributors) |
 
-### Checkout-based Bash installer
-
-From the root of a source checkout, using Python 3.14+:
-
-```bash
-PYTHON_CMD=python3.14 bash install.sh
-```
-
-The [installer](https://github.com/mementomorri/reducto/blob/main/install.sh)
-uses editable installation of the current directory and includes embeddings.
-It is not a standalone download-and-run installer; `INSTALL_DIR` is currently
-unused. Prefer the explicit pip commands above for control over environments/extras.
-
-### Docker
-
-```bash
-docker build -t reducto .
-docker run -v "$(pwd):/work" -w /work reducto analyze .
-```
+Only these three usage routes are maintained. Contributor environment setup is
+documented separately in [ONBOARDING.md](ONBOARDING.md).
 
 ## Prerequisites
 
@@ -114,7 +101,7 @@ reducto sessions list          # List saved sessions
 
 | Command | What the plan contains |
 |---------|-------------------------|
-| `deduplicate` | Embeddings find similar functions/methods; proposes `utils/<symbol>_dedup.py` (suggestion only — does **not** rewrite call sites). |
+| `deduplicate` | Embeddings compare self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Call sites are **not** rewritten. |
 | `pattern` | All default patterns, including singleton, propose new advisory modules. A configured model enables optional whole-module rewrites for applicable named patterns. |
 | `idiomatize` | Python heuristics by default; a configured model enables optional whole-module rewrites. Both paths require behavior review. |
 | `apply` | Context/syntax/definition-name checks and rollback attempts. Dirty-state preservation and exceptional recovery are not reliable. See [SAFETY.md](SAFETY.md). |
@@ -127,19 +114,23 @@ Flags are command-specific, not global:
 | --- | --- |
 | `analyze`, `compare`, `deduplicate`, `idiomatize`, `pattern`, `check`, `apply` | `--config` / `-c`, `--quiet` / `-q` (hide progress only) |
 | `analyze`, `compare`, `deduplicate`, `idiomatize`, `check` | `--verbose` / `-v`, `--no-verbose` |
-| `deduplicate`, `idiomatize`, `pattern` | `--dry-run` (save descriptions and session JSON; no inline code diff) |
+| `deduplicate`, `idiomatize`, `pattern` | `--dry-run` (save unified diff, diagnostics, provenance, and session JSON) |
+| `idiomatize`, `pattern` | `--allow-fallback` (explicitly permit heuristic/template fallback after model failure) |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `check` | `--report` / `-r` |
 | `deduplicate` | `--report` (successful apply report), `--prefer-remote` |
 | `analyze`, `deduplicate`, `idiomatize` | `--model` |
 | `analyze` | `--prefer-local`, `--prefer-remote` (mutually exclusive) |
-| `analyze`, `compare` | `--format markdown\|json\|html\|all`, `--output-dir` |
+| `analyze`, `compare` | `--format markdown\|json\|html\|all` |
+| `analyze`, `compare`, `check`, `deduplicate`, `idiomatize`, `pattern` | `--output-dir` |
 | `compare` | Required `--base`, optional `--head` (default `HEAD`) |
-| `report` | `--config` / `-c`; optional positional session ID |
+| `report` | `--config` / `-c`, `--path` / `-C`, `--output-dir`; optional positional session ID |
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
 
 `pattern` has no `--model` flag; set `model` in configuration or `REDUCTO_MODEL`.
-Model failures may fall back to heuristics/templates without explaining the path.
+Selected-model failures stop planning by default (exit 1). `--allow-fallback`
+explicitly permits fallback, with a warning and recorded provenance. A valid
+unchanged model response is not a failure and does not trigger heuristics.
 Preference is not an enforced local-only mode: cloud models receive source text.
 
 For `analyze` and `compare`, add `--report --format all` for Markdown, JSON, and an
@@ -148,8 +139,12 @@ reports go. Comparison is informational; parse/read failures exit nonzero and
 produce incomplete reports. See [Reports and CI](CI.md) and [Metrics v2](METRICS.md).
 
 Generated plans print `Session ID: …`; dry-runs print `Dry run report: …`.
-Inspect original/modified code in `<target>/.reducto/sessions/<id>.json` before
-approval. Legacy reports still default to the caller's `.reducto/` directory.
+Full unified diffs print before approval, including `--yes`, and in `sessions show`.
+Reports default to `<target>/.reducto`; sessions remain in its `sessions/` directory.
+Explicit relative `--output-dir` paths are relative to the caller's working directory
+and do not move sessions. Use `reducto report -C /path/to/target` for retrieval;
+specify the same `--output-dir` when overridden. Old reports are not migrated or
+automatically searched. Incomplete plans remain inspectable but cannot be applied.
 An empty plan skips application. Successful application and ordinary declined
 approval exit 0; failed application exits 1 with a reason on stderr. Declining
 the dirty-tree warning exits 1. Input/configuration errors exit 2. Quality findings

@@ -5,13 +5,18 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from reducto.models import FileChange, RefactorPlan
+from reducto.models import FileChange, PlanDiagnostic, PlanningProvenance, RefactorPlan
+from reducto.plan_review import validate_plan
 from reducto.session import SessionStore
 from reducto.utils.code_utils import strip_code_fence
 from reducto.workspace import Workspace
 
 if TYPE_CHECKING:
     from reducto.llm.router import LLMRouter
+
+
+class ModelRewriteError(RuntimeError):
+    pass
 
 
 class BaseAgent:
@@ -23,19 +28,25 @@ class BaseAgent:
     ):
         self.workspace = workspace
         self.llm = llm_router
-        self.session_store = session_store or SessionStore()
+        self.session_store = session_store or SessionStore(
+            str(workspace.root / ".reducto" / "sessions") if workspace else ".reducto/sessions"
+        )
         self._session_plans: dict[str, RefactorPlan] = {}
+        self._begin_plan()
+
+    def _begin_plan(self, allow_fallback: bool = False) -> None:
+        self.allow_fallback = allow_fallback
+        self.diagnostics: list[PlanDiagnostic] = []
+        self.provenance: list[PlanningProvenance] = []
 
     def _generate_session_id(self) -> str:
         return str(uuid.uuid4())
 
     def _save_plan(self, plan: RefactorPlan, command_type: str) -> None:
-        self._session_plans[plan.session_id] = plan
         self.session_store.save_plan(plan, command_type=command_type)
+        self._session_plans[plan.session_id] = plan
 
     def get_plan(self, session_id: str) -> RefactorPlan | None:
-        if session_id in self._session_plans:
-            return self._session_plans[session_id]
         return self.session_store.load_plan(session_id)
 
     def _file_content_path(self, file) -> tuple[str, str]:
@@ -44,27 +55,56 @@ class BaseAgent:
         return file["content"], file["path"]
 
     def _llm_enabled(self) -> bool:
-        # Opt-in: only when the user selected a model and a router is wired.
-        return bool(self.llm and self.workspace and self.workspace.cfg.model)
+        # An explicit model request must not silently degrade when no router is wired.
+        return bool(self.workspace and self.workspace.cfg.model)
 
     async def _llm_rewrite(
         self, content: str, path: str, instruction: str, description: str
     ) -> FileChange | None:
         """Ask the LLM to rewrite a whole module; returns a reviewable change or None."""
-        if self.llm is None:
-            return None
         prompt = (
             f"{instruction}\nReturn ONLY the complete rewritten module, no prose.\n\n"
             f"```python\n{content}\n```"
         )
+        model = self.workspace.cfg.model if self.workspace else ""
+        model = "custom endpoint" if "://" in model else model
         try:
+            if self.llm is None:
+                raise ModelRewriteError("No model router available")
             raw = await self.llm.complete(
                 prompt, system_prompt="You are an expert Python engineer."
             )
+            code = strip_code_fence(raw)
+            if not code.strip():
+                raise ValueError("Empty model response")
+            compile(code, path, "exec")
         except Exception:
-            return None
-        code = strip_code_fence(raw)
-        if not code or code.strip() == content.strip():
+            self.diagnostics.append(
+                PlanDiagnostic(
+                    code="model_failed",
+                    file=path,
+                    message="Model rewrite failed or returned empty/invalid Python"
+                    + (
+                        "; explicit fallback enabled"
+                        if self.allow_fallback
+                        else "; no application permitted"
+                    ),
+                    severity="warning" if self.allow_fallback else "error",
+                )
+            )
+            self.provenance.append(
+                PlanningProvenance(file=path, engine="model", outcome="failed", model=model)
+            )
+            raise ModelRewriteError("Model rewrite unavailable") from None
+        self.provenance.append(
+            PlanningProvenance(
+                file=path,
+                engine="model",
+                outcome="unchanged" if code.strip() == content.strip() else "proposed",
+                model=model,
+            )
+        )
+        if code.strip() == content.strip():
             return None
         return FileChange(
             path=path,
@@ -80,7 +120,19 @@ class BaseAgent:
             session_id=self._generate_session_id(),
             changes=changes,
             description=description,
+            diagnostics=self.diagnostics,
+            provenance=self.provenance,
             **plan_kw,
         )
+        # Coalesce truly identical changes, but never silently pick one conflicting version.
+        unique = []
+        for change in plan.changes:
+            if change not in unique:
+                unique.append(change)
+        plan.changes = unique
+        plan.diagnostics.extend(
+            validate_plan(plan, self.workspace.root if self.workspace else None)
+        )
+        plan.complete = not any(item.severity == "error" for item in plan.diagnostics)
         self._save_plan(plan, command_type)
         return plan

@@ -47,7 +47,9 @@ class LLMRouter:
 
     def _setup_litellm(self):
         """Configure LiteLLM with API keys and settings."""
-        litellm.set_verbose = self.verbose
+        # CLI verbosity must not enable provider debug dumps containing source or secrets.
+        litellm.set_verbose = False
+        litellm.suppress_debug_info = True
         litellm.drop_params = True
 
     def is_local_available(self) -> bool:
@@ -76,7 +78,7 @@ class LLMRouter:
 
         if actual_model_override:
             if self.verbose:
-                logger.info(f"Using model override: {actual_model_override}")
+                logger.info("Using the selected model")
             return actual_model_override
 
         cfg = self.config.get(tier.value, {})
@@ -121,9 +123,7 @@ class LLMRouter:
         messages.append({"role": "user", "content": prompt})
 
         if self.verbose:
-            logger.info(f"LLM request: model={model}, tier={tier.value}")
-            logger.info(f"  System prompt: {system_prompt[:100] if system_prompt else 'None'}...")
-            logger.info(f"  User prompt: {prompt[:200]}...")
+            logger.info(f"LLM request: tier={tier.value}")
 
         try:
             response = await acompletion(
@@ -141,9 +141,8 @@ class LLMRouter:
                     logger.info(
                         f"LLM response: tokens_prompt={usage.prompt_tokens}, tokens_completion={usage.completion_tokens}"
                     )
-                logger.info(f"  Response: {content[:200]}...")
 
             return content if isinstance(content, str) else ""
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
+        except Exception:
+            logger.error("LLM call failed; provider details withheld")
             raise

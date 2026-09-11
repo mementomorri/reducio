@@ -20,7 +20,7 @@ import reducto
 from reducto.embeddings.service import EmbeddingService
 
 assert sys.version_info[:2] == (3, 14), sys.version
-assert importlib.metadata.version('reducto') == sys.argv[1]
+assert importlib.metadata.version('reducto-code') == sys.argv[1]
 assert Path(reducto.__file__).is_relative_to(Path(sys.prefix))
 
 async def check():
@@ -40,6 +40,69 @@ asyncio.run(check())
 """
 
 
+def check_cli(run, executable: str, root: Path, version: str) -> None:
+    """Same public CLI contract for the PyPI installation and PyApp binary."""
+    assert run(executable, "version", capture=True).stdout.strip() == f"reducto {version}"
+    target = root / "contract-target"
+    target.mkdir()
+    source = target / "sample.py"
+    source.write_text("def value():\n    return 1\n")
+    config = root / "contract.yaml"
+    config.write_text("{}\n")
+    run("git", "-C", str(target), "init")
+    run("git", "-C", str(target), "add", "sample.py")
+    run(
+        "git",
+        "-C",
+        str(target),
+        "-c",
+        "user.name=Smoke",
+        "-c",
+        "user.email=smoke@example.invalid",
+        "commit",
+        "-m",
+        "base",
+    )
+    source.write_text("def value():\n    return 2\n")
+    run("git", "-C", str(target), "add", "sample.py")
+    run(
+        "git",
+        "-C",
+        str(target),
+        "-c",
+        "user.name=Smoke",
+        "-c",
+        "user.email=smoke@example.invalid",
+        "commit",
+        "-m",
+        "head",
+    )
+    for command in ("analyze", "compare"):
+        extra = ["--base", "HEAD~1"] if command == "compare" else []
+        run(
+            executable,
+            command,
+            str(target),
+            *extra,
+            "--config",
+            str(config),
+            "--report",
+            "--format",
+            "all",
+        )
+    run(executable, "check", str(target), "--config", str(config), "--report")
+    assert run(
+        executable, "report", "-C", str(target), "--config", str(config), capture=True
+    ).stdout
+    for suffix in ("md", "json", "html"):
+        assert list((target / ".reducto").glob(f"*.{suffix}")), suffix
+    run(executable, "idiomatize", str(target), "--config", str(config), "--dry-run", "--quiet")
+    session = json.loads(next((target / ".reducto/sessions").glob("*.json")).read_text())["plan"]
+    assert session["complete"] and session["provenance"]
+    run(executable, "sessions", "show", session["session_id"], "-C", str(target))
+    assert source.read_text() == "def value():\n    return 2\n"
+
+
 def smoke(executable: Path, version: str) -> None:
     executable = executable.resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="reducto-pyapp-smoke-") as temporary:
@@ -53,7 +116,7 @@ def smoke(executable: Path, version: str) -> None:
         }
         env.update(
             {
-                "PYAPP_INSTALL_DIR_REDUCTO": str(install),
+                "PYAPP_INSTALL_DIR_REDUCTO-CODE": str(install),
                 "XDG_CONFIG_HOME": str(root / "config"),
                 "XDG_CACHE_HOME": str(root / "cache"),
                 "XDG_DATA_HOME": str(root / "data"),
@@ -103,6 +166,7 @@ def smoke(executable: Path, version: str) -> None:
             assert len(files) == 1 and files[0].stat().st_size > 0, extension
         result = json.loads(next(reports.glob("*.json")).read_text())
         assert result["complete"] and result["total_symbols"] >= 1, result
+        check_cli(run, str(executable), root, version)
         print("Checking real embeddings and Chroma (first use downloads the model)", flush=True)
         run(str(installed_python), "-I", "-c", EMBEDDING_CHECK, version)
         assert run(str(executable), "version", capture=True).stdout.strip() == f"reducto {version}"

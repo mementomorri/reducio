@@ -71,7 +71,8 @@ def test_generate_dry_run(tmp_path):
     )
     out = Reporter(output_dir=str(tmp_path / ".reducto")).generate_dry_run(plan, "idiomatize", "p")
     text = out.read_text()
-    assert "Dry Run: idiomatize" in text
+    assert "Command: idiomatize" in text
+    assert "+++ b/x.py" in text and "+y" in text
     assert "x.py" in text
 
 

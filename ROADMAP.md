@@ -123,9 +123,9 @@ landing page now describes current behavior; [ADVERTISING_AUDIT.md](docs/ADVERTI
 preserves the original comparison. Safety items remain release blockers, not
 optional polish. Ordered from immediate clarity/safety work to broader features:
 
-- [ ] **Review and result clarity:** session IDs, report paths, actual returned apply
-  outcomes and failure exit codes are implemented. Remaining: unified diffs before
-  approval and heuristic/model/fallback provenance.
+- [ ] **Review and result clarity:** session IDs, target-local report paths, actual
+  apply outcomes, failure exit codes, unified diff previews, and persisted
+  heuristic/model/fallback provenance are implemented.
   Decide whether to expose the existing commit configuration as a supported CLI flag.
 - [ ] **Reliable recovery — release blocker:** preserve staged, unstaged, and
   untracked pre-existing work; recover from validation/runner exceptions; distinguish

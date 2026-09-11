@@ -27,7 +27,9 @@ Python produces explicit unavailable measurements rather than zero complexity.
 **Scenario**: Provide two files with semantically identical logic (e.g., identical input validation blocks) but different variable names.
 **Status: implemented as suggestions.** Optional embeddings identify similar
 functions and propose copied utility modules. Applying writes those modules, but
-does not remove originals or rewrite callers. Dependency/collision handling remains incomplete.
+does not remove originals or rewrite callers. Extraction is restricted to self-contained
+top-level functions; dependency/scope exclusions are explained. Proposed Python and
+source-qualified destinations are checked during planning and replay.
 
 ### Test Case: Idiomatic Transformation (Pythonic Alignment)
 
@@ -64,9 +66,9 @@ exceptions can bypass recovery, and restoration status is not reliably verified.
 
 **Scenario**: User requests a compression operation.
 **Status: partial.** Approval is per nonempty plan and can be bypassed with
-`--yes`. CLI output includes session IDs and dry-run report paths; reports/show
-list descriptions. Unified/side-by-side previews remain planned; inspect persisted
-original/modified JSON manually. Empty plans are not applied.
+`--yes`. CLI output includes session IDs and dry-run report paths. Reports, session
+display, and pre-apply output include unified diffs and provenance; side-by-side
+display remains optional future work. Empty/incomplete plans are not applied.
 
 ### Test Case: Non-Destructive Apply
 

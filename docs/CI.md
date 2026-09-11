@@ -38,9 +38,12 @@ to make that choice explicit. See [METRICS.md](METRICS.md) for counting rules.
 | HTML | Offline interactive dashboard: distributions, scatter, rankings, comparison charts, complete table |
 | JSON | Complete versioned measurements for automation |
 
-`--report` alone preserves the Markdown default under the caller's `.reducto/`.
+`--report` alone writes Markdown under `<target>/.reducto/`.
 `--format markdown\|html\|json\|all` selects formats **when `--report` is present**.
-`--output-dir` overrides that directory for `analyze` and `compare`. Files have
+`--output-dir` overrides report locations; an explicit relative path is caller-relative.
+Use `reducto report -C /path/to/target` to read the latest Markdown report, adding
+the same `--output-dir` when overridden. Sessions stay under the target's `.reducto/sessions/`.
+Old reports are not migrated or searched in other directories. Analysis/comparison files have
 timestamped names; HTML includes its own JavaScript and needs no server/CDN.
 Without the `reports` extra, Markdown and JSON still work.
 

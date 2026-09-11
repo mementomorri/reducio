@@ -20,9 +20,11 @@ from reducto.models import (
     RefactorPlan,
     RefactorResult,
 )
+from reducto.plan_review import plan_preview, terminal_text, validate_plan
 from reducto.progress import progress
 from reducto.reporter import Reporter
 from reducto.session import SessionStore
+from reducto.storage import StorageError, validate_session_id
 from reducto.visual_report import ReportError, ReportFormat, write_reports
 
 if TYPE_CHECKING:
@@ -33,7 +35,11 @@ def _new_app(root: str, cfg: AppConfig) -> App:
     # Load optional model infrastructure only after the first progress message.
     from reducto.services import App
 
-    return App(root, cfg)
+    try:
+        return App(root, cfg)
+    except StorageError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
 
 
 app = typer.Typer(
@@ -98,11 +104,22 @@ def _run(coro):
 
 
 def _show_plan(plan: RefactorPlan) -> None:
-    typer.echo(plan.description)
-    typer.echo(f"Session ID: {plan.session_id}")
+    typer.echo(terminal_text(plan_preview(plan)))
+    for diagnostic in plan.diagnostics:
+        typer.echo(
+            terminal_text(f"{diagnostic.severity}: {diagnostic.file}: {diagnostic.message}"),
+            err=True,
+        )
+
+
+def _require_complete(plan: RefactorPlan) -> None:
+    if not plan.complete or any(d.severity == "error" for d in plan.diagnostics):
+        typer.echo("Plan is incomplete; no changes can be applied.", err=True)
+        raise typer.Exit(1)
 
 
 def _has_changes(plan: RefactorPlan) -> bool:
+    _require_complete(plan)
     if not plan.changes:
         typer.echo("No changes to apply.")
         return False
@@ -118,9 +135,20 @@ def _show_apply_result(result: RefactorResult) -> None:
     typer.echo("Applied.")
 
 
-def _dry_run_report(plan: RefactorPlan, cfg: AppConfig, command: str, path: Path) -> None:
-    report = Reporter(cfg).generate_dry_run(plan, command, str(path))
+def _report_dir(path: Path, output_dir: Path | None) -> Path:
+    return output_dir if output_dir is not None else path.resolve() / ".reducto"
+
+
+def _dry_run_report(
+    plan: RefactorPlan, cfg: AppConfig, command: str, path: Path, output_dir: Path | None = None
+) -> None:
+    try:
+        report = Reporter(cfg, output_dir, target=path).generate_dry_run(plan, command, str(path))
+    except (OSError, StorageError) as error:
+        typer.echo(f"Report failed: {error}", err=True)
+        raise typer.Exit(1) from None
     typer.echo(f"Dry run report: {report}")
+    _require_complete(plan)
 
 
 @app.command()
@@ -135,7 +163,9 @@ def analyze(
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
-    output_dir: Path = typer.Option(Path(".reducto"), "--output-dir", help="Report directory"),
+    output_dir: Path | None = typer.Option(
+        None, "--output-dir", help="Report directory (default: TARGET/.reducto)"
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Scan for complexity hotspots."""
@@ -158,7 +188,7 @@ def analyze(
             typer.echo(f"No hotspots (cyclomatic >= {th})")
     if report:
         with progress("Generating analysis reports...", quiet=quiet):
-            _write_analysis_reports(result, output_dir, format)
+            _write_analysis_reports(result, _report_dir(path, output_dir), format)
     for diagnostic in result.diagnostics:
         typer.echo(
             f"Metrics unavailable: {diagnostic.file}:{diagnostic.line or 1}: {diagnostic.message}",
@@ -191,7 +221,7 @@ def compare(
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
-    output_dir: Path = typer.Option(Path(".reducto"), "--output-dir"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
@@ -231,7 +261,7 @@ def compare(
             )
     if report:
         with progress("Generating comparison reports...", quiet=quiet):
-            _write_analysis_reports(result, output_dir, format)
+            _write_analysis_reports(result, _report_dir(path, output_dir), format)
     for diagnostic in result.diagnostics + result.before.diagnostics + result.after.diagnostics:
         typer.echo(f"Comparison incomplete: {diagnostic.file}: {diagnostic.message}", err=True)
     if not result.complete:
@@ -244,6 +274,7 @@ def deduplicate(
     dry_run: bool = typer.Option(False, "--dry-run"),
     yes: bool = typer.Option(False, "--yes"),
     report: bool = typer.Option(False, "--report"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     model: str | None = typer.Option(None, "--model"),
@@ -261,7 +292,7 @@ def deduplicate(
         plan = _run(svc.deduplicate(str(path)))
     _show_plan(plan)
     if dry_run:
-        _dry_run_report(plan, cfg, "deduplicate", path)
+        _dry_run_report(plan, cfg, "deduplicate", path, output_dir)
         return
     if not _has_changes(plan):
         return
@@ -271,13 +302,17 @@ def deduplicate(
         result = svc.apply_plan(plan)
     _show_apply_result(result)
     if report and result.success:
-        typer.echo(f"Apply report: {Reporter(cfg).generate(result)}")
+        typer.echo(f"Apply report: {Reporter(cfg, output_dir, target=path).generate(result)}")
 
 
 @app.command()
 def idiomatize(
     path: Path = typer.Argument(Path(".")),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    allow_fallback: bool = typer.Option(
+        False, "--allow-fallback", help="Allow heuristics if the selected model fails"
+    ),
     yes: bool = typer.Option(False, "--yes"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
@@ -292,10 +327,10 @@ def idiomatize(
         _check_git(root, cfg)
     with progress("Preparing idiom proposals...", quiet=quiet):
         svc = _new_app(root, cfg)
-        plan = _run(svc.idiomatize(str(path)))
+        plan = _run(svc.idiomatize(str(path), allow_fallback=allow_fallback))
     _show_plan(plan)
     if dry_run:
-        _dry_run_report(plan, cfg, "idiomatize", path)
+        _dry_run_report(plan, cfg, "idiomatize", path, output_dir)
         return
     if not _has_changes(plan):
         return
@@ -314,6 +349,10 @@ def pattern(
     pattern_name: str = typer.Argument("", help="factory|strategy|observer|singleton"),
     path: Path = typer.Argument(Path(".")),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    allow_fallback: bool = typer.Option(
+        False, "--allow-fallback", help="Allow templates if the selected model fails"
+    ),
     yes: bool = typer.Option(False, "--yes"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
@@ -331,10 +370,10 @@ def pattern(
         _check_git(root, cfg)
     with progress("Preparing pattern suggestions...", quiet=quiet):
         svc = _new_app(root, cfg)
-        plan = _run(svc.pattern(pattern_name, str(path)))
+        plan = _run(svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback))
     _show_plan(plan)
     if dry_run:
-        _dry_run_report(plan, cfg, "pattern", path)
+        _dry_run_report(plan, cfg, "pattern", path, output_dir)
         return
     if not _has_changes(plan):
         return
@@ -351,6 +390,7 @@ def check(
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
@@ -372,7 +412,11 @@ def check(
                 typer.echo(f"  {i['suggestion']}")
     if report:
         with progress("Writing quality report...", quiet=quiet):
-            p = Reporter(cfg).generate_check(result)
+            try:
+                p = Reporter(cfg, output_dir, target=path).generate_check(result)
+            except (OSError, StorageError) as error:
+                typer.echo(f"Report failed: {error}", err=True)
+                raise typer.Exit(1) from None
         typer.echo(f"Quality report: {p}")
     if any(issue["issue_type"] == "parse_error" for issue in result["issues"]):
         typer.echo("Quality check incomplete: some Python files could not be parsed.", err=True)
@@ -391,11 +435,11 @@ def apply(
     cfg = _get_cfg(config)
     cfg.pre_approve = yes
     root = Path(_resolve_repo(path))
-    store = SessionStore(storage_dir=str(root / ".reducto" / "sessions"))
-    plan = store.load_plan(session_id)
+    plan = _load_plan(root, session_id)
     if not plan:
         typer.echo(f"Session not found: {session_id}", err=True)
         raise typer.Exit(1)
+    plan.diagnostics.extend(validate_plan(plan, root))
     _show_plan(plan)
     if not _has_changes(plan):
         return
@@ -413,15 +457,23 @@ def apply(
 def report_cmd(
     session_id: str = typer.Argument("", help="Session ID or empty for latest"),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    path: Path = typer.Option(Path("."), "--path", "-C", help="Repository path"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
 ):
     """Print a saved report (latest, or the given session ID)."""
     cfg = _get_cfg(config)
     try:
-        text = Reporter(cfg).load_latest(session_id)
+        text = Reporter(cfg, output_dir, target=_resolve_repo(path)).load_latest(session_id)
+    except StorageError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
     except FileNotFoundError:
         typer.echo("No report found. Run a command with --report first.", err=True)
         raise typer.Exit(1) from None
-    typer.echo(text)
+    except OSError:
+        typer.echo("Report could not be read.", err=True)
+        raise typer.Exit(1) from None
+    typer.echo(terminal_text(text))
 
 
 sessions_app = typer.Typer(help="Manage refactoring sessions")
@@ -429,7 +481,20 @@ app.add_typer(sessions_app, name="sessions")
 
 
 def _session_store(path: Path) -> SessionStore:
-    return SessionStore(storage_dir=str(Path(_resolve_repo(path)) / ".reducto" / "sessions"))
+    try:
+        return SessionStore(storage_dir=str(Path(_resolve_repo(path)) / ".reducto" / "sessions"))
+    except StorageError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
+
+
+def _load_plan(path: Path, session_id: str) -> RefactorPlan | None:
+    try:
+        validate_session_id(session_id)
+        return _session_store(path).load_plan(session_id)
+    except StorageError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
 
 
 @sessions_app.command("list")
@@ -452,13 +517,11 @@ def sessions_show(
     path: Path = typer.Option(Path("."), "--path", "-C", help="Repository path"),
 ):
     """Show the changes in a saved session."""
-    plan = _session_store(path).load_plan(session_id)
+    plan = _load_plan(path, session_id)
     if not plan:
         typer.echo("Not found", err=True)
         raise typer.Exit(1)
-    typer.echo(f"{plan.description}\nChanges: {len(plan.changes)}")
-    for i, c in enumerate(plan.changes, 1):
-        typer.echo(f"  {i}. {c.path} — {c.description}")
+    _show_plan(plan)
 
 
 @sessions_app.command("cleanup")

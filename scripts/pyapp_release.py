@@ -12,6 +12,7 @@ import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 
+from packaging.utils import canonicalize_name
 from packaging.version import Version
 
 
@@ -32,8 +33,8 @@ def package_metadata(wheel_directory: Path, commit: str) -> dict[str, str]:
         if len(metadata_files) != 1:
             raise ValueError("Expected exactly one wheel METADATA file")
         metadata = BytesParser().parsebytes(archive.read(metadata_files[0]))
-    if metadata["Name"] != "reducto":
-        raise ValueError("The published wheel must contain reducto")
+    if canonicalize_name(metadata["Name"]) != "reducto-code":
+        raise ValueError("The published wheel must contain reducto-code")
     version = Version(metadata["Version"])
     name = f"reducto-{commit[:7]}"
     return {

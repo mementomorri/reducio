@@ -5,8 +5,15 @@ Idiomatizer agent for transforming code to idiomatic patterns (Python heuristics
 import ast
 import re
 
-from reducto.agents.base import BaseAgent
-from reducto.models import FileChange, IdiomatizeRequest, Language, RefactorPlan
+from reducto.agents.base import BaseAgent, ModelRewriteError
+from reducto.models import (
+    FileChange,
+    IdiomatizeRequest,
+    Language,
+    PlanDiagnostic,
+    PlanningProvenance,
+    RefactorPlan,
+)
 from reducto.repo import detect_language
 from reducto.session import SessionStore
 
@@ -16,10 +23,14 @@ class IdiomatizerAgent(BaseAgent):
         super().__init__(workspace, llm_router, session_store)
 
     async def idiomatize(self, request: IdiomatizeRequest) -> RefactorPlan:
+        self._begin_plan(request.allow_fallback)
         changes = []
         idioms = 0
         for file in request.files:
-            change, count = await self._idiomatize_file(file)
+            try:
+                change, count = await self._idiomatize_file(file)
+            except ModelRewriteError:
+                break
             if change:
                 changes.append(change)
                 idioms += count
@@ -36,18 +47,31 @@ class IdiomatizerAgent(BaseAgent):
         try:
             ast.parse(content)  # can't safely rewrite (or validate) a file that doesn't parse
         except SyntaxError:
+            self.diagnostics.append(
+                PlanDiagnostic(
+                    code="invalid_source", file=path, message="Skipped invalid Python source"
+                )
+            )
             return None, 0
         if self._llm_enabled():
-            change = await self._llm_rewrite(
-                content,
-                path,
-                "Rewrite the following Python module to be more idiomatic and concise "
-                "without changing behaviour.",
-                "LLM idiomatic rewrite",
+            try:
+                change = await self._llm_rewrite(
+                    content,
+                    path,
+                    "Rewrite the following Python module to be more idiomatic and concise without changing behaviour.",
+                    "LLM idiomatic rewrite",
+                )
+                return change, int(change is not None)
+            except ModelRewriteError:
+                if not self.allow_fallback:
+                    raise
+        change, count = self._idiomatize_python(content, path)
+        self.provenance.append(
+            PlanningProvenance(
+                file=path, engine="heuristic", outcome="proposed" if change else "unchanged"
             )
-            if change:
-                return change, 1
-        return self._idiomatize_python(content, path)
+        )
+        return change, count
 
     def _idiomatize_python(self, content: str, path: str) -> tuple[FileChange | None, int]:
         """Collect every idiom as a line span and emit one whole-file change.

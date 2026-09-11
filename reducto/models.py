@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field
 
@@ -61,12 +62,29 @@ class FileChange(BaseModel):
     description: str
 
 
+class PlanDiagnostic(BaseModel):
+    code: str
+    message: str
+    file: str = ""
+    severity: Literal["info", "warning", "error"] = "warning"
+
+
+class PlanningProvenance(BaseModel):
+    file: str
+    engine: Literal["heuristic", "template", "model", "embeddings", "unknown"]
+    outcome: str
+    model: str = ""
+
+
 class RefactorPlan(BaseModel):
     session_id: str
     changes: list[FileChange]
     description: str
     pattern: str | None = None
     created_at: datetime = Field(default_factory=datetime.now)
+    complete: bool = True
+    diagnostics: list[PlanDiagnostic] = Field(default_factory=list)
+    provenance: list[PlanningProvenance] = Field(default_factory=list)
 
 
 class RefactorResult(BaseModel):
@@ -235,9 +253,11 @@ class DeduplicateRequest(BaseModel):
 class IdiomatizeRequest(BaseModel):
     path: str
     files: list[FileInfo] = Field(default_factory=list)
+    allow_fallback: bool = False
 
 
 class PatternRequest(BaseModel):
     pattern: str
     path: str
     files: list[FileInfo] = Field(default_factory=list)
+    allow_fallback: bool = False

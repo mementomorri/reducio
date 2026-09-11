@@ -12,6 +12,17 @@ order reflects effort; the release blockers below reflect severity.
 
 ## Implementation update — CLI contracts and documentation
 
+**Section 2 follow-up:** target-local reports, unified previews, safe session paths,
+explicit planning failures/provenance, bounded advisory preflight, and subprocess
+coverage are now implemented. Installation is limited to GitHub CI, the
+`reducto-code` PyPI distribution, and PyApp executables; CLI/import stay `reducto`.
+First public publication/Trusted Publishing setup remain operational follow-ups.
+The snapshot below describes the earlier section 1 work; current verification is
+recorded in [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md): **328 passed,
+5 strict expected failures, 91.43% coverage**; lint/type/build checks and
+installed-wheel CLI/report smoke passed. No public publication or PyApp build
+was run locally; section 3 safety defects remain unresolved.
+
 TODO section 1 is implemented locally: ANSI-resilient help tests, canonical active
 links and local origin, truthful plan/session/report output, nonzero failed-apply
 exits, saved-plan dirty warnings, and consistent directory/configuration validation.
@@ -19,10 +30,10 @@ Explicit CLI model/verbosity/preference overrides now win over environment, sele
 YAML, and defaults; services preserve resolved settings. `--no-verbose` disables
 details independently of `--quiet`. Invalid inputs exit 2 without configuration dumps.
 
-Safety/architecture/user/onboarding/testing docs now distinguish actual safeguards
-from planned capabilities. The installer is documented as checkout-based Bash;
-its unused `INSTALL_DIR` and absent installer CI remain item 12. No rollback or
-rewriting engine was changed. Items 19–24 remain safety blockers.
+Safety/architecture/user/onboarding/testing docs distinguish actual safeguards
+from planned capabilities. The later section 2 update removes the Bash installer
+and container support. No rollback or rewriting engine was changed. Items 19–24
+remain safety blockers.
 
 Local verification: **266 tests passed, 85.15% coverage**; CLI coverage **83%**,
 configuration **100%**. Ruff, Black, mypy, and wheel/sdist build passed; tracked
@@ -213,13 +224,13 @@ Sources: [workspace.py](../reducto/workspace.py),
 
 | Finding | Evidence and impact | TODO |
 | --- | --- | --- |
-| Session IDs can escape storage paths | Reproduced by path resolution only: `../../../outside` resolves outside the configured session directory. File operations need ID/containment validation. | 15 |
+| Session path isolation — fixed locally | IDs/containment are validated before cache or file access, symlinks rejected, filename/metadata identities checked. Unsafe listings are skipped with warnings. This is not a concurrent hostile-filesystem sandbox. | 15 |
 | Remaining configuration/CI policies | Precedence and validation are fixed; configurable finding gates and a broader noninteractive approval policy remain undecided. | 28 |
-| Reports and sessions use different roots | Reports default to the caller's working directory; sessions use the target repository. Docker's advertised data-directory variable is unused. | 13 |
-| Plans lack a convenient code preview | Dry-run reports and session display show descriptions; apply approval generally shows a count. Full original/modified text is available in session JSON. | 14 |
-| Advisory modules may be invalid or incomplete | Copied methods retain indentation/class dependencies; extracted functions may lack imports. Destination names can collide across source paths. | 18 |
-| Fallbacks can hide capability failures | Parser initialization failure yields no symbols. Failed LLM rewriting falls back to heuristics/templates without a clear user-facing explanation of the path used. | 17 |
-| Installer implementation/testing gaps | Documentation now states checkout-based Bash installation; `INSTALL_DIR` is still unused and Installation CI does not exercise the script. | 12 |
+| Report roots — fixed locally | Default reports and sessions share the target's `.reducto`. Explicit output directories remain caller-relative; report lookup accepts `-C`. | 13 |
+| Plan previews — fixed locally | Dry-run Markdown, session display, and pre-apply output include unified diffs, diagnostics, and provenance, including with `--yes`. | 14 |
+| Advisory preflight — bounded fix implemented | Only self-contained top-level functions are extracted. Generated paths are source-qualified; syntax and destination conflicts are checked before application and replay. This does not prove semantic equivalence. | 18 |
+| Silent planning failures — fixed locally | Parser/required embeddings and selected-model failures make plans incomplete. Explicit `--allow-fallback` permits logged heuristic/template fallback. Incomplete plans cannot apply. | 17 |
+| Distribution identity — fixed locally, first publication pending | The maintainer chose `reducto-code`; CLI/import stay `reducto`. Its PyPI endpoint returned 404 on 2026-09-11 (not a reservation guarantee). Configure Trusted Publishing before the first release. Only CI, PyPI, and Releases executables remain supported routes. | 12 |
 | Task-based model routing is not operational in the normal agent path | A configured model enables rewriting and bypasses tier selection. Tier-selection unit tests do not demonstrate task-based routing in an actual workflow. | 27 |
 
 The repository identity is a confirmed maintainer choice, not inferred from a

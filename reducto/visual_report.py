@@ -252,7 +252,7 @@ def _figures(result: Result) -> list[Any]:
     try:
         import plotly.graph_objects as go
     except ImportError as error:
-        raise ReportError('HTML reports require: pip install "reducto[reports]"') from error
+        raise ReportError('HTML reports require: pip install "reducto-code[reports]"') from error
 
     figures = []
     if isinstance(result, AnalyzeResult):

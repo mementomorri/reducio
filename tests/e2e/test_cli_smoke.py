@@ -141,12 +141,15 @@ def test_pattern_collision_reports_failure_on_stderr(tmp_path):
     source = tmp_path / "sample.py"
     original = "def sample(x):\n" + "    if x: x -= 1\n" * 5 + "    return x\n"
     source.write_text(original)
-    destination = tmp_path / "strategies" / "sample_strategy.py"
+    from reducto.plan_review import advisory_path
+
+    destination = tmp_path / advisory_path("strategies", "sample.py", "strategy")
     destination.parent.mkdir()
     destination.write_text("# Existing user module\n")
     result = _run_cli("pattern", "strategy", str(tmp_path), "--yes", "--quiet", cwd=tmp_path)
     assert result.returncode == 1
-    assert "Failed: refusing to create over existing file" in result.stderr
+    assert "Refusing to create over existing file" in result.stderr
+    assert "Plan is incomplete" in result.stderr
     assert "Applied." not in result.stdout
     assert "Proposed strategy" in result.stdout
     assert source.read_text() == original

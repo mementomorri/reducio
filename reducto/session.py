@@ -9,9 +9,9 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, cast
 
 from reducto.models import RefactorPlan
+from reducto.storage import StorageError, checked_file, read_text, validate_session_id, write_text
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +59,13 @@ class SessionStore:
 
     def _ensure_storage_dir(self):
         """Create storage directory if it doesn't exist."""
+        checked_file(self.storage_dir, "probe.json")
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Session storage directory: {self.storage_dir}")
 
     def _get_session_path(self, session_id: str) -> Path:
         """Get the file path for a session."""
-        return self.storage_dir / f"{session_id}.json"
+        return checked_file(self.storage_dir, f"{validate_session_id(session_id)}.json")
 
     @staticmethod
     def _metadata_with_session_id(metadata: dict, session_path: Path) -> dict:
@@ -74,10 +75,23 @@ class SessionStore:
 
     def _read_session_file(self, session_path: Path) -> dict | None:
         try:
-            with open(session_path) as f:
-                return cast(dict[str, Any], json.load(f))
-        except Exception as e:
-            logger.warning(f"Failed to read session {session_path}: {e}")
+            path = self._get_session_path(session_path.stem)
+            data = json.loads(read_text(path))
+            if not isinstance(data, dict):
+                raise ValueError("Invalid session envelope")
+            metadata = data.get("metadata", {})
+            if not isinstance(metadata, dict):
+                raise ValueError("Invalid metadata")
+            for record in (metadata, data.get("plan", {})):
+                if not isinstance(record, dict) or record.get("session_id", path.stem) != path.stem:
+                    raise ValueError("Session ID does not match filename")
+            if metadata:
+                info = SessionInfo.from_dict(self._metadata_with_session_id(metadata, path))
+                # Normalize dates for sorting/cleanup; also reject malformed metadata early.
+                info.created_at.timestamp()
+            return data
+        except OSError, ValueError, TypeError, KeyError:
+            logger.warning("Skipping unsafe or malformed session file")
             return None
 
     def save_plan(self, plan: RefactorPlan, command_type: str = "unknown") -> None:
@@ -112,8 +126,7 @@ class SessionStore:
 
         # Write to file
         try:
-            with open(session_path, "w") as f:
-                json.dump(data, f, indent=2)
+            write_text(session_path, json.dumps(data, indent=2))
 
             # Update cache
             self._cache[plan.session_id] = plan
@@ -133,12 +146,10 @@ class SessionStore:
         Returns:
             The RefactorPlan if found, None otherwise
         """
-        # Check cache first
-        if session_id in self._cache:
-            logger.debug(f"Loading session {session_id} from cache")
-            return self._cache[session_id]
-
         session_path = self._get_session_path(session_id)
+        # Validate before using caches; cached data must not bypass replaced files.
+        if session_id in self._cache:
+            self._cache.pop(session_id, None)
 
         if not session_path.exists():
             logger.warning(f"Session {session_id} not found")
@@ -155,13 +166,15 @@ class SessionStore:
                 return None
 
             plan = RefactorPlan.model_validate(plan_data)
+            if plan.session_id != session_id:
+                raise StorageError("Session ID does not match filename")
             self._cache[session_id] = plan
 
             logger.info(f"Loaded session {session_id} ({len(plan.changes)} changes)")
             return plan
 
-        except Exception as e:
-            logger.error(f"Failed to load session {session_id}: {e}")
+        except ValueError, TypeError:
+            logger.error("Failed to load malformed session")
             return None
 
     def list_sessions(self) -> list[SessionInfo]:
@@ -185,7 +198,7 @@ class SessionStore:
             )
 
         # Sort by created_at, newest first
-        sessions.sort(key=lambda s: s.created_at, reverse=True)
+        sessions.sort(key=lambda s: s.created_at.timestamp(), reverse=True)
         return sessions
 
     def delete_session(self, session_id: str) -> bool:
@@ -222,7 +235,9 @@ class SessionStore:
         Returns:
             Number of sessions deleted
         """
-        cutoff = datetime.now() - timedelta(days=max_age_days)
+        if max_age_days < 0:
+            raise ValueError("Session age must be nonnegative")
+        cutoff = (datetime.now() - timedelta(days=max_age_days)).timestamp()
         deleted = 0
 
         for session_path in self.storage_dir.glob("*.json"):
@@ -233,8 +248,8 @@ class SessionStore:
             created_at_str = metadata.get("created_at")
             if not created_at_str:
                 continue
-            if datetime.fromisoformat(created_at_str) < cutoff:
-                session_path.unlink()
+            if datetime.fromisoformat(created_at_str).timestamp() < cutoff:
+                self._get_session_path(session_path.stem).unlink()
                 session_id = self._metadata_with_session_id(metadata, session_path)["session_id"]
                 self._cache.pop(session_id, None)
                 deleted += 1

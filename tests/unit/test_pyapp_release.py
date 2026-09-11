@@ -13,9 +13,9 @@ from scripts import pyapp_release
 COMMIT = "abcdef1234567890abcdef1234567890abcdef12"
 
 
-def make_wheel(directory, version="1.2.3", name="reducto"):
+def make_wheel(directory, version="1.2.3", name="reducto-code"):
     directory.mkdir(parents=True, exist_ok=True)
-    wheel = directory / f"{name}-{version}-py3-none-any.whl"
+    wheel = directory / f"{name.replace('-', '_')}-{version}-py3-none-any.whl"
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(
             f"{name}-{version}.dist-info/METADATA", f"Name: {name}\nVersion: {version}\n"
@@ -231,7 +231,8 @@ def test_publish_workflow_gates_release_and_limits_credentials():
     document = yaml.safe_load(workflow.read_text())
     assert document["concurrency"]["cancel-in-progress"] is False
     jobs = document["jobs"]
-    assert jobs["pyapp"]["needs"] == "pypi"
+    assert jobs["pyapp"]["needs"] == ["pypi", "verify-pypi"]
+    assert jobs["verify-pypi"]["needs"] == "pypi"
     assert jobs["pyapp"]["permissions"] == {"contents": "write"}
     assert jobs["pypi"]["permissions"]["id-token"] == "write"
     steps = jobs["pyapp"]["steps"]

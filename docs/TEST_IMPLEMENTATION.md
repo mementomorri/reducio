@@ -61,7 +61,13 @@ mypy reducto/ --ignore-missing-imports
 ```
 
 Coverage target: `reducto/` package (minimum 60% in CI; see `pyproject.toml`).
-Latest local run: **266 tests passed / 85.15% coverage** (2026-09-11, section 1
+Latest section 2 run (2026-09-11, on top of `7d36387`): **328 passed, 5 strict
+expected failures, 91.43% coverage**; CLI **92%**, configuration **100%**. Ruff,
+Black, mypy, wheel/sdist build, and installed-wheel CLI/report smoke passed.
+Tracked fixtures are unchanged. No public release, remote CI run, or full local
+PyApp build was performed. Expected failures retain the section 3 safety blockers.
+
+Historical section 1 run: **266 tests passed / 85.15% coverage** (2026-09-11, section 1
 implementation on top of `2ca053b`). CLI statement coverage is **83%**, and
 configuration coverage is **100%**. Ruff, Black, mypy, and wheel/sdist build passed;
 tracked fixtures are unchanged. This is local verification, not a new remote CI run.
@@ -72,7 +78,23 @@ Metric contracts are in `tests/unit/test_metrics_v2.py`; isolated Git comparison
 (including dirty-tree preservation, renames, invalid revisions/source, and empty
 changes) in `test_compare.py`; report agreement, escaping, optional dependencies,
 and in-process CLI exit behavior in `test_visual_report.py`. CLI subprocess smoke
-tests remain; the new `CliRunner` tests are included in coverage.
+tests and `CliRunner` tests are included in coverage. Section 2 enables
+`[tool.coverage.run] patch = ["subprocess"]`, with pytest-cov 7+ and coverage
+7.10.6+, following the [subprocess coverage guidance](https://pytest-cov.readthedocs.io/en/latest/subprocess-support.html).
+
+Section 2 regression tests live in `test_plan_contracts.py`, `test_review_contracts.py`,
+and `test_distribution_smoke.py`. They cover unsafe session paths, full diff previews,
+outside-target report retrieval, actual saved-plan application, selected-model failure,
+explicit fallback, dependency exclusions, and release-wheel identity checks.
+Five strict expected failures (`test_known_safety_gaps.py` and `test_git.py`) describe
+known behavior/recovery defects. They must fail until the corresponding section 3
+fixes land; an unexpected pass fails the suite so its marker is removed deliberately.
+
+The release workflow runs `pypi` → `verify-pypi` → `pyapp`. Published package bytes
+must match the saved wheel before installation. Both distribution paths exercise the
+common CLI/report contract and real embeddings/Chroma. Local wheel smoke uses a
+separate environment outside the checkout with inherited dependencies; it is not a
+substitute for isolated public-PyPI and built-executable checks in release CI.
 
 `test_cli_contracts.py` covers actual returned apply outcomes, empty/declined
 plans, saved-plan dirty warnings, dry-run paths/session IDs, configuration

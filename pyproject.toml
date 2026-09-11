@@ -1,5 +1,5 @@
 [project]
-name = "reducto"
+name = "reducto-code"
 version = "1.0.0"
 description = "Semantic code compression engine"
 requires-python = ">=3.14"
@@ -30,7 +30,8 @@ embeddings = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
+    "pytest-cov>=7.0.0",
+    "coverage[toml]>=7.10.6",
     "pytest-mock>=3.11.0",
     "ruff>=0.1.0",
     "black>=23.0.0",
@@ -39,6 +40,10 @@ dev = [
 
 [project.scripts]
 reducto = "reducto.cli:app"
+
+[project.urls]
+Repository = "https://github.com/mementomorri/reducto"
+Documentation = "https://github.com/mementomorri/reducto/blob/main/docs/README.md"
 
 [build-system]
 requires = ["hatchling"]
@@ -74,3 +79,6 @@ addopts = "--cov=reducto --cov-report=term-missing --cov-fail-under=60"
 markers = [
     "embeddings: requires sentence-transformers model download",
 ]
+
+[tool.coverage.run]
+patch = ["subprocess"]

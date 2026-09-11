@@ -27,6 +27,7 @@ from reducto.models import (
     RefactorPlan,
     RefactorResult,
 )
+from reducto.plan_review import validate_plan
 from reducto.progress import status
 from reducto.session import SessionStore
 from reducto.workspace import Workspace
@@ -69,18 +70,24 @@ class App:
         status("Finding similar functions and preparing duplicate proposals...")
         return await agent.find_duplicates(DeduplicateRequest(path=path, files=files))
 
-    async def idiomatize(self, path: str) -> RefactorPlan:
+    async def idiomatize(self, path: str, *, allow_fallback: bool = False) -> RefactorPlan:
         agent = IdiomatizerAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing idioms and preparing proposals...")
-        return await agent.idiomatize(IdiomatizeRequest(path=path, files=files))
+        return await agent.idiomatize(
+            IdiomatizeRequest(path=path, files=files, allow_fallback=allow_fallback)
+        )
 
-    async def pattern(self, pattern_name: str, path: str) -> RefactorPlan:
+    async def pattern(
+        self, pattern_name: str, path: str, *, allow_fallback: bool = False
+    ) -> RefactorPlan:
         agent = PatternAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing patterns and preparing suggestions...")
         return await agent.apply_pattern(
-            PatternRequest(pattern=pattern_name, path=path, files=files)
+            PatternRequest(
+                pattern=pattern_name, path=path, files=files, allow_fallback=allow_fallback
+            )
         )
 
     async def check(self, path: str) -> dict[str, Any]:
@@ -90,6 +97,16 @@ class App:
         return report.to_dict()
 
     def apply_plan(self, plan: RefactorPlan, run_tests: bool = True) -> RefactorResult:
+        errors = validate_plan(plan, self.workspace.root)
+        if not plan.complete or any(d.severity == "error" for d in plan.diagnostics) or errors:
+            return RefactorResult(
+                session_id=plan.session_id,
+                success=False,
+                changes=[],
+                tests_passed=False,
+                error="Plan is incomplete or failed preflight"
+                + (f": {errors[0].message}: {errors[0].file}" if errors else ""),
+            )
         # A whole-file rewrite (non-empty original) must not silently drop a def/class —
         # guards against LLM rewrites (or future bugs) deleting code. Advisory modules
         # (original="") are exempt.

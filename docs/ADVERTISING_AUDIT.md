@@ -10,6 +10,13 @@ the fictional terminal output with supported example commands. Outstanding tool
 work is tracked in [Enhancement opportunities](../ROADMAP.md#enhancement-opportunities).
 No refactoring behavior was changed by this copy update.
 
+**Section 2 follow-up (2026-09-11):** unified previews, persisted planning provenance,
+explicit capability failures, and bounded advisory preflight are implemented.
+The table below is the original audit, not the current status of those fixes.
+The PyPI name `reducto` belongs to an unrelated SDK; the maintainer selected
+`reducto-code` instead. Installation copy distinguishes the distribution from the
+CLI/import and flags the first publication as pending. See [TODO.md](../TODO.md).
+
 ## Summary
 
 The original page sold a behavior-preserving code compressor. Today the strongest

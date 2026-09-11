@@ -2,6 +2,11 @@
 
 Create `.github/workflows/reducto.yml` in your Python repository:
 
+For now CI installs this repository directly until the first `reducto-code`
+release is published. The command remains `reducto`; the public PyPI name
+`reducto` belongs to an unrelated SDK. After a verified release, replace the
+install step with `pip install "reducto-code[reports]==VERSION"`, using its exact version.
+
 ```yaml
 name: reducto
 on:
@@ -27,7 +32,7 @@ jobs:
         with:
           python-version: '3.14'
       - name: Install reducto
-        run: pip install "reducto[reports] @ git+https://github.com/mementomorri/reducto.git@main"
+        run: pip install "reducto-code[reports] @ git+https://github.com/mementomorri/reducto.git@main"
       - name: Analyze main or compare a pull request
         env:
           EVENT_NAME: ${{ github.event_name }}

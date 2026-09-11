@@ -51,9 +51,9 @@ class EmbeddingService:
             )
             logger.warning("Install with: pip install sentence-transformers")
             self._use_real_embeddings = False
-        except Exception as e:
+        except Exception:
             logger.warning(
-                f"Failed to load sentence-transformers: {e}. Semantic deduplication will not work correctly."
+                "Failed to load sentence-transformers. Semantic deduplication is unavailable."
             )
             self._use_real_embeddings = False
 
@@ -66,7 +66,8 @@ class EmbeddingService:
             self.collection = self.client.get_or_create_collection(
                 name="code_embeddings", metadata={"hnsw:space": "cosine"}
             )
-        except ImportError:
+        except Exception:
+            logger.warning("Chroma initialization failed; semantic deduplication is unavailable.")
             self._use_real_embeddings = False
 
         self._initialized = True
