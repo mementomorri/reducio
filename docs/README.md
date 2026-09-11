@@ -21,6 +21,38 @@ pip install reducto
 pip install "reducto[embeddings]"
 ```
 
+### Linux executable
+
+Tagged releases built by the Publish workflow also provide a Linux x64 executable
+with `reports` and `embeddings` enabled. Download the executable and matching
+`.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducto/releases).
+The release title is `reducto-<sha7>`; its existing `v*` tag remains the package's
+release tag. Replace `abcdef1` below with the seven-character commit identifier:
+
+```bash
+sha256sum --check reducto-abcdef1-linux-x86_64.sha256
+chmod +x reducto-abcdef1-linux-x86_64
+./reducto-abcdef1-linux-x86_64 --help
+./reducto-abcdef1-linux-x86_64 analyze . --report --format all
+```
+
+The executable is built on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl,
+macOS, Windows, and ARM are not supported by this download. Python 3.14 and
+dependencies install automatically on first launch, requiring internet access
+and writable user storage. Semantic embeddings download their model on first use.
+This is not an offline bundle. Git operations still require Git on `PATH`, and
+target-project tests require their own configured environment.
+
+Download a newer executable to upgrade; PyApp management commands are disabled.
+The `version` command continues to report the Python package version.
+
+Maintainers: the executable embeds the exact wheel uploaded by the PyPI job and
+is published only after executable, report, and real-embedding smoke checks pass.
+If the executable job fails after PyPI succeeds, use **Re-run failed jobs** on
+that workflow run. It reuses the saved wheel without republishing to PyPI. Release
+retries upload missing assets and skip identical assets; differing existing
+assets fail rather than being overwritten. Existing release notes are preserved.
+
 ### From source
 
 ```bash
@@ -59,7 +91,7 @@ docker run -v "$(pwd):/work" -w /work reducto analyze .
 
 ## Prerequisites
 
-- **Python 3.14+**
+- **Python 3.14+** (provisioned automatically by the Linux executable)
 - *(Optional)* **Ollama** for local LLM inference
 - *(Optional)* API keys for cloud models via LiteLLM
 

@@ -4,10 +4,18 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   pypi:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -16,4 +24,82 @@ jobs:
           python-version: '3.14'
       - run: pip install build
       - run: python -m build
+      - name: Save the wheel being published
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-wheel-${{ github.run_attempt }}
+          path: dist/*.whl
+          if-no-files-found: error
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  pyapp:
+    needs: pypi
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install packaging
+      # A failed-job rerun keeps the successful PyPI job's original artifact.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: published-wheel-*
+          path: wheels
+      - name: Identify the published package and commit
+        id: package
+        run: |
+          python scripts/pyapp_release.py metadata \
+            --wheel-directory wheels --commit "$(git rev-parse HEAD)" \
+            --output "$GITHUB_OUTPUT"
+      - name: Set up Rust stable
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Build PyApp executable
+        env:
+          PYAPP_PROJECT_PATH: ${{ steps.package.outputs.wheel }}
+          PYAPP_EXEC_SPEC: reducto.cli:app
+          PYAPP_PYTHON_VERSION: '3.14'
+          PYAPP_DISTRIBUTION_VARIANT_CPU: v1
+          PYAPP_PROJECT_FEATURES: reports,embeddings
+          PYAPP_SELF_COMMAND: none
+          PYAPP_VERSION: '0.29.0'
+          BINARY_NAME: ${{ steps.package.outputs.binary_name }}
+        run: |
+          curl --fail --silent --show-error --location \
+            "https://github.com/ofek/pyapp/releases/download/v${PYAPP_VERSION}/source.tar.gz" \
+            --output "$RUNNER_TEMP/pyapp-source.tar.gz"
+          mkdir -p "$RUNNER_TEMP/pyapp-source"
+          tar -xzf "$RUNNER_TEMP/pyapp-source.tar.gz" \
+            --directory "$RUNNER_TEMP/pyapp-source" --strip-components=1
+          cargo build --release --locked \
+            --manifest-path "$RUNNER_TEMP/pyapp-source/Cargo.toml" \
+            --target x86_64-unknown-linux-gnu
+          mkdir -p executable
+          install -m 755 \
+            "$RUNNER_TEMP/pyapp-source/target/x86_64-unknown-linux-gnu/release/pyapp" \
+            "executable/$BINARY_NAME"
+      - name: Smoke-test the executable and optional features
+        env:
+          BINARY_NAME: ${{ steps.package.outputs.binary_name }}
+          PACKAGE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          python scripts/smoke_pyapp.py \
+            "executable/$BINARY_NAME" "$PACKAGE_VERSION"
+      - name: Publish executable to GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ steps.package.outputs.commit }}
+        run: |
+          python scripts/pyapp_release.py publish \
+            --wheel-directory wheels --commit "$RELEASE_COMMIT" \
+            --tag "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --asset-directory executable --summary "$GITHUB_STEP_SUMMARY"
