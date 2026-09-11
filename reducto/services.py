@@ -27,6 +27,7 @@ from reducto.models import (
     RefactorPlan,
     RefactorResult,
 )
+from reducto.progress import status
 from reducto.session import SessionStore
 from reducto.workspace import Workspace
 
@@ -48,6 +49,7 @@ class App:
 
     async def _embeddings(self):
         if self._embedding is None:
+            status("Loading embeddings (first use may download a model)...")
             from reducto.embeddings import EmbeddingService
 
             self._embedding = EmbeddingService()
@@ -63,20 +65,28 @@ class App:
     async def deduplicate(self, path: str) -> RefactorPlan:
         emb = await self._embeddings()
         agent = DeduplicatorAgent(self.workspace, emb, self.llm, self.sessions)
-        return await agent.find_duplicates(DeduplicateRequest(path=path, files=self._files()))
+        files = self._files()
+        status("Finding similar functions and preparing duplicate proposals...")
+        return await agent.find_duplicates(DeduplicateRequest(path=path, files=files))
 
     async def idiomatize(self, path: str) -> RefactorPlan:
         agent = IdiomatizerAgent(self.workspace, self.llm, self.sessions)
-        return await agent.idiomatize(IdiomatizeRequest(path=path, files=self._files()))
+        files = self._files()
+        status("Analyzing idioms and preparing proposals...")
+        return await agent.idiomatize(IdiomatizeRequest(path=path, files=files))
 
     async def pattern(self, pattern_name: str, path: str) -> RefactorPlan:
         agent = PatternAgent(self.workspace, self.llm, self.sessions)
+        files = self._files()
+        status("Analyzing patterns and preparing suggestions...")
         return await agent.apply_pattern(
-            PatternRequest(pattern=pattern_name, path=path, files=self._files())
+            PatternRequest(pattern=pattern_name, path=path, files=files)
         )
 
     async def check(self, path: str) -> dict[str, Any]:
-        report = await self.quality.check_quality(self._files(), path)
+        files = self._files()
+        status("Checking naming, function length, and complexity...")
+        report = await self.quality.check_quality(files, path)
         return report.to_dict()
 
     def apply_plan(self, plan: RefactorPlan, run_tests: bool = True) -> RefactorResult:

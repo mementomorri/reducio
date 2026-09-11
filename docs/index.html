@@ -889,6 +889,7 @@
                 <nav>
                     <a href="#features">Features</a>
                     <a href="#how-it-works">How It Works</a>
+                    <a href="#ci">GitHub CI</a>
                     <a href="#installation">Installation</a>
                     <a href="dashboard/">Dashboard</a>
                     <a href="https://github.com/mementomorri/reducto">GitHub</a>
@@ -985,6 +986,30 @@
                         <h3>Review &amp; Validate</h3>
                         <p>Apply only after reviewing the proposal, preferably in a disposable clean checkout. Syntax checks and rollback attempts are safeguards, not guarantees; test discovery, recovery, and behavior preservation have known limits.</p>
                     </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="ci" class="features">
+            <div class="container">
+                <h2 class="section-title">Complexity Checks in GitHub CI</h2>
+                <p class="section-subtitle">See what changed, directly from your workflow run. No model or API key needed.</p>
+                <div class="features-grid">
+                    <div class="feature-card" data-animate>
+                        <h3>Review Pull Requests</h3>
+                        <p>Compare the PR head with its merge base. Measure whole functions in changed Python files and distinguish improvements, regressions, additions, and removals.</p>
+                    </div>
+                    <div class="feature-card" data-animate>
+                        <h3>Keep a Main-Branch Overview</h3>
+                        <p>Scan the current codebase after a push to main. Read the Markdown job summary and download an offline interactive HTML dashboard plus JSON measurements.</p>
+                    </div>
+                    <div class="feature-card" data-animate>
+                        <h3>Follow the Run</h3>
+                        <p>Progress messages show exploration, analysis, and report generation in job logs. Complexity findings are informational; incomplete analysis or report errors fail the command.</p>
+                    </div>
+                </div>
+                <div class="cta-buttons">
+                    <a href="https://github.com/mementomorri/reducto/blob/main/docs/GITHUB_CI.md" class="btn btn-primary">Set Up GitHub CI</a>
                 </div>
             </div>
         </section>

@@ -101,6 +101,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md).
 | [ONBOARDING.md](ONBOARDING.md) | Setup, layout, CI, extension points |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Modules and request flows |
 | [CI.md](CI.md) | Dashboards, revision comparison, GitHub summaries and artifacts |
+| [GITHUB_CI.md](GITHUB_CI.md) | Copy-paste GitHub Actions setup for your repository |
 | [METRICS.md](METRICS.md) | Versioned syntax-aware metrics and interpretation |
 | [SAFETY.md](SAFETY.md) | Apply/rollback safety model and guarantees |
 | [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md) | pytest and CI |

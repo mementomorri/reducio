@@ -17,6 +17,7 @@ from reducto.models import (
     FunctionComparison,
     FunctionMetrics,
 )
+from reducto.progress import status as report_status
 from reducto.repo import _should_exclude_dir, _should_exclude_file, _should_include
 
 
@@ -135,6 +136,7 @@ def _comparison(before: FunctionMetrics | None, after: FunctionMetrics | None, t
 def compare_revisions(
     path: str, base: str, head: str = "HEAD", cfg: AppConfig | None = None
 ) -> CompareResult:
+    report_status("Resolving Git revisions...")
     cfg = cfg or AppConfig()
     target = Path(path).resolve()
     root = Path(_git(target, "rev-parse", "--show-toplevel").decode().strip())
@@ -145,9 +147,13 @@ def compare_revisions(
         .strip()
         for ref in (base, head)
     )
+    report_status("Finding changed Python files...")
     files = _changed_files(root, base_sha, head_sha, scope, cfg)
+    report_status(f"Reading base snapshot ({len(files)} changed files)...")
     before = _snapshot(root, base_sha, [f["before"] for f in files if f["before"]], cfg, scope)
+    report_status(f"Reading head snapshot ({len(files)} changed files)...")
     after = _snapshot(root, head_sha, [f["after"] for f in files if f["after"]], cfg, scope)
+    report_status("Matching functions and comparing complexity...")
     result = CompareResult(
         scope=scope,
         base_revision=base_sha,

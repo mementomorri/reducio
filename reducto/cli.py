@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 
@@ -13,10 +14,21 @@ from reducto.compare import CompareError, compare_revisions
 from reducto.config import apply_env, load_config
 from reducto.git_safety import GitSafety
 from reducto.models import AnalysisDiagnostic, AppConfig, CompareResult
+from reducto.progress import progress
 from reducto.reporter import Reporter
-from reducto.services import App
 from reducto.session import SessionStore
 from reducto.visual_report import ReportError, ReportFormat, write_reports
+
+if TYPE_CHECKING:
+    from reducto.services import App
+
+
+def _new_app(root: str, cfg: AppConfig) -> App:
+    # Load optional model infrastructure only after the first progress message.
+    from reducto.services import App
+
+    return App(root, cfg)
+
 
 app = typer.Typer(
     name="reducto",
@@ -80,11 +92,13 @@ def analyze(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
     output_dir: Path = typer.Option(Path(".reducto"), "--output-dir", help="Report directory"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Scan for complexity hotspots."""
     cfg = _get_cfg(config, verbose, model, prefer_local, prefer_remote)
-    svc = App(_resolve_repo(path), cfg)
-    result = _run(svc.analyze(str(path)))
+    with progress("Preparing analysis...", quiet=quiet):
+        svc = _new_app(_resolve_repo(path), cfg)
+        result = _run(svc.analyze(str(path)))
     typer.echo(
         f"Files: {result.total_files}  Symbols: {result.total_symbols}  Hotspots: {len(result.hotspots)}"
     )
@@ -99,7 +113,8 @@ def analyze(
             th = cfg.complexity_thresholds.cyclomatic_complexity
             typer.echo(f"No hotspots (cyclomatic >= {th})")
     if report:
-        _write_analysis_reports(result, output_dir, format)
+        with progress("Generating analysis reports...", quiet=quiet):
+            _write_analysis_reports(result, output_dir, format)
     for diagnostic in result.diagnostics:
         typer.echo(
             f"Metrics unavailable: {diagnostic.file}:{diagnostic.line or 1}: {diagnostic.message}",
@@ -135,12 +150,14 @@ def compare(
     output_dir: Path = typer.Option(Path(".reducto"), "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Compare functions in changed Python files at two committed revisions. Informational only."""
     cfg = _get_cfg(config, verbose, "", True, False)
     root = _resolve_repo(path)
     try:
-        result = compare_revisions(root, base, head, cfg)
+        with progress("Preparing revision comparison...", quiet=quiet):
+            result = compare_revisions(root, base, head, cfg)
     except CompareError as error:
         empty = analyze_files([], cfg, str(path))
         result = CompareResult(
@@ -169,7 +186,8 @@ def compare(
                 f"{change.status} CC delta={change.cyclomatic_delta} cognitive delta={change.cognitive_delta}"
             )
     if report:
-        _write_analysis_reports(result, output_dir, format)
+        with progress("Generating comparison reports...", quiet=quiet):
+            _write_analysis_reports(result, output_dir, format)
     for diagnostic in result.diagnostics + result.before.diagnostics + result.after.diagnostics:
         typer.echo(f"Comparison incomplete: {diagnostic.file}: {diagnostic.message}", err=True)
     if not result.complete:
@@ -186,14 +204,16 @@ def deduplicate(
     verbose: bool = typer.Option(False, "--verbose", "-v"),
     model: str = typer.Option("", "--model"),
     prefer_remote: bool = typer.Option(False, "--prefer-remote"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
     cfg = _get_cfg(config, verbose, model, True, prefer_remote)
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(_resolve_repo(path), cfg)
-    plan = _run(svc.deduplicate(str(path)))
+    with progress("Preparing duplicate detection...", quiet=quiet):
+        svc = _new_app(_resolve_repo(path), cfg)
+        plan = _run(svc.deduplicate(str(path)))
     typer.echo(plan.description)
     if dry_run:
         p = Reporter(cfg).generate_dry_run(plan, "deduplicate", str(path))
@@ -201,7 +221,8 @@ def deduplicate(
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
-    result = svc.apply_plan(plan)
+    with progress("Applying changes and validating...", quiet=quiet):
+        result = svc.apply_plan(plan)
     typer.echo("Applied." if result.success else f"Failed: {result.error}")
     if report and result.success:
         Reporter(cfg).generate(result)
@@ -215,21 +236,24 @@ def idiomatize(
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
     model: str = typer.Option("", "--model"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Rewrite code to idiomatic Python (e.g. list comprehensions)."""
     cfg = _get_cfg(config, verbose, model, True, False)
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(_resolve_repo(path), cfg)
-    plan = _run(svc.idiomatize(str(path)))
+    with progress("Preparing idiom proposals...", quiet=quiet):
+        svc = _new_app(_resolve_repo(path), cfg)
+        plan = _run(svc.idiomatize(str(path)))
     typer.echo(plan.description)
     if dry_run:
         Reporter(cfg).generate_dry_run(plan, "idiomatize", str(path))
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
-    result = svc.apply_plan(plan)
+    with progress("Applying changes and validating...", quiet=quiet):
+        result = svc.apply_plan(plan)
     typer.echo("Applied." if result.success else f"Failed: {result.error}")
 
 
@@ -243,6 +267,7 @@ def pattern(
     dry_run: bool = typer.Option(False, "--dry-run"),
     yes: bool = typer.Option(False, "--yes"),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Apply or suggest a design pattern (factory|strategy|observer|singleton)."""
     if pattern_name and pattern_name.lower() not in _PATTERNS:
@@ -254,8 +279,9 @@ def pattern(
     cfg.pre_approve = yes
     if not dry_run:
         _check_git(str(path), cfg)
-    svc = App(_resolve_repo(path), cfg)
-    plan = _run(svc.pattern(pattern_name, str(path)))
+    with progress("Preparing pattern suggestions...", quiet=quiet):
+        svc = _new_app(_resolve_repo(path), cfg)
+        plan = _run(svc.pattern(pattern_name, str(path)))
     typer.echo(plan.description)
     if dry_run:
         Reporter(cfg).generate_dry_run(plan, "pattern", str(path))
@@ -263,7 +289,8 @@ def pattern(
     if not yes and plan.changes and not typer.confirm("Apply changes?", default=False):
         raise typer.Exit(0)
     if plan.changes:
-        svc.apply_plan(plan)
+        with progress("Applying changes and validating...", quiet=quiet):
+            svc.apply_plan(plan)
 
 
 @app.command()
@@ -272,11 +299,13 @@ def check(
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
     cfg = _get_cfg(config, verbose, "", True, False)
-    svc = App(_resolve_repo(path), cfg)
-    result = _run(svc.check(str(path)))
+    with progress("Preparing quality check...", quiet=quiet):
+        svc = _new_app(_resolve_repo(path), cfg)
+        result = _run(svc.check(str(path)))
     typer.echo(
         f"Issues: {result['total_issues']} "
         f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
@@ -290,7 +319,8 @@ def check(
             if i.get("suggestion"):
                 typer.echo(f"  {i['suggestion']}")
     if report:
-        p = Reporter(cfg).generate_check(result)
+        with progress("Writing quality report...", quiet=quiet):
+            p = Reporter(cfg).generate_check(result)
         typer.echo(f"Quality report: {p}")
     if any(issue["issue_type"] == "parse_error" for issue in result["issues"]):
         typer.echo("Quality check incomplete: some Python files could not be parsed.", err=True)
@@ -303,6 +333,7 @@ def apply(
     path: Path = typer.Argument(Path(".")),
     yes: bool = typer.Option(False, "--yes"),
     config: Path | None = typer.Option(None, "--config", "-c"),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Apply a previously saved plan by session ID."""
     cfg = _get_cfg(config, False, "", True, False)
@@ -313,10 +344,12 @@ def apply(
     if not plan:
         typer.echo(f"Session not found: {session_id}", err=True)
         raise typer.Exit(1)
-    svc = App(str(root), cfg)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
-    result = svc.apply_plan(plan)
+    with progress("Preparing application...", quiet=quiet):
+        svc = _new_app(str(root), cfg)
+    with progress("Applying changes and validating...", quiet=quiet):
+        result = svc.apply_plan(plan)
     typer.echo("Success" if result.success else result.error)
 
 

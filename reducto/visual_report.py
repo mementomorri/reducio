@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from reducto.models import AnalyzeResult, CompareResult, FunctionMetrics
+from reducto.progress import status
 
 Result = AnalyzeResult | CompareResult
 
@@ -483,6 +484,7 @@ def write_reports(
         else [format]
     )
     for selected in formats:
+        status(f"Generating {selected.value} report...")
         if selected == ReportFormat.MARKDOWN:
             suffix, content = "md", markdown_report(result)
         elif selected == ReportFormat.JSON:

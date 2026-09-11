@@ -14,6 +14,7 @@ from reducto.models import (
     FileInfo,
     Symbol,
 )
+from reducto.progress import status
 
 
 def analysis_configuration(cfg: AppConfig) -> dict:
@@ -24,6 +25,7 @@ def analysis_configuration(cfg: AppConfig) -> dict:
 
 
 def analyze_files(files: Iterable[FileInfo], cfg: AppConfig, scope: str = ".") -> AnalyzeResult:
+    status("Analyzing Python functions and measuring complexity...")
     result = AnalyzeResult(
         total_files=0,
         total_symbols=0,

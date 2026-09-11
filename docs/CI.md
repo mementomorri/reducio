@@ -1,5 +1,8 @@
 # Reports and CI
 
+For a copy-paste workflow for another repository, start with the short
+[GitHub CI setup guide](GITHUB_CI.md).
+
 ## Local usage
 
 ```bash
@@ -40,6 +43,13 @@ to make that choice explicit. See [METRICS.md](METRICS.md) for counting rules.
 `--output-dir` overrides that directory for `analyze` and `compare`. Files have
 timestamped names; HTML includes its own JavaScript and needs no server/CDN.
 Without the `reports` extra, Markdown and JSON still work.
+
+Long-running commands print plain-text stages to stderr immediately before work,
+including preparation, exploration, analysis, and report generation. A heartbeat
+every five seconds keeps slow phases visible without implying a percentage or
+completion estimate. `--quiet` / `-q` hides progress, not results or errors;
+stdout remains available for scripts. Library calls are silent unless progress
+is explicitly enabled. Progress stops before interactive approval prompts.
 
 ## This repository's GitHub Actions workflow
 

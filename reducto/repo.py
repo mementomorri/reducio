@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from reducto.models import FileInfo, Language
+from reducto.progress import status
 
 # Dot-directories (.git, .venv, .reducto, .pytest_cache, ...) are excluded by the
 # leading-dot rule in _should_exclude_dir; only non-dot dirs need listing here.
@@ -78,6 +79,7 @@ def walk(
     include_patterns: list[str] | None = None,
 ) -> list[FileInfo]:
     root_path = Path(root).resolve()
+    status(f"Exploring {root_path} for matching source files...")
     exclude_patterns = exclude_patterns or []
     include_patterns = include_patterns or []
     paths: list[Path] = []
@@ -99,6 +101,7 @@ def walk(
                 continue
             paths.append(full)
 
+    status(f"Reading {len(paths)} source files...")
     files: list[FileInfo] = []
     with ThreadPoolExecutor(max_workers=32) as pool:
         futures = {pool.submit(_read_one, root_path, p): p for p in paths}
