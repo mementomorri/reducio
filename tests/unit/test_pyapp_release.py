@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -26,11 +27,12 @@ def make_wheel(directory, version="1.2.3", name="reducio"):
 @pytest.mark.parametrize(
     "version,prerelease", [("1.2.3", "false"), ("1.3rc1", "true"), ("1.3.dev1", "true")]
 )
-def test_metadata_names_commit_and_preserves_package_version(tmp_path, version, prerelease):
+def test_metadata_names_tag_and_preserves_package_version(tmp_path, version, prerelease):
     wheel = make_wheel(tmp_path, version)
-    package = pyapp_release.package_metadata(tmp_path, COMMIT)
-    assert package["release_name"] == "reducio-abcdef1"
-    assert package["binary_name"] == "reducio-abcdef1-linux-x86_64"
+    package = pyapp_release.release_metadata(tmp_path, COMMIT, "v0.1.0")
+    assert package["release_name"] == "reducio-v0.1.0"
+    assert package["binary_name"] == "reducio-v0.1.0"
+    assert package["commit"] == COMMIT
     assert package["version"] == version
     assert package["prerelease"] == prerelease
     assert package["wheel"] == str(wheel.resolve())
@@ -40,6 +42,46 @@ def test_rerun_uses_latest_publishing_attempt(tmp_path):
     make_wheel(tmp_path / "published-wheel-2", "1.0.0")
     wheel = make_wheel(tmp_path / "published-wheel-10", "2.0.0")
     assert pyapp_release.package_metadata(tmp_path, COMMIT)["wheel"] == str(wheel)
+
+
+def test_tags_on_same_commit_have_distinct_names(tmp_path):
+    make_wheel(tmp_path)
+    first = pyapp_release.release_metadata(tmp_path, COMMIT, "v0.1.0")
+    second = pyapp_release.release_metadata(tmp_path, COMMIT, "v0.2.0-rc.1")
+    assert first["binary_name"] == "reducio-v0.1.0"
+    assert second["binary_name"] == "reducio-v0.2.0-rc.1"
+
+
+@pytest.mark.parametrize("tag", ["", "0.1.0", "v../release", "v0.1.0\n", "v*"])
+def test_rejects_tags_unsafe_for_asset_paths(tmp_path, tag):
+    with pytest.raises(ValueError, match="filename-safe"):
+        pyapp_release.release_metadata(tmp_path, COMMIT, tag)
+
+
+def test_metadata_command_emits_tag_names_for_workflow(tmp_path):
+    make_wheel(tmp_path)
+    output = tmp_path / "outputs"
+    subprocess.run(
+        [
+            sys.executable,
+            str(Path(pyapp_release.__file__).resolve()),
+            "metadata",
+            "--wheel-directory",
+            str(tmp_path),
+            "--commit",
+            COMMIT,
+            "--tag",
+            "v0.1.0",
+            "--output",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert values["binary_name"] == values["release_name"] == "reducio-v0.1.0"
+    assert values["version"] == "1.2.3"
 
 
 def test_rejects_ambiguous_or_wrong_wheels(tmp_path):
@@ -110,7 +152,7 @@ class FakeGitHub:
 @pytest.fixture
 def package_and_binary(tmp_path):
     make_wheel(tmp_path)
-    package = pyapp_release.package_metadata(tmp_path, COMMIT)
+    package = pyapp_release.release_metadata(tmp_path, COMMIT, "v1.2.3")
     binary = tmp_path / package["binary_name"]
     binary.write_bytes(b"a tested executable")
     binary.chmod(0o755)
@@ -126,6 +168,9 @@ def test_new_release_publishes_only_after_upload_and_retry_skips_assets(
     url = pyapp_release.publish(package, "v1.2.3", "owner/repo", binary.parent)
     assert url == github.release["html_url"]
     assert github.release["draft"] is False
+    for call in github.calls:
+        if call[:2] in (("release", "create"), ("release", "edit")):
+            assert call[call.index("--title") + 1] == "reducio-v1.2.3"
     assert COMMIT in github.release["body"]
     checksum_name = binary.name + ".sha256"
     assert (
@@ -247,3 +292,6 @@ def test_publish_workflow_gates_release_and_limits_credentials():
     )
     assert smoke_index < release_index
     assert all("GH_TOKEN" not in step.get("env", {}) for step in steps[:release_index])
+    metadata_step = next(step for step in steps if step.get("id") == "package")
+    assert metadata_step["env"]["RELEASE_TAG"] == "${{ github.ref_name }}"
+    assert '--tag "$RELEASE_TAG"' in metadata_step["run"]

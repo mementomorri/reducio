@@ -36,14 +36,24 @@ def package_metadata(wheel_directory: Path, commit: str) -> dict[str, str]:
     if canonicalize_name(metadata["Name"]) != "reducio":
         raise ValueError("The published wheel must contain reducio")
     version = Version(metadata["Version"])
-    name = f"reducio-{commit[:7]}"
     return {
         "wheel": str(wheel),
         "commit": commit,
         "version": str(version),
-        "release_name": name,
-        "binary_name": f"{name}-linux-x86_64",
         "prerelease": str(version.is_prerelease or version.is_devrelease).lower(),
+    }
+
+
+def release_metadata(wheel_directory: Path, commit: str, tag: str) -> dict[str, str]:
+    # The tag becomes a filename and a download pattern; exclude path separators,
+    # glob characters and whitespace rather than silently changing the tag.
+    if not re.fullmatch(r"v[A-Za-z0-9][A-Za-z0-9._+-]*", tag):
+        raise ValueError("Expected a filename-safe v* publishing tag")
+    return {
+        **package_metadata(wheel_directory, commit),
+        "tag": tag,
+        "release_name": f"reducio-{tag}",
+        "binary_name": f"reducio-{tag}",
     }
 
 
@@ -92,8 +102,8 @@ commands are disabled. `version` reports the Python package version.
 
 
 def publish(package: dict[str, str], tag: str, repo: str, asset_directory: Path) -> str:
-    if not tag.startswith("v"):
-        raise ValueError("Expected the existing v* publishing tag")
+    if package["tag"] != tag:
+        raise ValueError("Release metadata must match the publishing tag")
     binary = asset_directory / package["binary_name"]
     if not binary.is_file() or binary.stat().st_size == 0 or not binary.stat().st_mode & 0o111:
         raise ValueError(f"Missing or non-executable release binary: {binary}")
@@ -173,13 +183,13 @@ def main() -> None:
     for command in (metadata_parser, publish_parser):
         command.add_argument("--wheel-directory", required=True, type=Path)
         command.add_argument("--commit", required=True)
+        command.add_argument("--tag", required=True)
     metadata_parser.add_argument("--output", required=True, type=Path)
-    publish_parser.add_argument("--tag", required=True)
     publish_parser.add_argument("--repo", required=True)
     publish_parser.add_argument("--asset-directory", required=True, type=Path)
     publish_parser.add_argument("--summary", required=True, type=Path)
     args = parser.parse_args()
-    package = package_metadata(args.wheel_directory, args.commit)
+    package = release_metadata(args.wheel_directory, args.commit, args.tag)
     if args.command == "metadata":
         with args.output.open("a") as output:
             for key, value in package.items():

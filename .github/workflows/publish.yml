@@ -74,10 +74,12 @@ jobs:
           path: wheels
       - name: Identify the published package and commit
         id: package
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           python scripts/pyapp_release.py metadata \
             --wheel-directory wheels --commit "$(git rev-parse HEAD)" \
-            --output "$GITHUB_OUTPUT"
+            --tag "$RELEASE_TAG" --output "$GITHUB_OUTPUT"
       - name: Set up Rust stable
         run: |
           rustup toolchain install stable --profile minimal

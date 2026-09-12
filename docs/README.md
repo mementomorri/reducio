@@ -50,14 +50,14 @@ There are no legacy command/import aliases. The repository and Pages links use
 After successful PyPI verification, tagged releases built by Publish provide a Linux x64 executable
 with `reports` and `embeddings` enabled. Download the executable and matching
 `.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducio/releases).
-The release title is `reducio-<sha7>`; its existing `v*` tag remains the package's
-release tag. Replace `abcdef1` below with the seven-character commit identifier:
+The executable and release title use the pushed tag: `v0.1.0` produces
+`reducio-v0.1.0`. Replace `v0.1.0` below with your chosen release tag:
 
 ```bash
-sha256sum --check reducio-abcdef1-linux-x86_64.sha256
-chmod +x reducio-abcdef1-linux-x86_64
-./reducio-abcdef1-linux-x86_64 --help
-./reducio-abcdef1-linux-x86_64 analyze . --report --format all
+sha256sum --check reducio-v0.1.0.sha256
+chmod +x reducio-v0.1.0
+./reducio-v0.1.0 --help
+./reducio-v0.1.0 analyze . --report --format all
 ```
 
 The executable is built on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl,
