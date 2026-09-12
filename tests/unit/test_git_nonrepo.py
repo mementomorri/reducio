@@ -1,12 +1,11 @@
-"""Git safety on non-repositories."""
+"""Git discovery is read-only, including non-repository targets."""
 
-import pytest
-
-from reducio.git_safety import GitError, GitSafety
+from reducio.git_safety import GitSafety
 
 
-def test_checkpoint_requires_repo(tmp_path):
+def test_nonrepo_is_clean(tmp_path):
     git = GitSafety(str(tmp_path))
     assert not git.is_repo()
-    with pytest.raises(GitError):
-        git.create_checkpoint("x")
+    assert git.is_clean()
+    for retired in ("create_checkpoint", "rollback", "commit"):
+        assert not hasattr(git, retired)

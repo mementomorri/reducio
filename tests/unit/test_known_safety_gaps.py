@@ -1,4 +1,4 @@
-"""Desired behavior for section 3 blockers; strict xfails expose future fixes."""
+"""Regression cases for the formerly expected section 3 safety failures."""
 
 import pytest
 
@@ -9,9 +9,6 @@ from reducio.session import SessionStore
 from reducio.workspace import Workspace
 
 
-@pytest.mark.xfail(
-    strict=True, reason="TODO 19–20: rewrite behavior preservation remains unresolved"
-)
 @pytest.mark.parametrize(
     "source",
     [
@@ -33,7 +30,6 @@ async def test_rewrite_preserves_output(tmp_path, source):
     assert before["f"]() == after["f"]()
 
 
-@pytest.mark.xfail(strict=True, reason="TODO 23: runner exception escapes without restoring files")
 def test_runner_exception_restores_original(tmp_path, monkeypatch):
     source = tmp_path / "a.py"
     source.write_text("x = 1\n")
@@ -51,7 +47,7 @@ def test_runner_exception_restores_original(tmp_path, monkeypatch):
         ],
     )
     try:
-        result = app.apply_plan(plan)
+        result = app.apply_plan(plan, run_tests=True)
     except OSError:
         result = None
     assert source.read_text() == "x = 1\n"

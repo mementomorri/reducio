@@ -1,5 +1,18 @@
 # Implementation assessment
 
+## Section 3 update — 2026-09-12
+
+Items 19–25 are implemented locally: conservative AST/token-aware idioms,
+durable scoped file snapshots (no Git writes), exception-safe verified recovery,
+opt-in explicit target tests, and whole-affected-file apply metrics/reports.
+The maintainer also confirmed successful PyPI configuration and publication.
+See [SAFETY.md](SAFETY.md) for the supported subset, configuration migration and
+remaining limits; [TODO.md](../TODO.md) tracks follow-up work.
+
+The audit and verification snapshots below are **historical**. In particular,
+their regex/checkpoint/default-test and LOC-only report findings are superseded
+by this implementation, not claims about the current code.
+
 Originally reviewed **2026-09-10**, against `main` at **`1e79b7b`** (`feat(cli): verbose
 listings and check reports`). Package version: **1.0.0**, Python **3.14+**.
 Canonical repository, confirmed by the maintainer: **`mementomorri/reducio`**.

@@ -93,14 +93,70 @@ class Reporter:
 
     def generate(self, result: RefactorResult) -> Path:
         out = self._path(f"reducio-report-{validate_session_id(result.session_id)}.md")
-        loc_before = result.metrics_before.lines_of_code
-        loc_after = result.metrics_after.lines_of_code
+        loc_before = result.metrics_before.lines_of_code if result.metrics_before else "unavailable"
+        loc_after = result.metrics_after.lines_of_code if result.metrics_after else "unavailable"
         content = (
             f"# reducio Report\n\n"
             f"Session: {result.session_id}\n\n"
             f"LOC before: {loc_before}\nLOC after: {loc_after}\n"
-            f"Reduced: {loc_before - loc_after}\n\n"
-            f"Success: {result.success}\nTests passed: {result.tests_passed}\n"
+            f"\nSuccess: {result.success}\nTests: {result.test_status}\n"
+            f"Recovery: {result.recovery_status}\n\n"
+            f"Error: {_md_cell(result.error or 'none')}\n\n"
+            f"Backup: {_md_cell(result.backup_location or 'none')}\n\n"
+        )
+        content += "\n".join(_md_cell(e) for e in result.recovery_errors) + "\n\n"
+        content += "Metrics v2; whole affected Python files, not snippets.\n\n"
+        content += "| State | LOC | Cyclomatic | Cognitive |\n|---|---:|---:|---:|\n"
+        from collections import defaultdict
+
+        from reducio.compare import _comparison
+        from reducio.services import _totals
+
+        for label, measurement in (
+            ("Before", result.measurements_before),
+            ("Attempted", result.measurements_attempted),
+            ("Retained", result.measurements_after),
+        ):
+            totals = _totals(measurement)
+            values = (
+                f"{totals.lines_of_code} | {totals.cyclomatic_complexity} | {totals.cognitive_complexity}"
+                if totals
+                else "unavailable | unavailable | unavailable"
+            )
+            content += f"| {label} | {values} |\n"
+        for label, measurement in (
+            ("Retained", result.measurements_after),
+            ("Attempted", result.measurements_attempted),
+        ):
+            before = result.measurements_before
+            if not before or not before.complete or not measurement or not measurement.complete:
+                continue
+            content += f"\n## {label} function changes\n\n"
+            content += "| Function | Status | Δ cyclomatic | Δ cognitive |\n|---|---|---:|---:|\n"
+            indexes = []
+            for snapshot in (before, measurement):
+                index = defaultdict(list)
+                for function in snapshot.functions:
+                    index[(function.file, function.qualified_name, function.kind)].append(function)
+                indexes.append(index)
+            for key in sorted(indexes[0].keys() | indexes[1].keys()):
+                left, right = indexes[0][key], indexes[1][key]
+                if len(left) > 1 or len(right) > 1:
+                    content += f"| {_md_cell(':'.join(key))} | ambiguous | — | — |\n"
+                    continue
+                comparison = _comparison(
+                    left[0] if left else None,
+                    right[0] if right else None,
+                    self.cfg.complexity_thresholds.cyclomatic_complexity,
+                )
+                content += (
+                    f"| {_md_cell(':'.join(key))} | {comparison.status} | "
+                    f"{comparison.cyclomatic_delta if comparison.cyclomatic_delta is not None else '—'} | "
+                    f"{comparison.cognitive_delta if comparison.cognitive_delta is not None else '—'} |\n"
+                )
+        write_text(
+            self._path(f"reducio-report-{validate_session_id(result.session_id)}.json"),
+            result.model_dump_json(indent=2),
         )
         write_text(out, content)
         return out

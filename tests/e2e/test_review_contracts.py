@@ -22,7 +22,7 @@ def run(*args, cwd):
 def test_report_generation_and_retrieval_outside_target(tmp_path, command, override):
     target = tmp_path / "target"
     target.mkdir()
-    source = "def f(x):\n    return x == None\n"
+    source = "def f():\n    x = None\n    return x == None\n"
     (target / "a.py").write_text(source)
     args = [command, target]
     if command == "pattern":
@@ -92,3 +92,51 @@ def test_incomplete_session_cannot_replay(tmp_path):
     result = run("apply", "failed", "--yes", "--quiet", cwd=tmp_path)
     assert result.returncode == 1 and "incomplete" in result.stderr
     assert not (tmp_path / "a.py").exists()
+
+
+@pytest.mark.parametrize("execute,exit_code", [(False, 0), (True, 0), (True, 1)])
+def test_real_opt_in_after_only_tests_and_report(tmp_path, execute, exit_code):
+    import yaml
+
+    from reducio.models import FileChange, RefactorPlan
+    from reducio.session import SessionStore
+
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "a.py").write_text("x = 1\n")
+    plan = RefactorPlan(
+        session_id="optin",
+        description="update",
+        changes=[
+            FileChange(path="a.py", original="x = 1\n", modified="x = 2\n", description="update")
+        ],
+    )
+    SessionStore(str(target / ".reducio/sessions")).save_plan(plan)
+    code = (
+        "from pathlib import Path; import sys; "
+        "assert Path('a.py').read_text() == 'x = 2\\n'; "
+        "Path('test-marker').write_text('ran'); " + f"sys.exit({exit_code})"
+    )
+    cfg = tmp_path / "runner.yaml"
+    cfg.write_text(yaml.safe_dump({"test_command": [sys.executable, "-c", code]}))
+    result = run(
+        "apply",
+        "optin",
+        target,
+        "--config",
+        cfg,
+        "--yes",
+        "--report",
+        "--output-dir",
+        "reports",
+        "--quiet",
+        *(["--run-tests"] if execute else []),
+        cwd=tmp_path,
+    )
+    failed = execute and exit_code != 0
+    assert result.returncode == (1 if failed else 0), result.stderr
+    assert (target / "test-marker").exists() is execute
+    assert (target / "a.py").read_text() == ("x = 1\n" if failed else "x = 2\n")
+    report = json.loads((tmp_path / "reports/reducio-report-optin.json").read_text())
+    assert report["test_status"] == ("not_run" if not execute else "failed" if failed else "passed")
+    assert report["recovery_status"] == ("restored" if failed else "not_needed")

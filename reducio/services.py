@@ -96,7 +96,7 @@ class App:
         report = await self.quality.check_quality(files, path)
         return report.to_dict()
 
-    def apply_plan(self, plan: RefactorPlan, run_tests: bool = True) -> RefactorResult:
+    def apply_plan(self, plan: RefactorPlan, run_tests: bool = False) -> RefactorResult:
         errors = validate_plan(plan, self.workspace.root)
         if not plan.complete or any(d.severity == "error" for d in plan.diagnostics) or errors:
             return RefactorResult(
@@ -121,28 +121,86 @@ class App:
                         tests_passed=False,
                         error=f"refusing change to {c.path}: would drop {', '.join(sorted(lost))}",
                     )
-        pairs = [(c.path, _change_to_diff(c)) for c in plan.changes]
-        result = self.workspace.apply_changes_safe(pairs, run_tests=run_tests)
-        if not result.get("success"):
+        from reducio.analysis import analyze_files
+        from reducio.recovery import safe_target
+
+        paths = sorted({change.path for change in plan.changes})
+        before = attempted = None
+
+        def measure():
+            files = []
+            for relative in paths:
+                path = safe_target(self.workspace.root, relative)
+                if path.exists():
+                    files.append(FileInfo(path=relative, content=path.read_bytes().decode("utf-8")))
+            return analyze_files(files, self.cfg, scope="affected files")
+
+        def validate_after():
+            nonlocal attempted
+            attempted = measure()
+            if not attempted.complete:
+                raise ValueError("Post-apply measurements are incomplete")
+
+        try:
+            before = measure()
+            if not before.complete:
+                raise ValueError("Pre-apply measurements are incomplete")
+        except Exception:
             return RefactorResult(
                 session_id=plan.session_id,
                 success=False,
-                changes=plan.changes[: result.get("applied", 0)],
+                changes=[],
                 tests_passed=False,
-                error=result.get("error", "apply failed"),
+                error="Cannot measure affected files safely",
+                measurements_before=before,
             )
-        if self.cfg.commit_changes:
-            self.workspace.commit_changes(f"reducio: {plan.description[:72]}", plan.changes)
-        before = sum(len(c.original.splitlines()) for c in plan.changes if c.original)
-        after = sum(len(c.modified.splitlines()) for c in plan.changes if c.modified)
+
+        pairs = [(c.path, _change_to_diff(c)) for c in plan.changes]
+        result = self.workspace.apply_changes_safe(
+            pairs, run_tests=run_tests, validate_after=validate_after
+        )
+        if result["success"]:
+            after = attempted if attempted is not None else before
+        else:
+            try:
+                after = measure()
+            except Exception:
+                after = None
         return RefactorResult(
             session_id=plan.session_id,
-            success=True,
-            changes=plan.changes,
-            tests_passed=result.get("tests_passed", True),
-            metrics_before=ComplexityMetrics(lines_of_code=before),
-            metrics_after=ComplexityMetrics(lines_of_code=after),
+            success=result["success"],
+            changes=plan.changes if result["success"] else [],
+            tests_passed=result["tests_passed"],
+            error=result.get("error"),
+            metrics_before=_totals(before),
+            metrics_after=_totals(after),
+            measurements_before=before,
+            measurements_after=after,
+            measurements_attempted=attempted,
+            **{
+                key: result[key]
+                for key in (
+                    "test_status",
+                    "test_output",
+                    "test_command",
+                    "test_count",
+                    "recovery_status",
+                    "recovery_errors",
+                    "backup_location",
+                )
+                if key in result
+            },
         )
+
+
+def _totals(measurement: AnalyzeResult | None) -> ComplexityMetrics | None:
+    if measurement is None or not measurement.complete:
+        return None
+    return ComplexityMetrics(
+        lines_of_code=sum(measurement.file_lines.values()),
+        cyclomatic_complexity=sum(f.cyclomatic_complexity for f in measurement.functions),
+        cognitive_complexity=sum(f.cognitive_complexity for f in measurement.functions),
+    )
 
 
 def _def_names(src: str) -> set[str]:

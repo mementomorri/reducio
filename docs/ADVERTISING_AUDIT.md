@@ -1,5 +1,10 @@
 # Landing-page claims vs implementation
 
+**Section 3 follow-up (2026-09-12):** the original regex and Git recovery defects
+below are superseded by conservative AST rules, scoped file snapshots, verified
+recovery and opt-in test statuses. See [SAFETY.md](SAFETY.md). This audit remains
+historical; broader model/semantic guarantees are still enhancement opportunities.
+
 Reviewed against `85c2716` plus the dashboard style/link changes. Scope:
 `docs/index.html` and the implementation, not a verification of published PyPI
 packages or live provider integrations. This document retains the original audit.

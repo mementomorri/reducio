@@ -1,4 +1,4 @@
-"""E2E apply plan with git checkpoint."""
+"""E2E application without Git mutation."""
 
 import subprocess
 import sys

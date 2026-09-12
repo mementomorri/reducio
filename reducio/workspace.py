@@ -8,8 +8,8 @@ from pathlib import Path
 
 from reducio import diff as diff_mod
 from reducio import parse, repo
-from reducio.git_safety import GitError, GitSafety
-from reducio.models import AppConfig, ComplexityMetrics, FileChange, FileInfo, Symbol
+from reducio.git_safety import GitSafety
+from reducio.models import AppConfig, ComplexityMetrics, FileInfo, Symbol
 from reducio.runner import ProjectRunner
 
 
@@ -22,7 +22,7 @@ class Workspace:
         self.root = Path(root_dir).resolve()
         self.cfg = cfg or AppConfig()
         self._git = GitSafety(str(self.root))
-        self._runner = ProjectRunner(str(self.root))
+        self._runner = ProjectRunner(str(self.root), self.cfg)
 
     def _resolve_path(self, path: str) -> Path:
         full = (self.root / path).resolve()
@@ -62,36 +62,10 @@ class Workspace:
         return parse.get_complexity(content)
 
     def apply_diff(self, path: str, diff_text: str) -> dict:
-        full = self._resolve_path(path)
-        if diff_text.lstrip().startswith("--- /dev/null"):
-            # A create diff (empty original) must make a NEW file. Merging it into an
-            # existing one would prepend the new content in front of the old file.
-            if full.exists():
-                raise diff_mod.DiffError(f"refusing to create over existing file: {path}")
-            new_content = diff_mod.apply_unified_diff("", diff_text)
-        else:
-            original = full.read_text(encoding="utf-8") if full.exists() else ""
-            new_content = diff_mod.apply_unified_diff(original, diff_text)
-        full.parent.mkdir(parents=True, exist_ok=True)
-        full.write_text(new_content, encoding="utf-8")
-        rel = str(full.relative_to(self.root))
-        return {"success": True, "path": rel}
-
-    def _safe_rollback(self, checkpoint: str | None, snapshot: dict[str, str | None]) -> None:
-        if checkpoint:
-            try:
-                self._git.rollback()
-            except GitError:
-                pass
-            return
-        # No git checkpoint (non-git target): best-effort restore of pre-apply contents,
-        # so the all-or-nothing guarantee holds even without git.
-        for path, content in snapshot.items():
-            full = self._resolve_path(path)
-            if content is None:
-                full.unlink(missing_ok=True)
-            else:
-                full.write_text(content, encoding="utf-8")
+        result = self.apply_changes_safe([(path, diff_text)])
+        if not result["success"]:
+            raise diff_mod.DiffError(result["error"])
+        return {**result, "path": path}
 
     def _invalid_python(self, changes: list[tuple[str, str]]) -> str | None:
         """Return the first changed .py file that no longer parses, else None."""
@@ -110,72 +84,85 @@ class Workspace:
         return None
 
     def apply_changes_safe(
-        self,
-        changes: list[tuple[str, str]],
-        run_tests: bool = True,
+        self, changes: list[tuple[str, str]], run_tests: bool = False, validate_after=None
     ) -> dict:
-        """Apply multiple diffs atomically; roll the whole batch back on any failure."""
-        if not changes:
-            return {"success": True, "applied": 0}
-        checkpoint = None
-        snapshot: dict[str, str | None] = {}
-        if self._git.is_repo():
-            try:
-                checkpoint = self._git.create_checkpoint("reducio checkpoint before plan")
-            except GitError as e:
-                return {"success": False, "error": str(e), "applied": 0}
-        else:
-            for path, _ in changes:
-                if path in snapshot:
-                    continue
-                full = self._resolve_path(path)
-                snapshot[path] = full.read_text(encoding="utf-8") if full.exists() else None
-        reverted = bool(checkpoint) or bool(snapshot)
-        for path, diff_text in changes:
-            try:
-                self.apply_diff(path, diff_text)
-            except Exception as e:
-                self._safe_rollback(checkpoint, snapshot)
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "path": path,
-                    "rolled_back": reverted,
-                    "applied": 0,
-                }
-        # Post-apply sanity: never leave (or commit) syntactically broken Python.
-        broken = self._invalid_python(changes)
-        if broken:
-            self._safe_rollback(checkpoint, snapshot)
-            return {
-                "success": False,
-                "error": f"apply produced invalid Python: {broken}",
-                "rolled_back": reverted,
-                "applied": 0,
-            }
-        if run_tests:
-            result = self._runner.run_tests()
-            if not result.success:
-                self._safe_rollback(checkpoint, snapshot)
-                return {
-                    "success": False,
-                    "tests_passed": False,
-                    "rolled_back": reverted,
-                    "test_output": result.output,
-                    "error": "Tests failed after plan, rolled back",
-                    "applied": 0,
-                }
-        return {
-            "success": True,
-            "tests_passed": True,
-            "rolled_back": False,
-            "applied": len(changes),
-            "checkpoint": checkpoint,
-        }
+        """Apply scoped changes with verified recovery; never mutate Git HEAD/index."""
+        from reducio.recovery import FileSnapshot, safe_target
 
-    def commit_changes(self, message: str, changes: list[FileChange]) -> None:
-        if self._git.is_repo():
-            self._git.commit(message, changes)
+        outcome = {
+            "success": False,
+            "tests_passed": False,
+            "test_status": "not_run",
+            "recovery_status": "not_needed",
+            "recovery_errors": [],
+            "applied": 0,
+        }
+        if not changes:
+            return {**outcome, "success": True}
+        snapshot = None
+        try:
+            # Simulate every hunk before writing anything, including repeated paths.
+            proposed: dict[str, str] = {}
+            originals = {}
+            for relative, diff_text in changes:
+                path = safe_target(self.root, relative)
+                original = proposed.get(relative)
+                if original is None:
+                    originals[relative] = path.read_bytes() if path.exists() else None
+                    original = (originals[relative] or b"").decode("utf-8")
+                if diff_text.lstrip().startswith("--- /dev/null") and (
+                    path.exists() or relative in proposed
+                ):
+                    raise ValueError(f"refusing to create over existing file: {relative}")
+                proposed[relative] = diff_mod.apply_unified_diff(original, diff_text)
+            snapshot = FileSnapshot(self.root, list(proposed))
+            outcome["backup_location"] = str(snapshot.directory)
+            for relative, original_bytes in originals.items():
+                expected = (
+                    hashlib.sha256(original_bytes).hexdigest()
+                    if original_bytes is not None
+                    else None
+                )
+                if snapshot.records[relative]["before"] != expected:
+                    raise ValueError(f"Target changed concurrently: {relative}")
+            for relative, content in proposed.items():
+                snapshot.write(relative, content.encode("utf-8"))
+            if broken := self._invalid_python(changes):
+                raise ValueError(f"apply produced invalid Python: {broken}")
+            if validate_after is not None:
+                validate_after()
+            if run_tests:
+                outcome["test_status"] = "error"
+                result = self._runner.run_tests()
+                outcome.update(
+                    test_status=result.status,
+                    test_output=result.output,
+                    test_command=result.command,
+                    test_count=result.count,
+                )
+                if not result.success:
+                    raise ValueError("Requested tests failed or could not run")
+            if validate_after is not None:
+                validate_after()
+            snapshot.complete()
+            outcome.update(
+                success=True, applied=len(proposed), tests_passed=outcome["test_status"] == "passed"
+            )
+        except (Exception, KeyboardInterrupt) as error:
+            outcome["error"] = (
+                str(error)
+                if isinstance(error, ValueError)
+                else "Application interrupted or validation failed"
+            )
+            if snapshot is not None:
+                errors = snapshot.restore()
+                outcome.update(
+                    recovery_errors=errors,
+                    recovery_status="failed" if errors else "restored",
+                    rolled_back=not errors,
+                )
+        outcome["tests_passed"] = outcome["test_status"] == "passed"
+        return outcome
 
     def run_tests(self) -> dict:
         r = self._runner.run_tests()
@@ -184,21 +171,9 @@ class Workspace:
             "output": r.output,
             "command": r.command,
             "exit_code": r.exit_code,
+            "status": r.status,
+            "count": r.count,
         }
-
-    def git_checkpoint(self, message: str) -> dict:
-        try:
-            h = self._git.create_checkpoint(message)
-            return {"success": True, "commit_hash": h}
-        except GitError as e:
-            return {"success": False, "error": str(e)}
-
-    def git_rollback(self) -> dict:
-        try:
-            self._git.rollback()
-            return {"success": True}
-        except GitError as e:
-            return {"success": False, "error": str(e)}
 
     def is_git_clean(self) -> bool:
         return self._git.is_clean()

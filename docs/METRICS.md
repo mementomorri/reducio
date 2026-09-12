@@ -1,9 +1,19 @@
 # Metrics v2
 
-`analyze`, `check`, and `compare` share the Python AST metric engine in
+`analyze`, `check`, `compare`, and apply-session measurements share the Python AST metric engine in
 `reducio/metrics.py`. These scores replace the old text/indentation heuristics;
 **do not compare v2 numbers to old reports**. Comparison remeasures both revisions
 with the same installed engine and current configuration.
+
+## Apply-session reports
+
+All modifying commands accept `--report` for Markdown and structured JSON.
+Measurements cover whole affected Python files before edits, attempted edits
+after syntax validation, and files retained after success/recovery. Matched
+functions show cyclomatic/cognitive deltas; additions and removals are separate.
+Ambiguous qualified names are labeled, not guessed. Missing or incomplete
+measurements are unavailable, never fake zeros; maintainability is not measured.
+Test/recovery statuses accompany the metrics. See [SAFETY.md](SAFETY.md).
 
 ## Scope and lines
 

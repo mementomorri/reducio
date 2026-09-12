@@ -1,101 +1,118 @@
 # Apply safety model
 
-The checks and known limits when applying a refactor plan. **Automatic modification
-is not production-safe, behavior-preserving, or reliably reversible.** This is the
-core of the modifier lane (`idiomatize` / `pattern` / `deduplicate` apply, and `apply <session_id>`).
-The implementation lives in `reducio/workspace.py`, `reducio/diff.py`, and `reducio/services.py`.
+Application edits files only. It never stages, commits, resets, or stashes Git state.
+Review proposals before applying; syntax checks and passing tests do not prove
+behavioral equivalence. Model-generated changes remain unverified proposals.
 
-## Plan / apply split
+## Pipeline
 
-A command never edits files directly. It produces a `RefactorPlan` — a list of `FileChange`s, each
-carrying the **full** `original` and `modified` text plus a `session_id` — and `SessionStore` persists
-it as JSON under `<repo>/.reducio/sessions/` *at creation time*. Applying is a separate phase
-(`App.apply_plan`), so `reducio apply <session_id>` can replay a plan from disk in a later invocation.
+1. Validate plan completeness, paths, syntax, definition names, destination
+   collisions, and every diff's context before any target write.
+2. Measure whole affected Python files with the shared AST metrics v2 engine.
+3. Save pre-apply bytes, permissions and existence in
+   `<target>/.reducio/recovery/<attempt-id>/`, with a JSON manifest and binary backups.
+4. Replace each file atomically, preserving its permissions; validate syntax and metrics.
+5. Only with `--run-tests`, execute the target's tests **after edits**.
+6. On write, validation, requested-test failure, exception or timeout, restore
+   affected files and verify bytes/permissions. Remove newly created files and
+   only empty directories created by this operation.
+7. Report actual test and recovery status, backup location, and affected-file
+   before/attempted/retained measurements. Git history and staging are untouched.
 
-`services._change_to_diff` converts each `FileChange` to a unified diff (splitting on `"\n"` so the
-diff's line numbers line up exactly with the applier), then `Workspace.apply_changes_safe` applies the
-batch.
+The same path handles Git repositories, subdirectories, worktrees, unborn
+repositories, and non-Git directories. Symlinks, hardlinked targets, escaped paths,
+Git metadata and reducio's own storage are rejected as modification targets.
+Existing files cannot be overwritten by a create-file proposal.
 
-## The apply pipeline (`Workspace.apply_changes_safe`)
+## Opt-in target tests
 
-The implementation attempts a guarded batch, not a guaranteed atomic transaction:
+All four modifying commands support `--run-tests`, `--report`, and `--output-dir`:
 
-1. **Checkpoint/snapshot.** On a git repo, create a checkpoint commit staging all files (`git_safety`). On a
-   non-git target, snapshot the pre-apply contents of every target path in memory.
-2. **Apply each diff** in order via `apply_diff`.
-3. **Context validation** (`diff._apply_hunk`): every context (` `) and removed (`-`) line in a hunk
-   must byte-match the file at that position, and may not run past end-of-file — otherwise it raises
-   `DiffError`. This catches a diff that no longer matches the file (e.g. a plan replayed after the file
-   drifted) instead of editing blindly.
-4. **Create-over-existing guard** (`apply_diff`): a "create" diff (empty `original`, emitted for new
-   advisory modules like `strategies/…` or `utils/…`) refuses to write over a file that already exists,
-   so a template is never prepended into a real file.
-5. **Post-apply syntax check** (`_invalid_python`): every changed `.py` must `ast.parse`; any
-   `SyntaxError` fails the batch.
-6. **Tests** (when `run_tests=True`): `ProjectRunner` runs `pytest -x -q` / `unittest discover` if the
-   target looks like a Python project; a non-Python target reports success with no tests run.
-7. **Attempt rollback on handled failures** (`_safe_rollback`): Git resets to the
-   checkpoint's **parent**, not the pre-apply checkpoint contents. Non-git targets
-   attempt to restore the in-memory snapshot. Exceptions can bypass recovery and
-   suppressed rollback errors can still be reported as success. On success, an
-   additional result commit is optional; the Git checkpoint already created a commit.
+```bash
+reducio idiomatize . --dry-run
+reducio apply <session-id> --run-tests --report
+```
 
-## Implemented safeguards (not semantic guarantees)
+Without `--run-tests`, the outcome is `not_run`, never “tests passed.”
+`App.apply_plan` and `Workspace.apply_changes_safe` also default to no tests.
 
-- **Edits land where they belong.** `idiomatize` emits one whole-file `FileChange` per file (spans
-  applied in reverse), so diffs are file-relative — not the old snippet-relative diffs that landed at
-  line 1 and clobbered the top of the file.
-- **Syntax validation** — post-apply `ast.parse` detects invalid changed Python
-  and requests rollback on handled failures, including targets without tests.
-  Successful restoration is not guaranteed.
-- **No silent file clobbering** — create diffs refuse to overwrite/merge into existing files; a stale
-  diff fails loudly via context validation.
-- **Workspace path containment** — `Workspace._resolve_path` rejects resolved paths
-  outside its root. This does not validate session IDs (TODO 15).
-- **Definition-name guard** — a whole-file rewrite (non-empty `original`) that would drop a
-  top-level or nested `def`/`class` is refused before apply (`services._def_names`). Guards LLM
-  rewrites and template bugs, but does not detect arbitrary code loss or behavior changes.
-  `idiomatize` also skips any file that does not `ast.parse` up front —
-  a file that can't be parsed can't be safely refactored or validated.
+Configure the target runner in the selected YAML file:
 
-## Limits (be honest)
+```yaml
+test_runner: pytest          # pytest (default) or unittest
+test_python: .venv/bin/python
+test_timeout_seconds: 300
+# Optional override: an argv list, not a shell string.
+# test_command: ["uv", "run", "pytest", "-q"]
+```
 
-- Git and non-git recovery are **best-effort**; neither guarantees restoration.
-  In-memory snapshots last only for one operation and do not protect against concurrent changes.
-- Test-driven rollback only trips when the target repo actually has runnable tests. The post-apply
-  `ast.parse` detects syntax errors, not behavioral equivalence. Runner selection
-  can fail to run intended tests or report success when none ran.
-- A plan that re-targets the same new-file path twice (e.g. two same-named duplicate groups) now fails
-  the batch via the create-over-existing guard rather than concatenating; partial
-  writes may remain if recovery fails.
-- **The git checkpoint uses `git add -A`.** On a *dirty* repo, your pre-existing uncommitted work is
-  folded into the "reducio checkpoint" commit, and rollback (`git reset` to the checkpoint's parent)
-  discards it from the working tree. The checkpoint may be recoverable through
-  `git reflog`, but staged/unstaged distinctions are not preserved. Clean targets
-  still face exceptional-recovery and newly-created-file defects. Modifying commands,
-  including saved-plan replay, warn on dirty Git roots; `--yes` bypasses prompts,
-  not warnings. This warning does not repair rollback.
-- Current idioms can alter strings/comments, lose accumulator state, and change
-  evaluation order. LLM output has the same review requirement. These and recovery
-  defects remain release blockers in [TODO 19–24](../TODO.md).
+Resolution: explicit `test_command` > configured `test_python` > target-local
+`.venv/bin/python` (Windows: `.venv/Scripts/python.exe`).
+There is no implicit fallback to the tool's interpreter or bare `python`.
+Relative executable paths resolve from the target; explicitly named commands
+resolve through PATH. Commands run with `shell=False` and target working directory.
+No dependency installation is performed.
 
-Use an independent backup and disposable checkout, inspect original/modified
-session JSON, and run behavior tests independently before adopting a proposal.
-CLI apply failures now exit 1 with a reason; success still does not prove safety.
+Missing runner/interpreter, timeout, or built-in pytest/unittest discovering zero
+tests fails requested validation and triggers recovery. Explicit custom commands
+use their exit status; test counts may be unknown. Commands and tests execute
+arbitrary target code: this is **not a sandbox**, and their unrelated side effects
+are not undone. Use a trusted command and isolated checkout.
 
-## Tests of specific safeguards
+## Recovery and reports
 
-These cover selected inputs, not universal guarantees or all recovery paths.
+Statuses are `test_status: not_run|passed|failed|error` and
+`recovery_status: not_needed|restored|failed`. `tests_passed` is only a compatibility
+projection of `test_status == passed`. Recovery success means verification actually
+succeeded; failed restoration reports errors and the retained backup location.
 
-| Checked case | Test |
-|-----------|------|
-| Idiomatize apply lands at correct lines, docstring intact | `tests/unit/test_apply_idiomatize.py` |
-| No valid `.py` becomes invalid after `idiomatize --yes` | `tests/e2e/test_cli_smoke.py::test_idiomatize_never_breaks_valid_python` |
-| Context mismatch / truncation drift raises `DiffError` | `tests/unit/test_diff.py` |
-| Invalid Python rolls back | `tests/unit/test_workspace.py::test_apply_changes_rolls_back_invalid_python` |
-| Create-over-existing refused | `tests/unit/test_workspace.py::test_apply_diff_refuses_create_over_existing` |
-| Non-git mid-batch failure restores earlier changes | `tests/unit/test_workspace.py::test_apply_changes_no_git_restores_on_failure` |
-| Path escape rejected | `tests/unit/test_workspace.py::test_path_escape` |
-| Rewrite dropping a `def`/`class` refused | `tests/unit/test_apply_guard.py::test_apply_plan_refuses_dropping_a_def` |
-| Behaviour-changing dedup loop left alone | `tests/unit/test_idiomatizer.py::test_idiomatize_skips_accumulator_referencing_loop` |
-| Singleton writes advisory module, not over source | `tests/unit/test_pattern_agent.py::test_singleton_pattern_writes_advisory_module_not_source` |
+Backups are retained on successful, restored, failed, and interrupted attempts.
+Inspect `manifest.json` to identify original paths and numbered binary backups.
+If recovery fails, stop editing, preserve that directory, and compare the backup
+with current files before restoring manually. Concurrent changes detected by
+content/permission checks are not overwritten. Backups may contain sensitive code;
+keep them private and remove reviewed old attempt directories yourself.
+
+This is **not a multi-file atomic transaction or crash-proof recovery system**.
+Abrupt termination can leave partial edits; there is no automatic crash-resume.
+Checks reduce common races but do not provide filesystem locking against hostile
+concurrent mutation. Ownership, timestamps, ACLs and extended attributes are not
+snapshotted; byte contents, existence and permission bits are.
+
+`--report` writes Markdown plus structured JSON for success and application failure.
+Metrics cover whole affected Python files, with matched-function deltas and
+separate additions/removals. Attempted state is measured after successful syntax
+validation; unavailable measurements are explicitly absent, not zero. Retained
+state reflects files left after recovery. These reports do not add an HTML dashboard.
+A report-write failure exits nonzero and identifies whether changes were applied;
+it does not roll back an otherwise successful operation.
+
+## Supported heuristic idioms
+
+AST node selection and token-aware source slices preserve strings, comments and
+unaffected formatting. Overlapping comments cause the candidate to be skipped.
+
+Comprehensions require an immediately preceding fresh empty local list/dictionary,
+a complete supported loop body, a small nonempty literal iterable or unshadowed
+builtin range, and closed built-in expressions. Accumulator references, aliases,
+escaping loop variables, closures, global/nonlocal state, extra statements and
+exception contexts are rejected. None comparisons, truthiness and membership
+rewrites require locally established built-in values; unknown/overloaded values
+and side-effecting expressions are skipped. Truthiness is restricted to supported
+single-evaluation conditions, not while-loop invariants.
+
+The supported subset is deliberately narrow; there is no unsafe heuristic override.
+Reflection/tracing, monkeypatched builtins and resource-exhaustion equivalence are
+not guaranteed. Wider patterns are enhancement opportunities, not current support.
+Saved plans remain reviewable proposals; old/model plans are not retrospectively
+certified by the new heuristic checks.
+
+## Migration
+
+Remove `commit_changes` from configuration: even `false` now raises a clear
+configuration error. Git checkpoint/rollback/commit APIs are removed.
+Commit reviewed changes manually. Previous report consumers must handle absent
+metrics and explicit test/recovery statuses.
+
+Regression coverage: `tests/unit/test_section3_safety.py`,
+`test_known_safety_gaps.py`, `test_git.py`, `test_workspace.py`, and CLI tests.

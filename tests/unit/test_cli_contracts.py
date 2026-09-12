@@ -14,6 +14,41 @@ from reducio.session import SessionStore
 COMMANDS = ["deduplicate", "idiomatize", "pattern", "apply"]
 
 
+@pytest.mark.parametrize("command", COMMANDS)
+def test_opt_in_runner_flag(cli_case, command):
+    result = cli_case.invoke(command, "--yes", "--run-tests", "--quiet")
+    assert result.exit_code == 0, result.output
+    cli_case.service.apply_plan.assert_called_once_with(cli_case.plan, run_tests=True)
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+@pytest.mark.parametrize("success", [False, True])
+def test_apply_report_includes_failures(cli_case, command, success, tmp_path):
+    cli_case.service.apply_plan.return_value = RefactorResult(
+        session_id=cli_case.plan.session_id,
+        success=success,
+        changes=[],
+        tests_passed=False,
+        error=None if success else "requested tests failed",
+        test_status="not_run" if success else "failed",
+    )
+    (tmp_path / "sample.py").write_text("x = 1\n")
+    result = cli_case.invoke(command, "--yes", "--report", "--output-dir", "reports", "--quiet")
+    assert result.exit_code == (0 if success else 1), result.output
+    assert (tmp_path / "reports/reducio-report-test-session.md").exists()
+    assert (tmp_path / "reports/reducio-report-test-session.json").exists()
+
+
+@pytest.mark.parametrize("success", [False, True])
+def test_report_failure_distinguishes_applied_state(cli_case, monkeypatch, success):
+    cli_case.service.apply_plan.return_value.success = success
+    monkeypatch.setattr("reducio.cli.Reporter.generate", Mock(side_effect=OSError("read-only")))
+    result = cli_case.invoke("idiomatize", "--yes", "--report", "--quiet")
+    assert result.exit_code == 1
+    assert ("Changes applied" if success else "Application failed") in result.output
+    assert "report failed" in result.output
+
+
 @pytest.fixture
 def cli_case(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -68,7 +103,7 @@ def test_apply_outcomes(cli_case, command, success):
     assert ("Applied." in result.output) is success
     if not success:
         assert "Failed: validation rejected" in result.output
-    cli_case.service.apply_plan.assert_called_once_with(cli_case.plan)
+    cli_case.service.apply_plan.assert_called_once_with(cli_case.plan, run_tests=False)
 
 
 @pytest.mark.parametrize("command", COMMANDS)

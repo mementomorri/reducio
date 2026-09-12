@@ -1,10 +1,12 @@
 """Data models for reducio."""
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
 
 
 class Language(StrEnum):
@@ -93,8 +95,27 @@ class RefactorResult(BaseModel):
     changes: list[FileChange]
     tests_passed: bool
     error: str | None = None
-    metrics_before: ComplexityMetrics = Field(default_factory=ComplexityMetrics)
-    metrics_after: ComplexityMetrics = Field(default_factory=ComplexityMetrics)
+    metrics_before: ComplexityMetrics | None = None
+    metrics_after: ComplexityMetrics | None = None
+    test_status: Literal["not_run", "passed", "failed", "error"] = "not_run"
+    test_output: str = ""
+    test_command: str = ""
+    test_count: int | None = None
+    recovery_status: Literal["not_needed", "restored", "failed"] = "not_needed"
+    recovery_errors: list[str] = Field(default_factory=list)
+    backup_location: str | None = None
+    measurements_before: AnalyzeResult | None = None
+    measurements_after: AnalyzeResult | None = None
+    measurements_attempted: AnalyzeResult | None = None
+
+    @field_serializer("metrics_before", "metrics_after")
+    def serialize_measured_totals(self, metric):
+        return metric.model_dump(exclude={"maintainability_index"}) if metric is not None else None
+
+    @model_validator(mode="after")
+    def truthful_tests(self):
+        self.tests_passed = self.test_status == "passed"
+        return self
 
 
 class PatternApplied(BaseModel):
@@ -227,7 +248,10 @@ class ComplexityThresholds(BaseModel):
 class AppConfig(BaseModel):
     complexity_thresholds: ComplexityThresholds = Field(default_factory=ComplexityThresholds)
     pre_approve: bool = False
-    commit_changes: bool = False
+    test_command: list[str] | None = Field(default=None, min_length=1)
+    test_python: str | None = None
+    test_runner: Literal["pytest", "unittest"] = "pytest"
+    test_timeout_seconds: int = Field(default=300, gt=0)
     dry_run: bool = False
     report: bool = False
     verbose: bool = False
@@ -237,6 +261,20 @@ class AppConfig(BaseModel):
         default_factory=lambda: [".git", "node_modules", "venv", "__pycache__"]
     )
     include_patterns: list[str] = Field(default_factory=lambda: ["*.py"])
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_commit_setting(cls, data):
+        if isinstance(data, dict) and "commit_changes" in data:
+            raise ValueError("commit_changes was removed; commit changes manually")
+        if isinstance(data, dict) and data.get("test_command") is not None:
+            if (
+                not isinstance(data["test_command"], list)
+                or not data["test_command"]
+                or any(not isinstance(x, str) or not x.strip() for x in data["test_command"])
+            ):
+                raise ValueError("test_command must contain nonempty argv strings")
+        return data
 
 
 class AnalyzeRequest(BaseModel):

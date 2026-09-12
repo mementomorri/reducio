@@ -29,7 +29,8 @@ User
 | `compare.py` | Read-only Git blob snapshots, changed-file selection, function matching |
 | `visual_report.py` | Markdown, JSON, and optional offline Plotly HTML dashboards |
 | `diff.py` | Apply unified diffs with context validation (raises `DiffError` on mismatch) |
-| `git_safety.py` | Checkpoint, rollback (GitPython) |
+| `git_safety.py` | Read-only repository discovery and dirty-state warnings (GitPython) |
+| `recovery.py` | Durable per-attempt file snapshots, scoped restoration and verification |
 | `runner.py` | `pytest` / `unittest` for Python projects |
 | `session.py` | JSON persistence for `RefactorPlan` |
 | `reporter.py` | Markdown reports |
@@ -65,11 +66,12 @@ suggestion-only — it proposes a shared `utils/<symbol>_dedup.py` module and do
 
 ### Apply
 
-`apply_changes_safe` attempts a guarded batch: checkpoint/snapshot → context-validated
-diffs → syntax checks → target tests when selected → rollback on handled failures.
-Create diffs refuse existing files, but this is **not a reliable atomic transaction**:
-dirty Git rollback restores the wrong baseline, exceptions can bypass recovery,
-and reported rollback/test success has known limitations. See [SAFETY.md](SAFETY.md).
+`apply_changes_safe` preflights all diffs, snapshots affected bytes/modes/existence,
+then performs per-file atomic writes, syntax/metrics validation and opt-in target
+tests. Failures and exceptions trigger scoped restoration with verification.
+No Git history/index mutation occurs. This is not crash-proof or multi-file atomic;
+concurrent changes and restoration failures are reported with retained backups.
+See [SAFETY.md](SAFETY.md).
 All modifying CLI commands now print actual returned apply outcomes and exit 1 on
 failure; saved-plan replay uses the same dirty-tree warning as planning commands.
 

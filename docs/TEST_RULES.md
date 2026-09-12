@@ -47,20 +47,19 @@ Automatic template integration into callers is planned, not implemented.
 
 ## 3. Safety Protocols and Git Integration
 
-### Test Case: Git-Native Checkpointing
+### Test Case: File snapshots without Git mutation
 
 **Scenario**: Initiate a refactoring session on a project with uncommitted changes.
-**Status: implemented warning, incomplete recovery.** Modifying commands,
-including saved-plan replay, warn on dirty Git roots and request confirmation.
-`--yes` bypasses prompts, not warnings. Checkpoints stage all files; correct
-preservation of pre-existing staged/unstaged/untracked state remains a blocker.
+**Status: implemented.** Modifying commands retain dirty-tree warnings. File
+snapshots preserve the actual pre-apply state; HEAD and index are not mutated.
+`--yes` bypasses prompts, not warnings. Git checkpoint/commit APIs are removed.
 
 ### Test Case: Automatic Rollback on Test Failure
 
 **Scenario**: The tool applies a refactor that causes an existing project test (e.g., pytest) to fail.
-**Status: partial.** Failed test results trigger an automatic rollback attempt,
-not merely a suggestion. Dirty Git rollback uses the wrong baseline, runner
-exceptions can bypass recovery, and restoration status is not reliably verified.
+**Status: implemented for opt-in tests.** `--run-tests` runs after edits only.
+Failures, launch errors and timeouts trigger scoped file recovery; restoration
+is verified, and failures report retained backup paths. No atomic/crash guarantee.
 
 ### Test Case: Human-in-the-Loop Approval
 
@@ -90,19 +89,19 @@ execution are planned. Router unit tests do not demonstrate task-based productio
 ### Test Case: Functional Parity Validation (Pass@1)
 
 **Scenario**: Apply a refactor to a core business logic function.
-**Status: planned safety criterion.** Target tests are attempted, but selection
-and passed/failed/not-run reporting have known defects. Passing available tests
-alone does not prove equivalence. Behavior-preserving rewrites remain release blockers.
+**Status: partial.** Explicit target runner selection and passed/failed/error/not-run
+reporting are implemented. Narrow heuristic prerequisites have regression coverage;
+passing tests still does not prove equivalence, especially for model rewrites.
 
 ## 5. Reporting and Metrics
 
 ### Test Case: Complexity Reduction Report
 
 **Scenario**: Execute the tool with the --report flag.
-**Status: implemented for revisions, partial for apply sessions.** `analyze` and
-`compare` produce Markdown/JSON/HTML with shared AST metrics; comparison includes
-whole-function deltas in changed files. Legacy apply-session reports contain LOC
-only, not before/after complexity. Cognitive is a custom reducio score.
+**Status: implemented.** `analyze` and `compare` produce Markdown/JSON/HTML with
+shared AST metrics. Apply sessions produce Markdown/JSON whole-file metrics and
+matched-function deltas, with attempted versus retained state after recovery.
+Unavailable measurements are not zeros. Cognitive is a custom reducio score.
 
 ### Test Case: Duplicate Removal Statistics
 
@@ -117,7 +116,7 @@ caller/import rewriting and validation first.
 
 **Scenario**: Navigate to a project folder and run `reducio deduplicate .`.
 **Status: partial.** Scan → persist proposal → approval (or `--yes`) → apply
-advisory modules → attempt validation/tests → optional result commit. Existing
-checkpoint commits are separate from that optional result commit. Failed returned
+advisory modules → syntax/metrics validation and opt-in tests → result report.
+There are no automatic commits or Git checkpoints. Failed returned
 applications exit 1 with a reason; successful applications and ordinary declined
 approval exit 0. Input errors exit 2. Remaining workflow safety limits are above.

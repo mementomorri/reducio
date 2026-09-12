@@ -42,6 +42,8 @@ def load_config(config_path: str | None = None) -> AppConfig:
             data = {}
         if not isinstance(data, dict):
             raise ConfigError(f"Configuration must be a mapping: {p}")
+        if "commit_changes" in data:
+            raise ConfigError("commit_changes was removed; remove this setting and commit manually")
         try:
             return AppConfig.model_validate({**cfg.model_dump(), **data})
         except (ValidationError, TypeError) as error:

@@ -3,8 +3,9 @@
 **Semantic code compression for Python codebases**
 
 Analyze Python complexity, compare revisions, and review experimental refactoring
-proposals. Automatic modification is **not production-safe**: behavior-changing
-rewrites and recovery defects remain. See [SAFETY.md](SAFETY.md).
+proposals. Heuristics now skip uncertain cases; file recovery is scoped and verified,
+but neither tests nor safeguards prove semantic equivalence. Model proposals still
+require review. See [SAFETY.md](SAFETY.md).
 
 reducio is a **Python 3.14+** CLI and library. It only analyzes and refactors **`.py` files** in target repositories.
 
@@ -18,8 +19,8 @@ comparisons. Reports appear in job summaries and downloadable artifacts.
 ### 2. PyPI
 
 The distribution, command, and Python import are all **`reducio`**.
-No `reducio` release was present on PyPI when checked on 2026-09-11; the
-following commands become available after the first successful publication:
+The maintainer confirmed Trusted Publishing configuration and a successful package
+upload on 2026-09-12:
 
 ```bash
 pip install reducio
@@ -109,6 +110,12 @@ reducio apply <session-id>     # Apply a saved plan
 reducio sessions list          # List saved sessions
 ```
 
+Tests default to **not run**. To validate edits, add `--run-tests`; configure
+`test_command` (argv), or `test_python` / target `.venv` with `test_runner`
+(`pytest` or `unittest`) and `test_timeout_seconds` (default 300). Missing or failing
+requested tests trigger recovery. Remove retired `commit_changes` configuration;
+commit reviewed changes manually. See [runner setup and recovery](SAFETY.md).
+
 ### Plan modes
 
 | Command | What the plan contains |
@@ -116,7 +123,7 @@ reducio sessions list          # List saved sessions
 | `deduplicate` | Embeddings compare self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Call sites are **not** rewritten. |
 | `pattern` | All default patterns, including singleton, propose new advisory modules. A configured model enables optional whole-module rewrites for applicable named patterns. |
 | `idiomatize` | Python heuristics by default; a configured model enables optional whole-module rewrites. Both paths require behavior review. |
-| `apply` | Context/syntax/definition-name checks and rollback attempts. Dirty-state preservation and exceptional recovery are not reliable. See [SAFETY.md](SAFETY.md). |
+| `apply` | Validated diffs, file snapshots, scoped recovery, opt-in target tests and whole-file metrics. No Git writes or semantic guarantee. See [SAFETY.md](SAFETY.md). |
 
 ### Flags
 
@@ -130,11 +137,12 @@ Flags are command-specific, not global:
 | `idiomatize`, `pattern` | `--allow-fallback` (explicitly permit heuristic/template fallback after model failure) |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `check` | `--report` / `-r` |
-| `deduplicate` | `--report` (successful apply report), `--prefer-remote` |
+| `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |
+| `deduplicate` | `--prefer-remote` |
 | `analyze`, `deduplicate`, `idiomatize` | `--model` |
 | `analyze` | `--prefer-local`, `--prefer-remote` (mutually exclusive) |
 | `analyze`, `compare` | `--format markdown\|json\|html\|all` |
-| `analyze`, `compare`, `check`, `deduplicate`, `idiomatize`, `pattern` | `--output-dir` |
+| `analyze`, `compare`, `check`, `deduplicate`, `idiomatize`, `pattern`, `apply` | `--output-dir` |
 | `compare` | Required `--base`, optional `--head` (default `HEAD`) |
 | `report` | `--config` / `-c`, `--path` / `-C`, `--output-dir`; optional positional session ID |
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
@@ -197,7 +205,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md).
 | [CI.md](CI.md) | Dashboards, revision comparison, GitHub summaries and artifacts |
 | [GITHUB_CI.md](GITHUB_CI.md) | Copy-paste GitHub Actions setup for your repository |
 | [METRICS.md](METRICS.md) | Versioned syntax-aware metrics and interpretation |
-| [SAFETY.md](SAFETY.md) | Apply/rollback safety model and guarantees |
+| [SAFETY.md](SAFETY.md) | Apply/recovery safeguards, test configuration and limitations |
 | [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md) | pytest and CI |
 | [TEST_RULES.md](TEST_RULES.md) | Acceptance criteria |
 | [DESIGN.md](DESIGN.md) | Product vision (long-form) |

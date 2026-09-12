@@ -136,7 +136,7 @@ async def test_model_failure_is_explicit_and_persisted(tmp_path, reply, fallback
         **({"side_effect": reply} if isinstance(reply, Exception) else {"return_value": reply})
     )
     store = SessionStore(str(tmp_path / ".reducio/sessions"))
-    source = "def f(x):\n    return x == None\n"
+    source = "def f():\n    x = None\n    return x == None\n"
     agent = IdiomatizerAgent(ws, llm, store)
     plan = await agent.idiomatize(
         IdiomatizeRequest(
@@ -158,7 +158,7 @@ async def test_model_failure_is_explicit_and_persisted(tmp_path, reply, fallback
 
 
 async def test_unchanged_model_does_not_run_heuristics(tmp_path):
-    content = "def f(x):\n    return x == None\n"
+    content = "def f():\n    x = None\n    return x == None\n"
     llm = MagicMock(complete=AsyncMock(return_value=content))
     agent = IdiomatizerAgent(
         Workspace(str(tmp_path), AppConfig(model="test")),

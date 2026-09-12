@@ -11,7 +11,8 @@ CONTENT = '''"""Module docstring that must survive."""
 import os
 
 
-def build(items):
+def build():
+    items = [1, 2, 3]
     result = []
     for item in items:
         result.append(item * 2)

@@ -87,7 +87,10 @@ def test_generate_report(tmp_path):
     )
     out = Reporter(output_dir=str(tmp_path / ".reducio")).generate(res)
     text = out.read_text()
-    assert "Reduced: 6" in text
+    assert "LOC before: 10" in text
+    assert "LOC after: 4" in text
+    assert "Tests: not_run" in text
+    assert out.with_suffix(".json").exists()
     assert "Success: True" in text
 
 

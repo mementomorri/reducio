@@ -118,7 +118,21 @@ def _require_complete(plan: RefactorPlan) -> None:
         raise typer.Exit(1)
 
 
-def _has_changes(plan: RefactorPlan) -> bool:
+def _has_changes(plan: RefactorPlan, cfg=None, path=None, output_dir=None, report=False) -> bool:
+    if report and (not plan.complete or any(d.severity == "error" for d in plan.diagnostics)):
+        _finish_apply(
+            RefactorResult(
+                session_id=plan.session_id,
+                success=False,
+                changes=[],
+                tests_passed=False,
+                error="Plan is incomplete or failed preflight",
+            ),
+            cfg,
+            path,
+            output_dir,
+            report,
+        )
     _require_complete(plan)
     if not plan.changes:
         typer.echo("No changes to apply.")
@@ -126,7 +140,25 @@ def _has_changes(plan: RefactorPlan) -> bool:
     return True
 
 
+def _finish_apply(result, cfg, path, output_dir, report):
+    if report:
+        try:
+            typer.echo(f"Apply report: {Reporter(cfg, output_dir, target=path).generate(result)}")
+        except (OSError, StorageError) as error:
+            state = "Changes applied" if result.success else "Application failed"
+            typer.echo(f"{state}; report failed: {error}", err=True)
+            raise typer.Exit(1) from None
+    _show_apply_result(result)
+
+
 def _show_apply_result(result: RefactorResult) -> None:
+    typer.echo(f"Tests: {result.test_status}; recovery: {result.recovery_status}.")
+    if result.backup_location:
+        typer.echo(f"Recovery backup: {result.backup_location}")
+    for error in result.recovery_errors:
+        typer.echo(error, err=True)
+    if result.test_status in ("failed", "error") and result.test_output:
+        typer.echo(terminal_text(result.test_output), err=True)
     if not result.success:
         typer.echo(
             f"Failed: {result.error or 'Application failed without an error detail.'}", err=True
@@ -273,6 +305,9 @@ def deduplicate(
     path: Path = typer.Argument(Path(".")),
     dry_run: bool = typer.Option(False, "--dry-run"),
     yes: bool = typer.Option(False, "--yes"),
+    run_tests: bool = typer.Option(
+        False, "--run-tests", help="Run target tests after edits; restore on failure"
+    ),
     report: bool = typer.Option(False, "--report"),
     output_dir: Path | None = typer.Option(None, "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
@@ -294,15 +329,13 @@ def deduplicate(
     if dry_run:
         _dry_run_report(plan, cfg, "deduplicate", path, output_dir)
         return
-    if not _has_changes(plan):
+    if not _has_changes(plan, cfg, path, output_dir, report):
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan)
-    _show_apply_result(result)
-    if report and result.success:
-        typer.echo(f"Apply report: {Reporter(cfg, output_dir, target=path).generate(result)}")
+        result = svc.apply_plan(plan, run_tests=run_tests)
+    _finish_apply(result, cfg, path, output_dir, report)
 
 
 @app.command()
@@ -314,6 +347,10 @@ def idiomatize(
         False, "--allow-fallback", help="Allow heuristics if the selected model fails"
     ),
     yes: bool = typer.Option(False, "--yes"),
+    report: bool = typer.Option(False, "--report"),
+    run_tests: bool = typer.Option(
+        False, "--run-tests", help="Run target tests after edits; restore on failure"
+    ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     model: str | None = typer.Option(None, "--model"),
@@ -332,13 +369,13 @@ def idiomatize(
     if dry_run:
         _dry_run_report(plan, cfg, "idiomatize", path, output_dir)
         return
-    if not _has_changes(plan):
+    if not _has_changes(plan, cfg, path, output_dir, report):
         return
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan)
-    _show_apply_result(result)
+        result = svc.apply_plan(plan, run_tests=run_tests)
+    _finish_apply(result, cfg, path, output_dir, report)
 
 
 _PATTERNS = ("factory", "strategy", "observer", "singleton")
@@ -354,6 +391,10 @@ def pattern(
         False, "--allow-fallback", help="Allow templates if the selected model fails"
     ),
     yes: bool = typer.Option(False, "--yes"),
+    report: bool = typer.Option(False, "--report"),
+    run_tests: bool = typer.Option(
+        False, "--run-tests", help="Run target tests after edits; restore on failure"
+    ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
@@ -375,13 +416,13 @@ def pattern(
     if dry_run:
         _dry_run_report(plan, cfg, "pattern", path, output_dir)
         return
-    if not _has_changes(plan):
+    if not _has_changes(plan, cfg, path, output_dir, report):
         return
     if not yes and not typer.confirm("Apply changes?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan)
-    _show_apply_result(result)
+        result = svc.apply_plan(plan, run_tests=run_tests)
+    _finish_apply(result, cfg, path, output_dir, report)
 
 
 @app.command()
@@ -428,6 +469,11 @@ def apply(
     session_id: str = typer.Argument(..., help="Session ID from a prior command"),
     path: Path = typer.Argument(Path(".")),
     yes: bool = typer.Option(False, "--yes"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    report: bool = typer.Option(False, "--report"),
+    run_tests: bool = typer.Option(
+        False, "--run-tests", help="Run target tests after edits; restore on failure"
+    ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
@@ -441,7 +487,7 @@ def apply(
         raise typer.Exit(1)
     plan.diagnostics.extend(validate_plan(plan, root))
     _show_plan(plan)
-    if not _has_changes(plan):
+    if not _has_changes(plan, cfg, path, output_dir, report):
         return
     _check_git(str(root), cfg)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
@@ -449,8 +495,8 @@ def apply(
     with progress("Preparing application...", quiet=quiet):
         svc = _new_app(str(root), cfg)
     with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan)
-    _show_apply_result(result)
+        result = svc.apply_plan(plan, run_tests=run_tests)
+    _finish_apply(result, cfg, path, output_dir, report)
 
 
 @app.command("report")

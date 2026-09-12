@@ -29,7 +29,7 @@ def test_apply_changes_rollback_on_bad_diff(temp_git_repo):
     bad = "@@@ not a valid hunk @@@"
     r = ws.apply_changes_safe([("main.py", good), ("main.py", bad)], run_tests=False)
     assert not r["success"]
-    assert r.get("rolled_back")
+    assert r["recovery_status"] == "not_needed"
     assert main.read_text().strip() == "x = 1"
 
 
@@ -55,7 +55,7 @@ def test_apply_changes_no_git_restores_on_failure(tmp_path):
     bad = "@@@ not a valid hunk @@@"
     r = ws.apply_changes_safe([("a.py", good), ("a.py", bad)], run_tests=False)
     assert not r["success"]
-    assert r["rolled_back"]
+    assert r["recovery_status"] == "not_needed"
     assert r["applied"] == 0
     assert a.read_text() == "a = 1\n"  # restored even without git
 

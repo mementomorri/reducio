@@ -74,10 +74,11 @@ clear "install the extra" message instead of an empty result.
   instead of `original=""` against the source file — which previously prepended a template into it.
 - The dirty-tree prompt (`cli._check_git`) and `--yes`/`--dry-run` gating are unchanged.
 
-### P3 — Initial semantic guards — **partial; safety milestone incomplete**
+### P3 — Initial semantic guards — historical milestone
 
 These specific guards shipped, but the later audit found additional semantic and
-recovery defects. They remain release blockers:
+recovery defects. TODO section 3 now addresses those defects with conservative
+rules and file snapshots; see the current capabilities and [safety model](docs/SAFETY.md).
 
 - `idiomatize` no longer rewrites a for/append loop whose value, iterable, or filter reads the
   accumulator (e.g. order-preserving dedup `if v not in u: u.append(v)`) — that silently changed
@@ -105,12 +106,12 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 |------------|--------|-------|
 | `analyze` — AST symbols + function-level metrics v2 | done | Static, no LLM; Markdown/JSON/HTML reports. |
 | `compare` — committed revision comparison | done | Changed-file function deltas; independent PR job. |
-| `idiomatize` — comprehensions, `is None`, truthiness, membership | partial safety | Planning/apply exist; known behavior-changing cases remain. Optional LLM whole-file rewrite. |
+| `idiomatize` — comprehensions, `is None`, truthiness, membership | bounded support | AST/token-aware, closed built-in cases only; uncertain cases skipped. Optional unverified LLM proposals. |
 | `deduplicate` — embedding clustering → proposed `utils/<symbol>_dedup.py` | done (suggest-only) | Honestly labeled; does **not** remove dupes or rewrite call sites. See Near-term. |
 | `pattern` — factory/strategy/observer/singleton templates | done | Default paths write advisory modules. Opt-in LLM via model configuration. |
 | `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold. |
 | Unified thresholds | done | `check` and `analyze` both read `AppConfig.complexity_thresholds`. |
-| Apply — checkpoints, validated diffs, syntax checks, rollback attempts | partial safety | Dirty-state preservation and exceptional recovery remain blockers. |
+| Apply — validated diffs, file snapshots, syntax/metrics checks | done (bounded) | No Git writes; opt-in tests; verified scoped recovery and explicit failures. Not crash-proof/multi-file atomic. |
 | Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducio/sessions/`. |
 | LiteLLM model routing (local Ollama / remote) | done | Opt-in via `--model`; tier config lives in `LLMRouter`. |
 | Config: `.reducio.yaml` + `REDUCIO_*` env overrides | done | |
@@ -120,19 +121,20 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 These opportunities capture the gap between the original landing-page claims and
 the tool. They are **not shipped capabilities or delivery commitments**. The
 landing page now describes current behavior; [ADVERTISING_AUDIT.md](docs/ADVERTISING_AUDIT.md)
-preserves the original comparison. Safety items remain release blockers, not
-optional polish. Ordered from immediate clarity/safety work to broader features:
+preserves the original comparison. The scoped section 3 safeguards are complete;
+broader semantic guarantees are not claimed. Ordered from clarity to broader features:
 
 - [ ] **Review and result clarity:** session IDs, target-local report paths, actual
   apply outcomes, failure exit codes, unified diff previews, and persisted
   heuristic/model/fallback provenance are implemented.
-  Decide whether to expose the existing commit configuration as a supported CLI flag.
-- [ ] **Reliable recovery — release blocker:** preserve staged, unstaged, and
-  untracked pre-existing work; recover from validation/runner exceptions; distinguish
-  actual rollback success and tests passed/failed/not run. See TODO 22–24.
-- [ ] **Behavior-preserving idioms — release blocker:** fix literal, accumulator,
-  alias, and evaluation-order changes; define supported preconditions and test
-  behavior before/after. Skip unsupported cases. See TODO 19–21.
+  Apply reports now include metrics and test/recovery outcomes; automatic commits
+  and the old commit configuration have been removed.
+- [x] **Scoped recovery:** per-attempt file snapshots preserve pre-existing state;
+  validation/runner exceptions trigger verified recovery. Explicit test/recovery
+  statuses and retained backups are implemented. No crash-atomic guarantee.
+- [x] **Conservative idioms:** AST/token-aware edits, tested closed built-in
+  prerequisites, and skipping uncertain accumulator/alias/evaluation cases.
+  Broader semantics and model rewrites remain review-dependent.
 - [ ] **Enforced local-only mode:** explicit remote consent, provider visibility,
   safe prompt logging, and disclosure of model/embedding downloads.
 - [ ] **Cognitive threshold policy:** define how CC and cognitive thresholds select

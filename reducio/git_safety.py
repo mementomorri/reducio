@@ -1,12 +1,10 @@
-"""Git checkpoint and rollback for safe refactoring."""
+"""Read-only Git discovery and dirty-tree inspection."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from git import InvalidGitRepositoryError, Repo
-
-from reducio.models import FileChange
 
 
 class GitError(Exception):
@@ -19,7 +17,11 @@ class GitSafety:
         self._repo: Repo | None = None
 
     def is_repo(self) -> bool:
-        return (self.path / ".git").exists()
+        try:
+            self._repo = Repo(self.path, search_parent_directories=True)
+            return True
+        except InvalidGitRepositoryError:
+            return False
 
     def _open(self) -> Repo:
         if not self.is_repo():
@@ -34,23 +36,7 @@ class GitSafety:
     def is_clean(self) -> bool:
         if not self.is_repo():
             return True
-        return not self._open().is_dirty(untracked_files=True)
-
-    def create_checkpoint(self, message: str) -> str:
         repo = self._open()
-        repo.git.add(A=True)
-        commit = repo.index.commit(message)
-        return commit.hexsha[:8]
-
-    def rollback(self) -> None:
-        repo = self._open()
-        head = repo.head.commit
-        if not head.parents:
-            raise GitError("no parent commit to rollback to")
-        repo.head.reset(head.parents[0], index=True, working_tree=True)
-
-    def commit(self, message: str, changes: list[FileChange]) -> None:
-        repo = self._open()
-        for change in changes:
-            repo.index.add([change.path])
-        repo.index.commit(message)
+        # Even status/diff may refresh Git's index unless optional locks are disabled.
+        with repo.git.custom_environment(GIT_OPTIONAL_LOCKS="0"):
+            return not repo.is_dirty(untracked_files=True)
