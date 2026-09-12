@@ -119,6 +119,23 @@ def rewrite(content: str, path: str) -> tuple[str, list[str], list[PlanDiagnosti
         if type(initial) not in (list, dict) or initial:
             raise ValueError()
         variable = node.target.id
+        candidates = {accumulator, variable}
+        parameters = {n.arg for n in ast.walk(function.args) if isinstance(n, ast.arg)}
+        prior_names = set()
+        for statement in statements[: index - 1]:
+            for n in ast.walk(statement):
+                if isinstance(n, ast.Name):
+                    prior_names.add(n.id)
+                elif isinstance(n, (ast.MatchAs, ast.MatchStar, ast.ExceptHandler)):
+                    prior_names.add(n.name)
+                elif isinstance(n, ast.MatchMapping):
+                    prior_names.add(n.rest)
+                elif isinstance(n, ast.alias):
+                    prior_names.add(n.asname or n.name.split(".")[0])
+        # Rebinding an existing value can change finalizer timing, even if the
+        # name is never read after the loop. Both destination names must be fresh.
+        if candidates.intersection(parameters | prior_names):
+            raise ValueError()
         if accumulator == variable or any(
             isinstance(n, (ast.Global, ast.Nonlocal)) for n in ast.walk(function)
         ):

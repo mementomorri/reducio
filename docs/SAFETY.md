@@ -96,7 +96,9 @@ Comprehensions require an immediately preceding fresh empty local list/dictionar
 a complete supported loop body, a small nonempty literal iterable or unshadowed
 builtin range, and closed built-in expressions. Accumulator references, aliases,
 escaping loop variables, closures, global/nonlocal state, extra statements and
-exception contexts are rejected. None comparisons, truthiness and membership
+exception contexts are rejected. Accumulator and loop-variable names must
+not reuse parameters or earlier bindings, avoiding changes to finalizer timing.
+None comparisons, truthiness and membership
 rewrites require locally established built-in values; unknown/overloaded values
 and side-effecting expressions are skipped. Truthiness is restricted to supported
 single-evaluation conditions, not while-loop invariants.

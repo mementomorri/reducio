@@ -9,6 +9,10 @@ The maintainer also confirmed successful PyPI configuration and publication.
 See [SAFETY.md](SAFETY.md) for the supported subset, configuration migration and
 remaining limits; [TODO.md](../TODO.md) tracks follow-up work.
 
+Final local verification: **419 passed, no expected failures, 92.24% coverage**.
+Lint, formatting, types, wheel/sdist build and installed-wheel CLI/report smoke
+pass; tracked fixtures are unchanged. See [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md).
+
 The audit and verification snapshots below are **historical**. In particular,
 their regex/checkpoint/default-test and LOC-only report findings are superseded
 by this implementation, not claims about the current code.

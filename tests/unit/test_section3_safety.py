@@ -54,7 +54,9 @@ def plan_for(tmp_path, before="def f():\n    return 1\n", after="def f():\n    r
     ],
 )
 def test_uncertain_rewrites_are_skipped(body):
-    source = "def f(x=None):\n" + "\n".join("    " + line for line in body.splitlines()) + "\n"
+    source = (
+        "def f(unknown=None):\n" + "\n".join("    " + line for line in body.splitlines()) + "\n"
+    )
     assert rewrite(source, "a.py")[0] == source
 
 
@@ -97,6 +99,39 @@ def test_shadowed_range_is_not_assumed_builtin(binding):
     source = (
         binding
         + "\ndef f():\n    out = []\n    for x in range(3):\n        out.append(x)\n    return out\n"
+    )
+    assert rewrite(source, "a.py")[0] == source
+
+
+@pytest.mark.parametrize("parameter", ["x", "out"])
+def test_rebinding_parameter_does_not_change_finalizer_timing(parameter):
+    source = (
+        "events = []\n"
+        "class Watched:\n"
+        "    def __del__(self):\n"
+        "        events.append('released')\n"
+        f"def f({parameter}):\n"
+        "    out = []\n"
+        "    for x in range(3):\n"
+        "        out.append(x)\n"
+        "    return len(events)\n"
+    )
+    updated, descriptions, diagnostics = rewrite(source, "a.py")
+    assert updated == source and not descriptions and diagnostics
+    before, after = {}, {}
+    exec(source, before)
+    exec(updated, after)
+    assert before["f"](before["Watched"]()) == after["f"](after["Watched"]())
+
+
+def test_previously_bound_loop_variable_is_not_rewritten():
+    source = (
+        "def f():\n"
+        "    x = object()\n"
+        "    out = []\n"
+        "    for x in range(3):\n"
+        "        out.append(x)\n"
+        "    return out\n"
     )
     assert rewrite(source, "a.py")[0] == source
 

@@ -2,7 +2,20 @@
 
 Requires **Python 3.14+** (matches CI and `pyproject.toml`).
 
-Rename verification: the `reducio` package/CLI passes **328 tests, 5 strict expected
+## Section 3 verification — 2026-09-12
+
+Verified `fe52767` plus the fresh-local/finalizer hardening: **419 passed, no
+expected failures, 92.24% coverage**; CLI **92%**. Ruff, Black, mypy and wheel/sdist
+build pass. Installed-wheel CLI/Markdown/JSON/HTML smoke passes outside the checkout,
+reusing existing development dependencies (not a fresh online dependency install).
+Tracked fixtures are unchanged. No commit, push, new publication, remote CI run
+or full PyApp build was performed by the agent.
+
+The implementation includes conservative AST/token-aware idioms, file snapshots
+without Git/index mutation, verified scoped recovery, opt-in after-only target
+tests, and whole-file apply metrics. See [SAFETY.md](SAFETY.md) for limits.
+
+Historical rename verification: the `reducio` package/CLI passed **328 tests, 5 strict expected
 failures, 91.43% coverage**. Ruff, Black, mypy, wheel/sdist build, and the installed
 CLI passed; the wheel contains the `reducio` namespace and entry point. No publish
 or push was performed.
@@ -40,7 +53,7 @@ Shared fixtures live in `tests/conftest.py` (`fixture_repo_root`, `fixture_files
 | §2 Cross-file dedup | `test_dedup_stub_plan_on_duplicate_pair`, `test_deduplicate_groups_extracted_validator_blocks` |
 | §2 Idiomatic Python | `test_idiom_list_comp` |
 | §2 Pattern injection | `test_pattern_strategy_on_complex_conditionals` |
-| §3 Git checkpoint / rollback | `tests/unit/test_git.py`, `test_workspace.py` |
+| §3 File snapshots / recovery, no Git mutation | `tests/unit/test_git.py`, `test_workspace.py`, `test_section3_safety.py` |
 | §5 Report | `test_reporter_writes_markdown` |
 | §6 CLI continuity | `tests/e2e/test_cli_smoke.py` |
 
@@ -66,11 +79,11 @@ mypy reducio/ --ignore-missing-imports
 ```
 
 Coverage target: `reducio/` package (minimum 60% in CI; see `pyproject.toml`).
-Latest section 2 run (2026-09-11, on top of `7d36387`): **328 passed, 5 strict
+Historical section 2 run (2026-09-11, on top of `7d36387`): **328 passed, 5 strict
 expected failures, 91.43% coverage**; CLI **92%**, configuration **100%**. Ruff,
 Black, mypy, wheel/sdist build, and installed-wheel CLI/report smoke passed.
 Tracked fixtures are unchanged. No public release, remote CI run, or full local
-PyApp build was performed. Expected failures retain the section 3 safety blockers.
+PyApp build was performed. Those expected failures documented then-open section 3 blockers.
 
 Historical section 1 run: **266 tests passed / 85.15% coverage** (2026-09-11, section 1
 implementation on top of `2ca053b`). CLI statement coverage is **83%**, and
@@ -91,9 +104,13 @@ Section 2 regression tests live in `test_plan_contracts.py`, `test_review_contra
 and `test_distribution_smoke.py`. They cover unsafe session paths, full diff previews,
 outside-target report retrieval, actual saved-plan application, selected-model failure,
 explicit fallback, dependency exclusions, and release-wheel identity checks.
-Five strict expected failures (`test_known_safety_gaps.py` and `test_git.py`) describe
-known behavior/recovery defects. They must fail until the corresponding section 3
-fixes land; an unexpected pass fails the suite so its marker is removed deliberately.
+The five former strict expected failures (`test_known_safety_gaps.py` and
+`test_git.py`) now pass as ordinary regressions. Section 3 coverage additionally
+checks closed-value idiom prerequisites, fresh-local/finalizer cases, exact
+bytes/modes, staged/unstaged/untracked state, unborn repositories and worktrees,
+write/runner/measurement faults, concurrent edits and failed restoration.
+CLI tests cover opt-in after-only execution, reports on failure, output-directory
+selection, and truthful test/recovery states.
 
 The release workflow runs `pypi` → `verify-pypi` → `pyapp`. Published package bytes
 must match the saved wheel before installation. Both distribution paths exercise the
