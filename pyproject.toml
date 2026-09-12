@@ -15,13 +15,12 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "gitpython>=3.1.0",
-    "litellm>=1.0.0",
-    "tenacity>=8.0.0",
     "tree-sitter>=0.21.0",
     "tree-sitter-python>=0.21.0",
 ]
 
 [project.optional-dependencies]
+llm = ["httpx>=0.28,<1"]
 reports = ["plotly>=6,<8"]
 embeddings = [
     "chromadb>=1.5.0",
@@ -32,7 +31,6 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=7.0.0",
     "coverage[toml]>=7.10.6",
-    "pytest-mock>=3.11.0",
     "ruff>=0.1.0",
     "black>=23.0.0",
     "mypy>=1.0.0",

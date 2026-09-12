@@ -68,9 +68,10 @@ def smoke(wheel_directory: Path, commit: str) -> None:
             "install",
             "--index-url",
             "https://pypi.org/simple",
-            f"{wheels[0]}[reports,embeddings]",
+            f"{wheels[0]}[reports,embeddings,llm]",
         )
         check_cli(run, str(root / "venv/bin/reducio"), root, version)
+        run(python, "-I", "-c", Path(__file__).with_name("smoke_llm.py").read_text())
         run(python, "-I", "-c", EMBEDDING_CHECK, version)
         print("Published PyPI installation verified", flush=True)
 

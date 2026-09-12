@@ -233,12 +233,6 @@ class CompareResult(BaseModel):
         return counts
 
 
-class ModelTier(StrEnum):
-    LIGHT = "light"
-    MEDIUM = "medium"
-    HEAVY = "heavy"
-
-
 class ComplexityThresholds(BaseModel):
     cyclomatic_complexity: int = 10
     cognitive_complexity: int = 15
@@ -256,7 +250,11 @@ class AppConfig(BaseModel):
     report: bool = False
     verbose: bool = False
     model: str = ""
-    prefer_local: bool = True
+    llm_api: Literal["openai", "anthropic"] | None = None
+    llm_base_url: str = ""
+    llm_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
+    llm_max_tokens: int = Field(default=2048, gt=0)
+    check_fail_on: Literal["none", "info", "warning", "critical"] = "none"
     exclude_patterns: list[str] = Field(
         default_factory=lambda: [".git", "node_modules", "venv", "__pycache__"]
     )
@@ -265,6 +263,17 @@ class AppConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_commit_setting(cls, data):
+        if isinstance(data, dict) and {
+            "prefer_local",
+            "prefer_remote",
+            "model_tiers",
+            "tier",
+        }.intersection(data):
+            raise ValueError(
+                "Model tiers/preferences were removed; set llm_api and model explicitly"
+            )
+        if isinstance(data, dict) and {"api_key", "llm_api_key"}.intersection(data):
+            raise ValueError("Use REDUCIO_API_KEY in the environment, not configuration")
         if isinstance(data, dict) and "commit_changes" in data:
             raise ValueError("commit_changes was removed; commit changes manually")
         if isinstance(data, dict) and data.get("test_command") is not None:

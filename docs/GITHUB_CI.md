@@ -2,10 +2,8 @@
 
 Create `.github/workflows/reducio.yml` in your Python repository:
 
-For now CI installs this repository directly until the first `reducio`
-release is published. The package and command are both `reducio`.
-After a verified release, replace the
-install step with `pip install "reducio[reports]==VERSION"`, using its exact version.
+PyPI publication is configured. Replace `VERSION` below with the exact published
+version you have reviewed. The package and command are both `reducio`.
 
 ```yaml
 name: reducio
@@ -32,7 +30,7 @@ jobs:
         with:
           python-version: '3.14'
       - name: Install reducio
-        run: pip install "reducio[reports] @ git+https://github.com/mementomorri/reducio.git@main"
+        run: pip install "reducio[reports]==VERSION"
       - name: Analyze main or compare a pull request
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -63,9 +61,26 @@ jobs:
 Commit and push to `main`, open a PR targeting `main`, or select **Actions →
 reducio → Run workflow** once the workflow is on your default branch. Change
 `main` and the `.` analysis target if your branch/source directory differs.
-For reproducible runs, replace the install URL's `@main` with a reviewed reducio
-commit SHA. No model, embeddings, API key, or target-project install is needed.
+Pin the published version for reproducible runs. No model, embeddings, API key, or target-project install is needed.
 Use `pull_request`, not `pull_request_target`; do not add secrets to PR analysis.
+
+## Optional quality gate
+
+With a release containing the section 4 changes, add this step before the summary:
+
+```yaml
+      - name: Quality gate
+        run: reducio check . --fail-on warning --report --output-dir ci-reports
+```
+
+`none` (default) is report-only. `info`, `warning`, and `critical` fail on findings
+at that severity or higher. Configure `check_fail_on` in YAML or
+`REDUCIO_CHECK_FAIL_ON`; explicit `--fail-on` wins. Reports are written before a
+gate failure (exit 1); retain the `if: always()` upload/summary steps above.
+Parse failures still fail even with `none`. Invalid configuration exits 2.
+This is a quality-finding gate, not a comparison/complexity-delta gate.
+Nonempty application in CI/non-TTY requires explicit `--yes`; dry runs and empty
+plans do not. Prefer read-only reporting in CI.
 
 ## View the results
 

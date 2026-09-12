@@ -1,5 +1,14 @@
 # Implementation assessment
 
+## Section 4 update — 2026-09-12
+
+Items 27–30 are implemented locally: explicit optional compatible APIs instead of
+model tiers, opt-in quality gates, explicit unattended approval, suggestion-only
+v1 deduplication scope, and bounded dependency/cache cleanup. Saved sessions remain
+compatible. See [API migration](LLM.md), [CI policy](GITHUB_CI.md) and
+[verification](TEST_IMPLEMENTATION.md). Historical routing/approval findings below
+are superseded; dependency graphs, caller rewriting and pre-commit remain enhancements.
+
 ## Section 3 update — 2026-09-12
 
 Items 19–25 are implemented locally: conservative AST/token-aware idioms,

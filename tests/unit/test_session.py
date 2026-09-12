@@ -79,6 +79,7 @@ def test_cleanup_old_sessions_pops_cache_for_legacy_metadata(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
     (store.storage_dir / "legacy-id.json").write_text(_LEGACY_SESSION_JSON)
     store.load_plan("legacy-id")
-    assert "legacy-id" in store._cache
+    assert store.load_plan("legacy-id") is not None
     assert store.cleanup_old_sessions(max_age_days=0) == 1
-    assert "legacy-id" not in store._cache
+    assert store.load_plan("legacy-id") is None
+    store.clear_cache()  # public compatibility no-op

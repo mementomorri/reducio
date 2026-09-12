@@ -37,12 +37,12 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 cd /path/to/reducio
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,embeddings,reports]"
+pip install -e ".[dev,embeddings,reports,llm]"
 reducio version
 pytest tests/ -v
 ```
 
-Optional: Ollama or cloud API keys for LLM-backed routing.
+Optional: `[llm]` extra and a token for [explicit compatible APIs](LLM.md).
 
 ### Configuration
 
@@ -70,8 +70,8 @@ exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
 | `check` | `check` | Naming, function length, per-function cyclomatic complexity |
 | `apply` | `apply_plan` | Session JSON → dirty-tree warning, approval, guarded apply with recovery limits |
 
-Use the [per-command flag table](README.md#flags): `pattern` selects its model
-through configuration/environment, not `--model`. Plans print session IDs;
+Use the [per-command flag table](README.md#flags): `pattern` and `idiomatize`
+accept explicit API/model flags, configuration or environment. Plans print session IDs;
 dry-runs print report paths. Failed application exits 1; invalid inputs exit 2.
 `--quiet` hides progress only, while `--no-verbose` disables detailed results.
 Diff previews and provenance appear in terminal output, dry-run Markdown, and

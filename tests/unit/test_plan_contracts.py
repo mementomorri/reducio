@@ -67,17 +67,20 @@ def test_parser_initialization_error_is_not_cached(monkeypatch):
 
 
 async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatch, caplog):
-    import reducio.llm.router as router
+    import httpx
 
+    from reducio.llm import LLMClient, LLMError
+
+    monkeypatch.setenv("REDUCIO_API_KEY", "SECRET")
     caplog.set_level("INFO")
     monkeypatch.setattr(
-        router, "acompletion", AsyncMock(side_effect=RuntimeError("SECRET provider response"))
+        httpx.AsyncClient, "post", AsyncMock(side_effect=RuntimeError("SECRET PRIVATE"))
     )
-    llm = router.LLMRouter(verbose=True, model_override="test/model")
-    with pytest.raises(RuntimeError):
-        await llm.complete("PRIVATE source code")
+    with pytest.raises(LLMError):
+        await LLMClient(AppConfig(verbose=True, llm_api="openai", model="chosen")).complete(
+            "PRIVATE"
+        )
     assert "SECRET" not in caplog.text and "PRIVATE" not in caplog.text
-    assert not router.litellm.set_verbose
 
 
 @pytest.mark.parametrize(
@@ -86,14 +89,14 @@ async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatc
 )
 def test_session_ids_rejected_before_cache_or_filesystem(tmp_path, session_id):
     store = SessionStore(str(tmp_path / "sessions"))
-    store._cache[session_id] = RefactorPlan(session_id=session_id, changes=[], description="cached")
+    plan = RefactorPlan(session_id=session_id, changes=[], description="cached")
     for operation in (store.load_plan, store.delete_session, store.get_session_info):
         with pytest.raises(StorageError):
             operation(session_id)
     with pytest.raises(StorageError):
-        store.save_plan(store._cache[session_id])
+        store.save_plan(plan)
     with pytest.raises(StorageError):
-        Reporter(output_dir=tmp_path).generate_dry_run(store._cache[session_id], "idiomatize", ".")
+        Reporter(output_dir=tmp_path).generate_dry_run(plan, "idiomatize", ".")
 
 
 def test_session_symlink_and_metadata_mismatch(tmp_path, caplog):

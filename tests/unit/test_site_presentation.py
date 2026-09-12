@@ -128,7 +128,7 @@ def test_landing_copy_discloses_limits_and_links_enhancements():
     for disclosure in (
         "Automatic modification is not production-safe",
         "call sites are not rewritten",
-        "Cloud models receive source code",
+        "Model planning sends source code",
         "Hotspots use the cyclomatic threshold",
         "reports",
         "embeddings",

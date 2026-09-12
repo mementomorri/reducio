@@ -42,6 +42,12 @@ def load_config(config_path: str | None = None) -> AppConfig:
             data = {}
         if not isinstance(data, dict):
             raise ConfigError(f"Configuration must be a mapping: {p}")
+        if {"prefer_local", "prefer_remote", "model_tiers", "tier"}.intersection(data):
+            raise ConfigError(
+                "Model tiers/preferences were removed; set llm_api and model explicitly"
+            )
+        if {"api_key", "llm_api_key"}.intersection(data):
+            raise ConfigError("Use REDUCIO_API_KEY in the environment, not configuration")
         if "commit_changes" in data:
             raise ConfigError("commit_changes was removed; remove this setting and commit manually")
         try:
@@ -57,13 +63,27 @@ def load_config(config_path: str | None = None) -> AppConfig:
 
 
 def apply_env(cfg: AppConfig) -> AppConfig:
-    if v := os.environ.get("REDUCIO_MODEL"):
-        cfg.model = v
-    for name, field in (("REDUCIO_PREFER_LOCAL", "prefer_local"), ("REDUCIO_VERBOSE", "verbose")):
-        value = os.environ.get(name, "").strip().lower()
-        if not value:
-            continue
+    if "REDUCIO_PREFER_LOCAL" in os.environ or "REDUCIO_PREFER_REMOTE" in os.environ:
+        raise ConfigError("Model preferences were removed; use REDUCIO_LLM_API and REDUCIO_MODEL")
+    values = cfg.model_dump()
+    for name in (
+        "model",
+        "llm_api",
+        "llm_base_url",
+        "llm_timeout_seconds",
+        "llm_max_tokens",
+        "check_fail_on",
+    ):
+        if value := os.environ.get("REDUCIO_" + name.upper()):
+            values[name] = value
+    value = os.environ.get("REDUCIO_VERBOSE", "").strip().lower()
+    if value:
         if value not in ("1", "true", "yes", "on", "0", "false", "no", "off"):
-            raise ConfigError(f"{name} must be a boolean (true/false, yes/no, on/off, 1/0)")
-        setattr(cfg, field, value in ("1", "true", "yes", "on"))
-    return cfg
+            raise ConfigError("REDUCIO_VERBOSE must be a boolean (true/false, yes/no, on/off, 1/0)")
+        values["verbose"] = value in ("1", "true", "yes", "on")
+    try:
+        return AppConfig.model_validate(values)
+    except ValidationError, TypeError:
+        raise ConfigError(
+            "Invalid REDUCIO environment configuration; check API, timeout and gate settings"
+        ) from None

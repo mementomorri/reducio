@@ -79,7 +79,7 @@ def release_notes(package: dict[str, str]) -> str:
 
 Commit: {package['commit']}
 
-Includes HTML reports and semantic embeddings (`reports,embeddings`). Built with
+Includes HTML reports and semantic embeddings (`reports,embeddings,llm`). Built with
 PyApp 0.29.0 on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl is not supported.
 The executable embeds the same Reducio wheel published to PyPI by this workflow.
 

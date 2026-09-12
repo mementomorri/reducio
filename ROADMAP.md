@@ -109,11 +109,11 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 | `idiomatize` — comprehensions, `is None`, truthiness, membership | bounded support | AST/token-aware, closed built-in cases only; uncertain cases skipped. Optional unverified LLM proposals. |
 | `deduplicate` — embedding clustering → proposed `utils/<symbol>_dedup.py` | done (suggest-only) | Honestly labeled; does **not** remove dupes or rewrite call sites. See Near-term. |
 | `pattern` — factory/strategy/observer/singleton templates | done | Default paths write advisory modules. Opt-in LLM via model configuration. |
-| `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold. |
+| `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold; opt-in `--fail-on` severity gate. |
 | Unified thresholds | done | `check` and `analyze` both read `AppConfig.complexity_thresholds`. |
 | Apply — validated diffs, file snapshots, syntax/metrics checks | done (bounded) | No Git writes; opt-in tests; verified scoped recovery and explicit failures. Not crash-proof/multi-file atomic. |
 | Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducio/sessions/`. |
-| LiteLLM model routing (local Ollama / remote) | done | Opt-in via `--model`; tier config lives in `LLMRouter`. |
+| Explicit compatible APIs | done | Optional `[llm]`; OpenAI Chat Completions or Anthropic Messages format, explicit model/custom URL. No tiers/discovery. |
 | Config: `.reducio.yaml` + `REDUCIO_*` env overrides | done | |
 
 ## Enhancement opportunities

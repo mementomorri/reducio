@@ -12,7 +12,7 @@ from reducio.utils.code_utils import strip_code_fence
 from reducio.workspace import Workspace
 
 if TYPE_CHECKING:
-    from reducio.llm.router import LLMRouter
+    from reducio.llm.router import LLMClient
 
 
 class ModelRewriteError(RuntimeError):
@@ -23,7 +23,7 @@ class BaseAgent:
     def __init__(
         self,
         workspace: Workspace | None = None,
-        llm_router: LLMRouter | None = None,
+        llm_router: LLMClient | None = None,
         session_store: SessionStore | None = None,
     ):
         self.workspace = workspace
@@ -31,7 +31,6 @@ class BaseAgent:
         self.session_store = session_store or SessionStore(
             str(workspace.root / ".reducio" / "sessions") if workspace else ".reducio/sessions"
         )
-        self._session_plans: dict[str, RefactorPlan] = {}
         self._begin_plan()
 
     def _begin_plan(self, allow_fallback: bool = False) -> None:
@@ -44,7 +43,6 @@ class BaseAgent:
 
     def _save_plan(self, plan: RefactorPlan, command_type: str) -> None:
         self.session_store.save_plan(plan, command_type=command_type)
-        self._session_plans[plan.session_id] = plan
 
     def get_plan(self, session_id: str) -> RefactorPlan | None:
         return self.session_store.load_plan(session_id)
@@ -56,7 +54,14 @@ class BaseAgent:
 
     def _llm_enabled(self) -> bool:
         # An explicit model request must not silently degrade when no router is wired.
-        return bool(self.workspace and self.workspace.cfg.model)
+        return bool(
+            self.workspace
+            and (
+                self.workspace.cfg.model
+                or self.workspace.cfg.llm_api
+                or self.workspace.cfg.llm_base_url
+            )
+        )
 
     async def _llm_rewrite(
         self, content: str, path: str, instruction: str, description: str
@@ -78,12 +83,16 @@ class BaseAgent:
             if not code.strip():
                 raise ValueError("Empty model response")
             compile(code, path, "exec")
-        except Exception:
+        except Exception as error:
+            from reducio.llm.router import LLMError
+
+            detail = f": {error}" if isinstance(error, LLMError) else ""
             self.diagnostics.append(
                 PlanDiagnostic(
                     code="model_failed",
                     file=path,
                     message="Model rewrite failed or returned empty/invalid Python"
+                    + detail
                     + (
                         "; explicit fallback enabled"
                         if self.allow_fallback

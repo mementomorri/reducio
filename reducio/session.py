@@ -54,7 +54,6 @@ class SessionStore:
 
     def __init__(self, storage_dir: str = ".reducio/sessions"):
         self.storage_dir = Path(storage_dir)
-        self._cache: dict[str, RefactorPlan] = {}
         self._ensure_storage_dir()
 
     def _ensure_storage_dir(self):
@@ -128,9 +127,6 @@ class SessionStore:
         try:
             write_text(session_path, json.dumps(data, indent=2))
 
-            # Update cache
-            self._cache[plan.session_id] = plan
-
             logger.info(f"Saved session {plan.session_id} ({len(plan.changes)} changes)")
         except Exception as e:
             logger.error(f"Failed to save session {plan.session_id}: {e}")
@@ -147,9 +143,6 @@ class SessionStore:
             The RefactorPlan if found, None otherwise
         """
         session_path = self._get_session_path(session_id)
-        # Validate before using caches; cached data must not bypass replaced files.
-        if session_id in self._cache:
-            self._cache.pop(session_id, None)
 
         if not session_path.exists():
             logger.warning(f"Session {session_id} not found")
@@ -168,7 +161,6 @@ class SessionStore:
             plan = RefactorPlan.model_validate(plan_data)
             if plan.session_id != session_id:
                 raise StorageError("Session ID does not match filename")
-            self._cache[session_id] = plan
 
             logger.info(f"Loaded session {session_id} ({len(plan.changes)} changes)")
             return plan
@@ -218,7 +210,6 @@ class SessionStore:
 
         try:
             session_path.unlink()
-            self._cache.pop(session_id, None)
             logger.info(f"Deleted session {session_id}")
             return True
         except Exception as e:
@@ -251,7 +242,6 @@ class SessionStore:
             if datetime.fromisoformat(created_at_str).timestamp() < cutoff:
                 self._get_session_path(session_path.stem).unlink()
                 session_id = self._metadata_with_session_id(metadata, session_path)["session_id"]
-                self._cache.pop(session_id, None)
                 deleted += 1
                 logger.debug(f"Deleted old session {session_id}")
 
@@ -284,6 +274,4 @@ class SessionStore:
         return SessionInfo.from_dict(self._metadata_with_session_id(metadata, session_path))
 
     def clear_cache(self):
-        """Clear the in-memory cache."""
-        self._cache.clear()
-        logger.debug("Session cache cleared")
+        """Compatibility no-op: sessions are always read and validated from disk."""

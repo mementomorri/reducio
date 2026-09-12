@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
+from pydantic import ValidationError
 
 from reducio import __version__
 from reducio.analysis import analysis_configuration, analyze_files
@@ -48,35 +51,49 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
-_cfg: AppConfig | None = None
-
 
 def _get_cfg(
     config: Path | None,
     verbose: bool | None = None,
     model: str | None = None,
-    prefer_local: bool | None = None,
-    prefer_remote: bool = False,
+    llm_api: str | None = None,
+    llm_base_url: str | None = None,
+    check_fail_on: str | None = None,
 ) -> AppConfig:
-    global _cfg
-    if prefer_local is True and prefer_remote:
-        typer.echo("Choose either --prefer-local or --prefer-remote, not both.", err=True)
-        raise typer.Exit(2)
     try:
         cfg = apply_env(load_config(str(config) if config is not None else None))
+        overrides = {
+            key: value
+            for key, value in (
+                ("verbose", verbose),
+                ("model", model),
+                ("llm_api", llm_api),
+                ("llm_base_url", llm_base_url),
+                ("check_fail_on", check_fail_on),
+            )
+            if value is not None
+        }
+        return AppConfig.model_validate(cfg.model_dump() | overrides)
     except ConfigError as error:
         typer.echo(str(error), err=True)
         raise typer.Exit(2) from None
-    if verbose is not None:
-        cfg.verbose = verbose
-    if model is not None:
-        cfg.model = model
-    if prefer_remote:
-        cfg.prefer_local = False
-    elif prefer_local is not None:
-        cfg.prefer_local = prefer_local
-    _cfg = cfg
-    return _cfg
+    except ValidationError:
+        typer.echo("Invalid configuration: check API format and severity threshold.", err=True)
+        raise typer.Exit(2) from None
+
+
+def _is_interactive() -> bool:
+    unattended = os.environ.get("CI", "").strip().lower() not in ("", "0", "false", "no", "off")
+    return not unattended and sys.stdin.isatty()
+
+
+def _require_approval(yes: bool) -> None:
+    if not yes and not _is_interactive():
+        typer.echo(
+            "Non-interactive application requires --yes; use --dry-run to review a proposal.",
+            err=True,
+        )
+        raise typer.Exit(1)
 
 
 def _resolve_repo(path: Path) -> str:
@@ -95,6 +112,7 @@ def _check_git(path: str, cfg: AppConfig) -> None:
     typer.echo("Warning: uncommitted changes detected.")
     if cfg.pre_approve:
         return
+    _require_approval(False)
     if not typer.confirm("Continue anyway?", default=False):
         raise typer.Exit(1)
 
@@ -189,9 +207,6 @@ def analyze(
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
-    model: str | None = typer.Option(None, "--model"),
-    prefer_local: bool | None = typer.Option(None, "--prefer-local"),
-    prefer_remote: bool = typer.Option(False, "--prefer-remote"),
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
@@ -201,7 +216,7 @@ def analyze(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Scan for complexity hotspots."""
-    cfg = _get_cfg(config, verbose, model, prefer_local, prefer_remote)
+    cfg = _get_cfg(config, verbose)
     with progress("Preparing analysis...", quiet=quiet):
         svc = _new_app(_resolve_repo(path), cfg)
         result = _run(svc.analyze(str(path)))
@@ -312,16 +327,12 @@ def deduplicate(
     output_dir: Path | None = typer.Option(None, "--output-dir"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
-    model: str | None = typer.Option(None, "--model"),
-    prefer_remote: bool = typer.Option(False, "--prefer-remote"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
-    cfg = _get_cfg(config, verbose, model, prefer_remote=prefer_remote)
+    cfg = _get_cfg(config, verbose)
     cfg.pre_approve = yes
     root = _resolve_repo(path)
-    if not dry_run:
-        _check_git(root, cfg)
     with progress("Preparing duplicate detection...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.deduplicate(str(path)))
@@ -331,6 +342,8 @@ def deduplicate(
         return
     if not _has_changes(plan, cfg, path, output_dir, report):
         return
+    _check_git(root, cfg)
+    _require_approval(yes)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
@@ -353,15 +366,15 @@ def idiomatize(
     ),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
+    llm_api: str | None = typer.Option(None, "--llm-api", help="openai or anthropic"),
+    llm_base_url: str | None = typer.Option(None, "--llm-base-url", help="API root including /v1"),
     model: str | None = typer.Option(None, "--model"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Rewrite code to idiomatic Python (e.g. list comprehensions)."""
-    cfg = _get_cfg(config, verbose, model)
+    cfg = _get_cfg(config, verbose, model, llm_api, llm_base_url)
     cfg.pre_approve = yes
     root = _resolve_repo(path)
-    if not dry_run:
-        _check_git(root, cfg)
     with progress("Preparing idiom proposals...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.idiomatize(str(path), allow_fallback=allow_fallback))
@@ -371,6 +384,8 @@ def idiomatize(
         return
     if not _has_changes(plan, cfg, path, output_dir, report):
         return
+    _check_git(root, cfg)
+    _require_approval(yes)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
@@ -395,6 +410,9 @@ def pattern(
     run_tests: bool = typer.Option(
         False, "--run-tests", help="Run target tests after edits; restore on failure"
     ),
+    llm_api: str | None = typer.Option(None, "--llm-api", help="openai or anthropic"),
+    llm_base_url: str | None = typer.Option(None, "--llm-base-url", help="API root including /v1"),
+    model: str | None = typer.Option(None, "--model"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
@@ -404,11 +422,9 @@ def pattern(
             f"Unknown pattern '{pattern_name}'. Choose from: {', '.join(_PATTERNS)}", err=True
         )
         raise typer.Exit(2)
-    cfg = _get_cfg(config)
+    cfg = _get_cfg(config, model=model, llm_api=llm_api, llm_base_url=llm_base_url)
     cfg.pre_approve = yes
     root = _resolve_repo(path)
-    if not dry_run:
-        _check_git(root, cfg)
     with progress("Preparing pattern suggestions...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback))
@@ -418,6 +434,8 @@ def pattern(
         return
     if not _has_changes(plan, cfg, path, output_dir, report):
         return
+    _check_git(root, cfg)
+    _require_approval(yes)
     if not yes and not typer.confirm("Apply changes?", default=False):
         raise typer.Exit(0)
     with progress("Applying changes and validating...", quiet=quiet):
@@ -428,6 +446,7 @@ def pattern(
 @app.command()
 def check(
     path: Path = typer.Argument(Path(".")),
+    fail_on: str | None = typer.Option(None, "--fail-on", help="none, info, warning or critical"),
     config: Path | None = typer.Option(None, "--config", "-c"),
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     report: bool = typer.Option(False, "--report", "-r"),
@@ -435,13 +454,19 @@ def check(
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
-    cfg = _get_cfg(config, verbose)
+    cfg = _get_cfg(config, verbose, check_fail_on=fail_on)
     with progress("Preparing quality check...", quiet=quiet):
         svc = _new_app(_resolve_repo(path), cfg)
         result = _run(svc.check(str(path)))
     typer.echo(
         f"Issues: {result['total_issues']} "
         f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
+    )
+    from reducio.quality_gate import evaluate_gate
+
+    result.update(evaluate_gate(result, cfg.check_fail_on))
+    typer.echo(
+        f"Quality gate: {cfg.check_fail_on}; {'failed' if result['gate_failed'] else 'passed' if cfg.check_fail_on != 'none' else 'disabled'}"
     )
     if cfg.verbose:
         for i in result["issues"]:
@@ -461,6 +486,9 @@ def check(
         typer.echo(f"Quality report: {p}")
     if any(issue["issue_type"] == "parse_error" for issue in result["issues"]):
         typer.echo("Quality check incomplete: some Python files could not be parsed.", err=True)
+        raise typer.Exit(1)
+
+    if result["gate_failed"]:
         raise typer.Exit(1)
 
 
@@ -490,6 +518,7 @@ def apply(
     if not _has_changes(plan, cfg, path, output_dir, report):
         return
     _check_git(str(root), cfg)
+    _require_approval(yes)
     if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
         raise typer.Exit(0)
     with progress("Preparing application...", quiet=quiet):

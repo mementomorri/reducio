@@ -66,6 +66,9 @@ def test_real_saved_apply_shows_diff_with_yes_and_preserves_behavior(tmp_path):
     result = run("idiomatize", target, "--dry-run", "--quiet", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     session = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())["plan"]
+    refused = run("apply", session["session_id"], target, "--quiet", cwd=tmp_path)
+    assert refused.returncode == 1 and "--yes" in refused.stderr
+    assert path.read_text() == source
     result = run("apply", session["session_id"], target, "--yes", "--quiet", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     assert "+++ b/a.py" in result.stdout and result.stdout.index(

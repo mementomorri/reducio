@@ -19,7 +19,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install
-        run: pip install -e ".[dev,embeddings,reports]"
+        run: pip install -e ".[dev,embeddings,reports,llm]"
 
       - name: Tests
         run: pytest tests/ -v

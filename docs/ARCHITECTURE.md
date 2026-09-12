@@ -10,7 +10,7 @@ User
        → reducio.services.App
             → Workspace (repo walk *.py, parse, diff, git, pytest)
             → Agents (analyze, deduplicate, idiomatize, pattern, check)
-            → LLMRouter (LiteLLM; Ollama local-first)
+            → LLMClient (optional explicit compatible API)
             → EmbeddingService ([embeddings] extra)
             → SessionStore (.reducio/sessions)
             → Reporter (.reducio/*.md)
@@ -37,7 +37,7 @@ User
 | `config.py` | Validated YAML + environment; CLI applies explicit overrides last |
 | `models.py` | Pydantic models and `AppConfig` |
 | `agents/*` | Planning agents (idiomatize is Python-only) |
-| `llm/router.py` | LiteLLM tiers |
+| `llm/router.py` | Explicit text-only OpenAI/Anthropic-compatible requests |
 | `embeddings/service.py` | ChromaDB similarity for deduplication |
 
 ## Request flows
@@ -77,13 +77,15 @@ failure; saved-plan replay uses the same dirty-tree warning as planning commands
 
 CLI configuration resolves YAML → environment → explicit options. `App` copies
 an explicitly supplied resolved configuration without reapplying environment.
-This changes precedence, not model-routing tiers or local-only enforcement.
+Model tiers/preferences were removed; requests require explicit API/model configuration.
+`check` defaults to report-only, with an opt-in inclusive severity gate.
+Noninteractive application requires `--yes`. See [API setup and migration](LLM.md).
 
 ## Distribution
 
 - PyPI: `reducio`, entrypoint `reducio.cli:app`
 - **Python 3.14+**
-- Extras: `embeddings`, `reports`, `dev`
+- Extras: `embeddings`, `reports`, `llm`, `dev`
 - Supported usage: GitHub CI (primary), PyPI, and a PyApp executable in GitHub Releases.
   The distribution is `reducio`; CLI/import remain `reducio`. See [installation status](README.md#2-pypi).
 
@@ -95,7 +97,7 @@ This changes precedence, not model-routing tiers or local-only enforcement.
 | Models | Pydantic v2 |
 | Parse | Python AST (metrics), tree-sitter-python (refactoring symbols) |
 | Dashboards | Plotly, optional `[reports]` extra |
-| LLM | LiteLLM |
+| LLM | HTTPX, optional `[llm]` extra, lazy-loaded on request |
 | VCS | GitPython |
 | Dedup | ChromaDB, sentence-transformers |
 

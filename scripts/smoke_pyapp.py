@@ -169,6 +169,7 @@ def smoke(executable: Path, version: str) -> None:
         check_cli(run, str(executable), root, version)
         print("Checking real embeddings and Chroma (first use downloads the model)", flush=True)
         run(str(installed_python), "-I", "-c", EMBEDDING_CHECK, version)
+        run(str(installed_python), "-I", "-c", Path(__file__).with_name("smoke_llm.py").read_text())
         assert run(str(executable), "version", capture=True).stdout.strip() == f"reducio {version}"
         print("PyApp smoke checks passed", flush=True)
 

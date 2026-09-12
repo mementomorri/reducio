@@ -4,6 +4,32 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.mark.parametrize(
+    "field", ["prefer_local", "prefer_remote", "model_tiers", "tier", "api_key", "llm_api_key"]
+)
+def test_retired_or_secret_settings_rejected(tmp_path, field):
+    from pydantic import ValidationError
+
+    from reducio.config import ConfigError, load_config
+    from reducio.models import AppConfig
+
+    path = tmp_path / "config.yaml"
+    path.write_text(f"{field}: SECRET\n")
+    with pytest.raises(ConfigError) as error:
+        load_config(str(path))
+    assert "SECRET" not in str(error.value)
+    with pytest.raises(ValidationError):
+        AppConfig.model_validate({field: "SECRET"})
+
+
+def test_public_complexity_alias():
+    from reducio.metrics import get_complexity
+    from reducio.utils import calculate_complexity
+
+    assert calculate_complexity("x = 1") == get_complexity("x = 1")
+
+
 from reducio.config import ConfigError, apply_env, load_config
 from reducio.models import AppConfig
 
@@ -15,7 +41,8 @@ def test_apply_env_model_override(monkeypatch):
 
 def test_apply_env_prefer_local_false(monkeypatch):
     monkeypatch.setenv("REDUCIO_PREFER_LOCAL", "false")
-    assert apply_env(AppConfig()).prefer_local is False
+    with pytest.raises(ConfigError, match="removed"):
+        apply_env(AppConfig())
 
 
 def test_apply_env_verbose(monkeypatch):
@@ -27,7 +54,7 @@ def test_apply_env_noop_when_unset(monkeypatch):
     for key in ("REDUCIO_MODEL", "REDUCIO_PREFER_LOCAL", "REDUCIO_VERBOSE"):
         monkeypatch.delenv(key, raising=False)
     cfg = apply_env(AppConfig())
-    assert cfg.prefer_local is True
+    assert cfg.llm_api is None
     assert cfg.verbose is False
     assert cfg.model == ""
 
@@ -112,10 +139,8 @@ def test_unreadable_configuration(tmp_path, monkeypatch):
 )
 def test_environment_boolean_both_directions(monkeypatch, value, expected):
     monkeypatch.setenv("REDUCIO_VERBOSE", value)
-    monkeypatch.setenv("REDUCIO_PREFER_LOCAL", value)
-    cfg = apply_env(AppConfig(verbose=not expected, prefer_local=not expected))
+    cfg = apply_env(AppConfig(verbose=not expected))
     assert cfg.verbose is expected
-    assert cfg.prefer_local is expected
 
 
 def test_invalid_environment_boolean(monkeypatch):
@@ -143,11 +168,10 @@ def test_services_preserve_resolved_config(tmp_path, monkeypatch):
 
     monkeypatch.setenv("REDUCIO_MODEL", "env-model")
     monkeypatch.setenv("REDUCIO_VERBOSE", "true")
-    monkeypatch.setenv("REDUCIO_PREFER_LOCAL", "false")
-    cfg = AppConfig(model="cli-model", verbose=False, prefer_local=True)
+    cfg = AppConfig(model="cli-model", verbose=False, llm_api="openai")
     service = App(str(tmp_path), cfg)
     assert service.cfg == cfg
-    assert service.llm.model_override == "cli-model"
+    assert service.llm is None  # no API initialization until a model-enabled command
     service.cfg.include_patterns.append("*.txt")
     assert cfg.include_patterns == ["*.py"]
 

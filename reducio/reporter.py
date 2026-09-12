@@ -56,6 +56,10 @@ class Reporter:
             f"| Info | {result.get('info', 0)} |\n\n",
         ]
         issues = result.get("issues") or []
+        if "gate_threshold" in result:
+            lines.append(
+                f"Quality gate: {result['gate_threshold']}; failed: {result['gate_failed']}\n\n"
+            )
         if issues:
             lines.append(
                 "## Issues\n\n"

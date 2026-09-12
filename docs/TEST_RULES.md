@@ -80,11 +80,12 @@ atomic recovery on all Git/non-Git paths is not implemented. See [SAFETY.md](SAF
 
 ### Test Case: Model Provider Switching
 
-**Scenario**: Configure the tool to use a local Ollama instance for simple tasks and a remote Claude model for architectural planning, if both enabled.
-**Status: partial.** Explicit model/preference configuration exists. CLI settings
-override environment, then the selected YAML file, then defaults. Normal agent
-rewrites require a selected model; task-based tier routing and enforced local-only
-execution are planned. Router unit tests do not demonstrate task-based production routing.
+**Scenario**: Explicitly select an OpenAI/Anthropic-compatible API and model.
+**Status: implemented (mocked API contracts).** CLI settings override environment,
+selected YAML, then defaults. HTTP support is optional and lazy. Missing credentials,
+timeouts, refusals and malformed replies fail planning unless fallback is explicit.
+No automatic model discovery, tiers, retries or provider switching are supported.
+Live provider availability and model-specific compatibility are not certified.
 
 ### Test Case: Functional Parity Validation (Pass@1)
 

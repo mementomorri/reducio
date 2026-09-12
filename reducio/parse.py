@@ -5,6 +5,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
+from reducio.utils.code_utils import find_python_block_end
+
 if TYPE_CHECKING:
     from tree_sitter import Parser
 
@@ -59,7 +61,7 @@ def _walk_python(
             if name_node:
                 name = name_node.text.decode()
                 start = child.start_point[0] + 1
-                end = _python_block_end(lines, start - 1)
+                end = find_python_block_end(lines, start - 1)
                 out.append(
                     Symbol(name=name, type="class", file=path, start_line=start, end_line=end)
                 )
@@ -81,14 +83,3 @@ def _walk_python(
                 )
         out.extend(_walk_python(child, source, path, lines, cls, indent))
     return out
-
-
-def _python_block_end(lines: list[str], start: int) -> int:
-    if start >= len(lines):
-        return len(lines)
-    base = len(lines[start]) - len(lines[start].lstrip())
-    for i in range(start + 1, len(lines)):
-        line = lines[i]
-        if line.strip() and (len(line) - len(line.lstrip())) <= base:
-            return i
-    return len(lines)

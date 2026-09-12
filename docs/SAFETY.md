@@ -4,6 +4,12 @@ Application edits files only. It never stages, commits, resets, or stashes Git s
 Review proposals before applying; syntax checks and passing tests do not prove
 behavioral equivalence. Model-generated changes remain unverified proposals.
 
+Nonempty application in CI or with non-TTY stdin requires an explicit CLI
+`--yes`; configuration cannot grant unattended approval. Dry runs and empty
+plans do not prompt. `--yes` does not bypass validation or suppress dirty warnings.
+Model planning sends source to the configured API even in dry-run mode; see
+[API setup and privacy](LLM.md). Saved-plan replay makes no model request.
+
 ## Pipeline
 
 1. Validate plan completeness, paths, syntax, definition names, destination

@@ -1,11 +1,13 @@
 # **reducio** Engineering the Autonomous Code Compression Utility: A Professional Framework for Semantic Refactoring
 
-> **Implementation (v1.0):** Python 3.14+ CLI (`reducio` distribution, `reducio` command/import). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the experimental modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are implemented. First publication is pending; see the user guide: [README.md](README.md). Shipped vs planned: [ROADMAP.md](../ROADMAP.md).
+> **Implementation (v1.0):** Python 3.14+ CLI (`reducio` distribution, `reducio` command/import). Single Python package; analyzes and refactors **Python (`.py`) code only**. Both the read-only analyzer lane and the experimental modifier lane (`idiomatize`/`pattern`/`deduplicate` apply, `apply`) are implemented. PyPI publication is configured; see the user guide: [README.md](README.md). Shipped vs planned: [ROADMAP.md](../ROADMAP.md).
 >
 > - **Maintain the code:** [ONBOARDING.md](ONBOARDING.md)
 > - **Module layout and flows:** [ARCHITECTURE.md](ARCHITECTURE.md)
 > - **Apply safety model:** [SAFETY.md](SAFETY.md)
-> - **This document:** product vision and research (not a runbook)
+> - **This document:** historical product vision and research (not a runbook).
+>   LiteLLM/tier proposals below are superseded by [explicit compatible APIs](LLM.md);
+>   v1 deduplication remains suggestion-only.
 
 The contemporary software development landscape is increasingly defined by a tension between rapid feature delivery and the escalating cognitive load required to maintain expansive codebases. As projects evolve, the accumulation of technical debt, redundant logic, and non-idiomatic implementation patterns creates a barrier to developer comprehension and velocity. The introduction of agentic artificial intelligence provides a novel mechanism for addressing these challenges through autonomous, context-aware code refactoring. This report delineates the design and implementation of a local command-line interface (CLI) application engineered to explore, optimize, and compress codebases. The objective is to minimize the scope of code requiring human understanding by replacing repeating patterns and verbose structures with high-level abstractions and popular design patterns.
 

@@ -1,5 +1,7 @@
 # reducio
 
+Optional model proposals: [API setup and migration](docs/LLM.md).
+
 **Semantic code compression for Python codebases.**
 
 Install, usage, and architecture: **[docs/README.md](docs/README.md)**

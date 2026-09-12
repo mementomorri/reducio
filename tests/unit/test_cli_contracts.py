@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from reducio.cli import app
-from reducio.models import AppConfig, FileChange, RefactorPlan, RefactorResult
+from reducio.models import FileChange, RefactorPlan, RefactorResult
 from reducio.session import SessionStore
 
 COMMANDS = ["deduplicate", "idiomatize", "pattern", "apply"]
@@ -51,6 +51,7 @@ def test_report_failure_distinguishes_applied_state(cli_case, monkeypatch, succe
 
 @pytest.fixture
 def cli_case(tmp_path, monkeypatch):
+    monkeypatch.setattr("reducio.cli._is_interactive", lambda: True)
     monkeypatch.chdir(tmp_path)
     for key in ("REDUCIO_MODEL", "REDUCIO_VERBOSE", "REDUCIO_PREFER_LOCAL"):
         monkeypatch.delenv(key, raising=False)
@@ -204,51 +205,45 @@ def test_invalid_explicit_config_is_clean_error(tmp_path, monkeypatch, command):
 @pytest.mark.parametrize(
     "options,environment,expected",
     [
-        ([], {}, ("file-model", False, True)),
+        ([], {}, ("file-model", "anthropic", True)),
         (
             [],
-            {
-                "REDUCIO_MODEL": "env-model",
-                "REDUCIO_PREFER_LOCAL": "true",
-                "REDUCIO_VERBOSE": "false",
-            },
-            ("env-model", True, False),
+            {"REDUCIO_MODEL": "env-model", "REDUCIO_LLM_API": "openai", "REDUCIO_VERBOSE": "false"},
+            ("env-model", "openai", False),
         ),
         (
-            ["--model", "cli-model", "--prefer-local", "-v"],
-            {
-                "REDUCIO_MODEL": "env-model",
-                "REDUCIO_PREFER_LOCAL": "false",
-                "REDUCIO_VERBOSE": "false",
-            },
-            ("cli-model", True, True),
+            ["--model", "cli-model", "--llm-api", "anthropic", "-v"],
+            {"REDUCIO_MODEL": "env-model", "REDUCIO_LLM_API": "openai", "REDUCIO_VERBOSE": "false"},
+            ("cli-model", "anthropic", True),
         ),
-        (
-            ["--model", "", "--prefer-remote", "--no-verbose"],
-            {
-                "REDUCIO_MODEL": "env-model",
-                "REDUCIO_PREFER_LOCAL": "true",
-                "REDUCIO_VERBOSE": "true",
-            },
-            ("", False, False),
-        ),
+        (["--model", "", "--no-verbose"], {"REDUCIO_MODEL": "env-model"}, ("", "anthropic", False)),
     ],
 )
 def test_cli_configuration_precedence(cli_case, monkeypatch, options, environment, expected):
-    Path(".reducio.yaml").write_text("model: file-model\nprefer_local: false\nverbose: true\n")
+    Path(".reducio.yaml").write_text("model: file-model\nllm_api: anthropic\nverbose: true\n")
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
-    from reducio.analysis import analyze_files
-
-    cli_case.service.analyze = AsyncMock(return_value=analyze_files([], AppConfig()))
-    result = cli_case.invoke("analyze", *options)
+    result = cli_case.invoke("idiomatize", "--dry-run", *options)
     assert result.exit_code == 0, result.output
     cfg = cli_case.factory.call_args.args[1]
-    assert (cfg.model, cfg.prefer_local, cfg.verbose) == expected
+    assert (cfg.model, cfg.llm_api, cfg.verbose) == expected
 
 
-def test_conflicting_preferences_do_not_initialize(cli_case):
+def test_retired_preferences_do_not_initialize(cli_case):
     result = cli_case.invoke("analyze", "--prefer-local", "--prefer-remote")
     assert result.exit_code == 2
-    assert "not both" in result.output
     cli_case.factory.assert_not_called()
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+@pytest.mark.parametrize("yes,empty", [(False, False), (True, False), (False, True)])
+def test_unattended_application_requires_yes(cli_case, monkeypatch, command, yes, empty):
+    monkeypatch.setattr("reducio.cli._is_interactive", lambda: False)
+    if empty:
+        cli_case.plan.changes.clear()
+        SessionStore().save_plan(cli_case.plan)
+    result = cli_case.invoke(command, "--quiet", *(["--yes"] if yes else []))
+    assert result.exit_code == (0 if yes or empty else 1), result.output
+    if not yes and not empty:
+        assert "--yes" in result.output and "--dry-run" in result.output
+        cli_case.service.apply_plan.assert_not_called()

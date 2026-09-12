@@ -25,7 +25,7 @@ New contributors: start with [ONBOARDING.md](ONBOARDING.md) for environment setu
 ## Run tests
 
 ```bash
-pip install -e ".[dev,embeddings,reports]"
+pip install -e ".[dev,embeddings,reports,llm]"
 pytest tests/ -v
 ```
 
@@ -68,7 +68,7 @@ universal behavior-preservation or recovery guarantees:
 | No valid `.py` becomes invalid after `idiomatize --yes` | `tests/e2e/test_cli_smoke.py::test_idiomatize_never_breaks_valid_python` |
 | Context mismatch / truncation drift raises `DiffError` | `tests/unit/test_diff.py` |
 | Invalid Python / create-over-existing / non-git failure roll back | `tests/unit/test_workspace.py` |
-| LLM tier/local/remote routing | `tests/unit/test_router.py` |
+| Explicit compatible APIs (mocked; no live calls) | `tests/unit/test_router.py` |
 
 ## Lint
 

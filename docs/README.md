@@ -26,6 +26,7 @@ upload on 2026-09-12:
 pip install reducio
 pip install "reducio[reports]"     # interactive HTML dashboards
 pip install "reducio[embeddings]"  # semantic duplicate detection
+pip install "reducio[llm]"         # optional compatible API proposals
 reducio analyze . --report
 ```
 
@@ -49,7 +50,7 @@ There are no legacy command/import aliases. The repository and Pages links use
 ### 3. GitHub Releases executable
 
 After successful PyPI verification, tagged releases built by Publish provide a Linux x64 executable
-with `reports` and `embeddings` enabled. Download the executable and matching
+with `reports`, `embeddings` and dormant `llm` support enabled. Download the executable and matching
 `.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducio/releases).
 The executable and release title use the pushed tag: `v0.1.0` produces
 `reducio-v0.1.0`. Replace `v0.1.0` below with your chosen release tag:
@@ -93,7 +94,7 @@ documented separately in [ONBOARDING.md](ONBOARDING.md).
 
 - **Python 3.14+** (provisioned automatically by the Linux executable)
 - *(Optional)* **Ollama** for local LLM inference
-- *(Optional)* API keys for cloud models via LiteLLM
+- *(Optional)* `[llm]` extra and an API token for [explicit compatible APIs](LLM.md)
 
 ## Usage
 
@@ -138,20 +139,21 @@ Flags are command-specific, not global:
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `check` | `--report` / `-r` |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |
-| `deduplicate` | `--prefer-remote` |
-| `analyze`, `deduplicate`, `idiomatize` | `--model` |
-| `analyze` | `--prefer-local`, `--prefer-remote` (mutually exclusive) |
+| `idiomatize`, `pattern` | `--model`, `--llm-api openai\|anthropic`, `--llm-base-url` |
+| `check` | `--fail-on none\|info\|warning\|critical` (default `none`) |
 | `analyze`, `compare` | `--format markdown\|json\|html\|all` |
 | `analyze`, `compare`, `check`, `deduplicate`, `idiomatize`, `pattern`, `apply` | `--output-dir` |
 | `compare` | Required `--base`, optional `--head` (default `HEAD`) |
 | `report` | `--config` / `-c`, `--path` / `-C`, `--output-dir`; optional positional session ID |
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
 
-`pattern` has no `--model` flag; set `model` in configuration or `REDUCIO_MODEL`.
+Model rewriting requires an explicit API format and model. See [API setup](LLM.md).
 Selected-model failures stop planning by default (exit 1). `--allow-fallback`
 explicitly permits fallback, with a warning and recorded provenance. A valid
 unchanged model response is not a failure and does not trigger heuristics.
-Preference is not an enforced local-only mode: cloud models receive source text.
+Model planning sends source text to the configured endpoint, including during dry runs.
+There is no model discovery or provider switching. In CI/non-TTY, nonempty application
+requires explicit `--yes`; dry runs and empty plans do not require approval.
 
 For `analyze` and `compare`, add `--report --format all` for Markdown, JSON, and an
 offline HTML dashboard, or choose one format. `--output-dir` controls where those
@@ -192,7 +194,7 @@ to bypass prompts; other modifier configuration policies remain separate work.
 
 ## Architecture
 
-Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (LiteLLM + optional embeddings). Plans persist under `.reducio/sessions/`.
+Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (optional compatible APIs + optional embeddings). Plans persist under `.reducio/sessions/`.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md).
 

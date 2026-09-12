@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import ast
 import difflib
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from reducio.llm import LLMClient
 
 from reducio.agents import (
     AnalyzerAgent,
@@ -14,7 +17,6 @@ from reducio.agents import (
     QualityCheckerAgent,
 )
 from reducio.config import apply_env, load_config
-from reducio.llm import LLMRouter
 from reducio.models import (
     AnalyzeRequest,
     AnalyzeResult,
@@ -39,11 +41,7 @@ class App:
         self.root = root
         self.workspace = Workspace(root, self.cfg)
         self.sessions = SessionStore(storage_dir=str(self.workspace.root / ".reducio" / "sessions"))
-        self.llm = LLMRouter(
-            verbose=self.cfg.verbose,
-            model_override=self.cfg.model or None,
-            prefer_local=self.cfg.prefer_local,
-        )
+        self.llm: LLMClient | None = None
         self._embedding = None
         self.analyzer = AnalyzerAgent(self.workspace)
         self.quality = QualityCheckerAgent(self.workspace)
@@ -71,6 +69,7 @@ class App:
         return await agent.find_duplicates(DeduplicateRequest(path=path, files=files))
 
     async def idiomatize(self, path: str, *, allow_fallback: bool = False) -> RefactorPlan:
+        self._prepare_llm()
         agent = IdiomatizerAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing idioms and preparing proposals...")
@@ -81,6 +80,8 @@ class App:
     async def pattern(
         self, pattern_name: str, path: str, *, allow_fallback: bool = False
     ) -> RefactorPlan:
+        if pattern_name:
+            self._prepare_llm()
         agent = PatternAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing patterns and preparing suggestions...")
@@ -94,7 +95,17 @@ class App:
         files = self._files()
         status("Checking naming, function length, and complexity...")
         report = await self.quality.check_quality(files, path)
-        return report.to_dict()
+        result = report.to_dict()
+        from reducio.quality_gate import evaluate_gate
+
+        result.update(evaluate_gate(result, self.cfg.check_fail_on))
+        return result
+
+    def _prepare_llm(self) -> None:
+        if self.llm is None and (self.cfg.model or self.cfg.llm_api or self.cfg.llm_base_url):
+            from reducio.llm import LLMClient
+
+            self.llm = LLMClient(self.cfg)
 
     def apply_plan(self, plan: RefactorPlan, run_tests: bool = False) -> RefactorResult:
         errors = validate_plan(plan, self.workspace.root)

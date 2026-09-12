@@ -90,7 +90,7 @@ jobs:
           PYAPP_EXEC_SPEC: reducio.cli:app
           PYAPP_PYTHON_VERSION: '3.14'
           PYAPP_DISTRIBUTION_VARIANT_CPU: v1
-          PYAPP_PROJECT_FEATURES: reports,embeddings
+          PYAPP_PROJECT_FEATURES: reports,embeddings,llm
           PYAPP_SELF_COMMAND: none
           PYAPP_VERSION: '0.29.0'
           BINARY_NAME: ${{ steps.package.outputs.binary_name }}
