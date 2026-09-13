@@ -2,6 +2,23 @@
 
 Requires **Python 3.14+** (matches CI and `pyproject.toml`).
 
+## Section 4 verification — 2026-09-13
+
+Verified `134ffb3` plus the test-import ordering fix: **485 passed, no expected
+failures, 92.71% coverage**; CLI **92%**, API client and quality gate **100%**.
+Ruff, Black, mypy, wheel/sdist build and fixture-preservation checks pass.
+A fresh isolated local-wheel install passes import/version and analysis/check
+Markdown reporting; the base installation contains no HTTPX. Adding `[llm]`
+passes both compatible API contracts through mock transports outside the checkout.
+Official OpenAI documentation informed the request schema; no live model request,
+publication, remote workflow or full PyApp build was performed. Release smoke
+scripts now also verify the bundled API client with fake credentials and mocks.
+
+The tests cover inclusive severity thresholds, configuration precedence, reports
+before gate failure, unattended approval, API request/response formats, sanitized
+errors, deadlines, explicit fallback and saved-plan replay without an API call.
+See [API setup/migration](LLM.md) and [CI policy](GITHUB_CI.md).
+
 ## Section 3 verification — 2026-09-12
 
 Verified `fe52767` plus the fresh-local/finalizer hardening: **419 passed, no

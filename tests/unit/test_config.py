@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from reducio.config import ConfigError, apply_env, load_config
+from reducio.models import AppConfig
+
 
 @pytest.mark.parametrize(
     "field", ["prefer_local", "prefer_remote", "model_tiers", "tier", "api_key", "llm_api_key"]
@@ -28,10 +31,6 @@ def test_public_complexity_alias():
     from reducio.utils import calculate_complexity
 
     assert calculate_complexity("x = 1") == get_complexity("x = 1")
-
-
-from reducio.config import ConfigError, apply_env, load_config
-from reducio.models import AppConfig
 
 
 def test_apply_env_model_override(monkeypatch):
