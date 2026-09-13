@@ -9,11 +9,16 @@ from pathlib import Path
 
 from reducio.models import AnalyzeResult, AppConfig, RefactorPlan, RefactorResult
 from reducio.plan_review import plan_preview, terminal_text
-from reducio.storage import StorageError, checked_file, read_text, validate_session_id, write_text
-
-
-def _md_cell(value: object) -> str:
-    return str(value).replace("|", "/").replace("\n", " ")
+from reducio.presentation import markdown_cell as _md_cell
+from reducio.presentation import table
+from reducio.storage import (
+    StorageError,
+    checked_file,
+    read_text,
+    report_stem,
+    validate_session_id,
+    write_text,
+)
 
 
 class Reporter:
@@ -43,46 +48,40 @@ class Reporter:
         return write_reports(result, self.output_dir)[0]
 
     def generate_check(self, result: dict) -> Path:
-        name = f"reducio-check-{datetime.now().strftime('%Y%m%d-%H%M%S')}.md"
+        name = report_stem("check") + ".md"
         path = self._path(name)
         lines = [
             "# reducio Quality Check Report\n",
             f"**Generated:** {datetime.now().isoformat()}\n\n",
             "## Summary\n\n",
-            "| Metric | Value |\n|--------|-------|\n",
-            f"| Total Issues | {result.get('total_issues', 0)} |\n",
-            f"| Critical | {result.get('critical', 0)} |\n",
-            f"| Warning | {result.get('warning', 0)} |\n",
-            f"| Info | {result.get('info', 0)} |\n\n",
+            table(
+                ["Metric", "Value"],
+                [
+                    [label, result.get(key, 0)]
+                    for label, key in (
+                        ("Total Issues", "total_issues"),
+                        ("Critical", "critical"),
+                        ("Warning", "warning"),
+                        ("Info", "info"),
+                    )
+                ],
+            )
+            + "\n",
         ]
         issues = result.get("issues") or []
         if "gate_threshold" in result:
             lines.append(
-                f"Quality gate: {result['gate_threshold']}; failed: {result['gate_failed']}\n\n"
+                f"Quality gate: {_md_cell(result['gate_threshold'])}; failed: {result['gate_failed']}\n\n"
             )
         if issues:
+            keys = ("severity", "issue_type", "file", "line", "symbol", "message", "suggestion")
             lines.append(
                 "## Issues\n\n"
-                "| Severity | Type | File | Line | Symbol | Message | Suggestion |\n"
-                "|----------|------|------|------|--------|---------|------------|\n"
-            )
-            for i in issues:
-                lines.append(
-                    "| "
-                    + " | ".join(
-                        _md_cell(i.get(k, ""))
-                        for k in (
-                            "severity",
-                            "issue_type",
-                            "file",
-                            "line",
-                            "symbol",
-                            "message",
-                            "suggestion",
-                        )
-                    )
-                    + " |\n"
+                + table(
+                    ["Severity", "Type", "File", "Line", "Symbol", "Message", "Suggestion"],
+                    [[issue.get(key, "") for key in keys] for issue in issues],
                 )
+            )
         write_text(path, "".join(lines))
         return path
 
@@ -111,20 +110,17 @@ class Reporter:
         content += "\n".join(_md_cell(e) for e in result.recovery_errors) + "\n\n"
         content += "Metrics v2; whole affected Python files, not snippets.\n\n"
         content += "| State | LOC | Cyclomatic | Cognitive |\n|---|---:|---:|---:|\n"
-        from collections import defaultdict
-
-        from reducio.compare import _comparison
-        from reducio.services import _totals
+        from reducio.analysis import match_functions, totals
 
         for label, measurement in (
             ("Before", result.measurements_before),
             ("Attempted", result.measurements_attempted),
             ("Retained", result.measurements_after),
         ):
-            totals = _totals(measurement)
+            measured = totals(measurement)
             values = (
-                f"{totals.lines_of_code} | {totals.cyclomatic_complexity} | {totals.cognitive_complexity}"
-                if totals
+                f"{measured.lines_of_code} | {measured.cyclomatic_complexity} | {measured.cognitive_complexity}"
+                if measured
                 else "unavailable | unavailable | unavailable"
             )
             content += f"| {label} | {values} |\n"
@@ -136,28 +132,32 @@ class Reporter:
             if not before or not before.complete or not measurement or not measurement.complete:
                 continue
             content += f"\n## {label} function changes\n\n"
-            content += "| Function | Status | Δ cyclomatic | Δ cognitive |\n|---|---|---:|---:|\n"
-            indexes = []
-            for snapshot in (before, measurement):
-                index = defaultdict(list)
-                for function in snapshot.functions:
-                    index[(function.file, function.qualified_name, function.kind)].append(function)
-                indexes.append(index)
-            for key in sorted(indexes[0].keys() | indexes[1].keys()):
-                left, right = indexes[0][key], indexes[1][key]
-                if len(left) > 1 or len(right) > 1:
-                    content += f"| {_md_cell(':'.join(key))} | ambiguous | — | — |\n"
-                    continue
-                comparison = _comparison(
-                    left[0] if left else None,
-                    right[0] if right else None,
-                    self.cfg.complexity_thresholds.cyclomatic_complexity,
+            comparisons, notes = match_functions(
+                before, measurement, self.cfg.complexity_thresholds.cyclomatic_complexity
+            )
+            if notes:
+                content += "\n\n".join(_md_cell(note) for note in notes) + "\n\n"
+            rows = []
+            for comparison in comparisons:
+                function = comparison.after or comparison.before
+                key = (function.file, function.qualified_name, function.kind)
+                rows.append(
+                    [
+                        ":".join(key),
+                        comparison.status,
+                        (
+                            comparison.cyclomatic_delta
+                            if comparison.cyclomatic_delta is not None
+                            else "—"
+                        ),
+                        (
+                            comparison.cognitive_delta
+                            if comparison.cognitive_delta is not None
+                            else "—"
+                        ),
+                    ]
                 )
-                content += (
-                    f"| {_md_cell(':'.join(key))} | {comparison.status} | "
-                    f"{comparison.cyclomatic_delta if comparison.cyclomatic_delta is not None else '—'} | "
-                    f"{comparison.cognitive_delta if comparison.cognitive_delta is not None else '—'} |\n"
-                )
+            content += table(["Function", "Status", "Δ cyclomatic", "Δ cognitive"], rows)
         write_text(
             self._path(f"reducio-report-{validate_session_id(result.session_id)}.json"),
             result.model_dump_json(indent=2),

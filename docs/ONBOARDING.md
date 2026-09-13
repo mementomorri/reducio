@@ -25,7 +25,7 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 | `reducio/cli.py` | Typer entrypoint |
 | `reducio/services.py` | `App` orchestration |
 | `reducio/workspace.py` | Repo I/O, parse, apply, git, tests |
-| `reducio/parse.py` | tree-sitter-python |
+| `reducio/parse.py` | Standard-library AST symbols |
 | `reducio/agents/` | Analyzer, deduplicator, idiomatizer, pattern, quality |
 | `tests/` | pytest (unit, scenario, e2e) |
 | `test-python-code/python/` | Fixture corpus |
@@ -92,7 +92,8 @@ above is for contributors. Public usage routes are CI, PyPI, and Releases execut
 
 | Workflow | Role |
 |----------|------|
-| `test.yml` | pytest, lint, wheel |
+| `test.yml` | Shared pytest/branch-coverage, lint, build and isolated wheel smoke gate |
+| `publish.yml` | Shared verification → PyPI → published-wheel check → PyApp Release |
 | `analysis.yml` | Source overview on pushes/manual runs; independent PR comparison job |
 
 See [CI.md](CI.md) for report access and [METRICS.md](METRICS.md) before changing
@@ -112,6 +113,6 @@ reducio deduplicate test-python-code/python --dry-run
 | CLI | `reducio/cli.py` |
 | Empty plan | `reducio/agents/*` |
 | Parse/symbols | `reducio/parse.py`, `reducio/repo.py` |
-| Apply/rollback | `reducio/workspace.py`, `diff.py`, `runner.py` (see [SAFETY.md](SAFETY.md)) |
+| Apply/rollback | `reducio/workspace.py`, `recovery.py`, `runner.py` (see [SAFETY.md](SAFETY.md)) |
 | LLM | `reducio/llm/router.py` |
 | Sessions | `.reducio/sessions/`, `session.py` |

@@ -80,8 +80,8 @@ async def test_observer_pattern_on_event_keywords():
 
 @pytest.mark.asyncio
 async def test_unknown_pattern_returns_no_changes():
-    plan = await _apply("banana", "x = 1\n")
-    assert plan.changes == []
+    with pytest.raises(ValueError, match="Unknown"):
+        await _apply("banana", "x = 1\n")
 
 
 @pytest.mark.asyncio

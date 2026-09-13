@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from enum import StrEnum
 from html import escape
 from pathlib import Path
 from typing import Any
 
 from reducio.models import AnalyzeResult, CompareResult, FunctionMetrics
+from reducio.presentation import table as _table
 from reducio.progress import status
+from reducio.storage import checked_file, report_stem, write_text
 
 Result = AnalyzeResult | CompareResult
 
@@ -116,22 +117,6 @@ def _summary(result: Result) -> list[tuple[str, str]]:
         ("Complexity Hotspots", str(result.total_hotspots)),
         ("Physical source lines", str(sum(result.file_lines.values()))),
     ]
-
-
-def _table(headers: list[str], rows: list[list[Any]], html: bool = False) -> str:
-    if html:
-        header = "".join(f'<th scope="col">{escape(h)}</th>' for h in headers)
-        body = "".join(
-            "<tr>" + "".join(f"<td>{escape(str(c))}</td>" for c in row) + "</tr>" for row in rows
-        )
-        return f'<div class="table-scroll"><table><thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>'
-
-    def cell(value):
-        return escape(str(value)).replace("|", "&#124;").replace("\n", " ")
-
-    lines = ["| " + " | ".join(headers) + " |", "| " + " | ".join("---" for _ in headers) + " |"]
-    lines.extend("| " + " | ".join(cell(c) for c in row) + " |" for row in rows)
-    return "\n".join(lines) + "\n"
 
 
 def _rows(result: Result) -> tuple[list[str], list[list[Any]]]:
@@ -473,10 +458,10 @@ def write_reports(
     result: Result, output_dir: str | Path, format: ReportFormat = ReportFormat.MARKDOWN
 ) -> list[Path]:
     output = Path(output_dir)
+    checked_file(output, "probe")
     output.mkdir(parents=True, exist_ok=True)
     kind = "compare" if isinstance(result, CompareResult) else "baseline"
-    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
-    stem = f"reducio-{kind}-{stamp}"
+    stem = report_stem(kind)
     paths = []
     formats = (
         [ReportFormat.MARKDOWN, ReportFormat.JSON, ReportFormat.HTML]
@@ -492,6 +477,6 @@ def write_reports(
         else:
             suffix, content = "html", html_report(result)
         path = output / f"{stem}.{suffix}"
-        path.write_text(content, encoding="utf-8")
+        write_text(path, content)
         paths.append(path)
     return paths

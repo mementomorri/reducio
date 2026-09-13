@@ -1,8 +1,15 @@
-"""Tests for code_utils helpers."""
+"""Tests for the code helpers still used by agents."""
 
-from reducio.utils.code_utils import find_python_block_end
+import pytest
+
+from reducio.utils.code_utils import strip_code_fence, to_pascal_case, to_snake_case
 
 
-def test_find_python_block_end_uses_indent():
-    lines = ["def foo():", "    a = 1", "    b = 2", "def bar():"]
-    assert find_python_block_end(lines, 0) == 3
+def test_name_suggestions():
+    assert to_snake_case("someName") == "some_name"
+    assert to_pascal_case("some_name") == "SomeName"
+
+
+@pytest.mark.parametrize("text", ["pass", "```python\npass\n```", "```\npass\n```"])
+def test_strip_code_fence(text):
+    assert strip_code_fence(text) == "pass"

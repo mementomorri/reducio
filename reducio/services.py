@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-import difflib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -16,12 +15,12 @@ from reducio.agents import (
     PatternAgent,
     QualityCheckerAgent,
 )
+from reducio.analysis import totals
 from reducio.config import apply_env, load_config
 from reducio.models import (
     AnalyzeRequest,
     AnalyzeResult,
     AppConfig,
-    ComplexityMetrics,
     DeduplicateRequest,
     FileInfo,
     IdiomatizeRequest,
@@ -143,7 +142,9 @@ class App:
             for relative in paths:
                 path = safe_target(self.workspace.root, relative)
                 if path.exists():
-                    files.append(FileInfo(path=relative, content=path.read_bytes().decode("utf-8")))
+                    from reducio.repo import source_file
+
+                    files.append(source_file(relative, path.read_bytes()))
             return analyze_files(files, self.cfg, scope="affected files")
 
         def validate_after():
@@ -166,9 +167,8 @@ class App:
                 measurements_before=before,
             )
 
-        pairs = [(c.path, _change_to_diff(c)) for c in plan.changes]
         result = self.workspace.apply_changes_safe(
-            pairs, run_tests=run_tests, validate_after=validate_after
+            plan.changes, run_tests=run_tests, validate_after=validate_after
         )
         if result["success"]:
             after = attempted if attempted is not None else before
@@ -183,8 +183,8 @@ class App:
             changes=plan.changes if result["success"] else [],
             tests_passed=result["tests_passed"],
             error=result.get("error"),
-            metrics_before=_totals(before),
-            metrics_after=_totals(after),
+            metrics_before=totals(before),
+            metrics_after=totals(after),
             measurements_before=before,
             measurements_after=after,
             measurements_attempted=attempted,
@@ -204,16 +204,6 @@ class App:
         )
 
 
-def _totals(measurement: AnalyzeResult | None) -> ComplexityMetrics | None:
-    if measurement is None or not measurement.complete:
-        return None
-    return ComplexityMetrics(
-        lines_of_code=sum(measurement.file_lines.values()),
-        cyclomatic_complexity=sum(f.cyclomatic_complexity for f in measurement.functions),
-        cognitive_complexity=sum(f.cognitive_complexity for f in measurement.functions),
-    )
-
-
 def _def_names(src: str) -> set[str]:
     try:
         tree = ast.parse(src)
@@ -224,23 +214,3 @@ def _def_names(src: str) -> set[str]:
         for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
     }
-
-
-def _change_to_diff(change) -> str:
-    if not change.original and change.modified:
-        lines = change.modified.splitlines()
-        body = "\n".join(f"+{ln}" for ln in lines)
-        return f"--- /dev/null\n+++ b/{change.path}\n@@ -0,0 +1,{len(lines)} @@\n{body}"
-    # Split on "\n" (not splitlines) so difflib's 1-based line numbers line up
-    # exactly with diff.apply_unified_diff's split("\n") — context validation then
-    # passes when disk == original and fails loudly on real drift.
-    diff = list(
-        difflib.unified_diff(
-            change.original.split("\n"),
-            change.modified.split("\n"),
-            fromfile=f"a/{change.path}",
-            tofile=f"b/{change.path}",
-            lineterm="",
-        )
-    )
-    return "\n".join(diff)

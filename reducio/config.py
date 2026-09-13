@@ -50,6 +50,10 @@ def load_config(config_path: str | None = None) -> AppConfig:
             raise ConfigError("Use REDUCIO_API_KEY in the environment, not configuration")
         if "commit_changes" in data:
             raise ConfigError("commit_changes was removed; remove this setting and commit manually")
+        if {"pre_approve", "dry_run", "report"}.intersection(data):
+            raise ConfigError(
+                "Remove pre_approve/dry_run/report settings; use CLI --yes/--dry-run/--report"
+            )
         try:
             return AppConfig.model_validate({**cfg.model_dump(), **data})
         except (ValidationError, TypeError) as error:

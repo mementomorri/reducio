@@ -105,12 +105,12 @@ def _resolve_repo(path: Path) -> str:
     return str(p)
 
 
-def _check_git(path: str, cfg: AppConfig) -> None:
+def _check_git(path: str, yes: bool) -> None:
     git = GitSafety(path)
     if not git.is_repo() or git.is_clean():
         return
     typer.echo("Warning: uncommitted changes detected.")
-    if cfg.pre_approve:
+    if yes:
         return
     _require_approval(False)
     if not typer.confirm("Continue anyway?", default=False):
@@ -118,7 +118,13 @@ def _check_git(path: str, cfg: AppConfig) -> None:
 
 
 def _run(coro):
-    return asyncio.run(coro)
+    try:
+        return asyncio.run(coro)
+    except OSError, StorageError:
+        typer.echo(
+            "Cannot read source or save the plan; check paths and storage permissions.", err=True
+        )
+        raise typer.Exit(1) from None
 
 
 def _show_plan(plan: RefactorPlan) -> None:
@@ -201,6 +207,35 @@ def _dry_run_report(
     _require_complete(plan)
 
 
+def _review_and_apply(
+    svc,
+    plan,
+    cfg,
+    path,
+    output_dir,
+    report,
+    yes,
+    run_tests,
+    quiet,
+    *,
+    dry_run=False,
+    command="apply",
+):
+    _show_plan(plan)
+    if dry_run:
+        _dry_run_report(plan, cfg, command, path, output_dir)
+        return
+    if not _has_changes(plan, cfg, path, output_dir, report):
+        return
+    _check_git(str(path.resolve()), yes)
+    _require_approval(yes)
+    if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
+        raise typer.Exit(0)
+    with progress("Applying changes and validating...", quiet=quiet):
+        result = svc.apply_plan(plan, run_tests=run_tests)
+    _finish_apply(result, cfg, path, output_dir, report)
+
+
 @app.command()
 def analyze(
     path: Path = typer.Argument(Path("."), help="Repository path"),
@@ -250,7 +285,7 @@ def _write_analysis_reports(result, output_dir: Path, format: ReportFormat) -> N
         for path in write_reports(result, output_dir, format):
             label = "Comparison" if isinstance(result, CompareResult) else "Baseline"
             typer.echo(f"{label} report: {path}")
-    except (ReportError, OSError) as error:
+    except (ReportError, OSError, StorageError) as error:
         typer.echo(f"Report failed: {error}", err=True)
         raise typer.Exit(1) from None
 
@@ -331,24 +366,23 @@ def deduplicate(
 ):
     """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
     cfg = _get_cfg(config, verbose)
-    cfg.pre_approve = yes
     root = _resolve_repo(path)
     with progress("Preparing duplicate detection...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.deduplicate(str(path)))
-    _show_plan(plan)
-    if dry_run:
-        _dry_run_report(plan, cfg, "deduplicate", path, output_dir)
-        return
-    if not _has_changes(plan, cfg, path, output_dir, report):
-        return
-    _check_git(root, cfg)
-    _require_approval(yes)
-    if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
-        raise typer.Exit(0)
-    with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan, run_tests=run_tests)
-    _finish_apply(result, cfg, path, output_dir, report)
+    _review_and_apply(
+        svc,
+        plan,
+        cfg,
+        path,
+        output_dir,
+        report,
+        yes,
+        run_tests,
+        quiet,
+        dry_run=dry_run,
+        command="deduplicate",
+    )
 
 
 @app.command()
@@ -373,24 +407,23 @@ def idiomatize(
 ):
     """Rewrite code to idiomatic Python (e.g. list comprehensions)."""
     cfg = _get_cfg(config, verbose, model, llm_api, llm_base_url)
-    cfg.pre_approve = yes
     root = _resolve_repo(path)
     with progress("Preparing idiom proposals...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.idiomatize(str(path), allow_fallback=allow_fallback))
-    _show_plan(plan)
-    if dry_run:
-        _dry_run_report(plan, cfg, "idiomatize", path, output_dir)
-        return
-    if not _has_changes(plan, cfg, path, output_dir, report):
-        return
-    _check_git(root, cfg)
-    _require_approval(yes)
-    if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
-        raise typer.Exit(0)
-    with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan, run_tests=run_tests)
-    _finish_apply(result, cfg, path, output_dir, report)
+    _review_and_apply(
+        svc,
+        plan,
+        cfg,
+        path,
+        output_dir,
+        report,
+        yes,
+        run_tests,
+        quiet,
+        dry_run=dry_run,
+        command="idiomatize",
+    )
 
 
 _PATTERNS = ("factory", "strategy", "observer", "singleton")
@@ -423,24 +456,23 @@ def pattern(
         )
         raise typer.Exit(2)
     cfg = _get_cfg(config, model=model, llm_api=llm_api, llm_base_url=llm_base_url)
-    cfg.pre_approve = yes
     root = _resolve_repo(path)
     with progress("Preparing pattern suggestions...", quiet=quiet):
         svc = _new_app(root, cfg)
         plan = _run(svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback))
-    _show_plan(plan)
-    if dry_run:
-        _dry_run_report(plan, cfg, "pattern", path, output_dir)
-        return
-    if not _has_changes(plan, cfg, path, output_dir, report):
-        return
-    _check_git(root, cfg)
-    _require_approval(yes)
-    if not yes and not typer.confirm("Apply changes?", default=False):
-        raise typer.Exit(0)
-    with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan, run_tests=run_tests)
-    _finish_apply(result, cfg, path, output_dir, report)
+    _review_and_apply(
+        svc,
+        plan,
+        cfg,
+        path,
+        output_dir,
+        report,
+        yes,
+        run_tests,
+        quiet,
+        dry_run=dry_run,
+        command="pattern",
+    )
 
 
 @app.command()
@@ -507,25 +539,14 @@ def apply(
 ):
     """Apply a previously saved plan by session ID."""
     cfg = _get_cfg(config)
-    cfg.pre_approve = yes
     root = Path(_resolve_repo(path))
     plan = _load_plan(root, session_id)
     if not plan:
         typer.echo(f"Session not found: {session_id}", err=True)
         raise typer.Exit(1)
     plan.diagnostics.extend(validate_plan(plan, root))
-    _show_plan(plan)
-    if not _has_changes(plan, cfg, path, output_dir, report):
-        return
-    _check_git(str(root), cfg)
-    _require_approval(yes)
-    if not yes and not typer.confirm(f"Apply {len(plan.changes)} change(s)?", default=False):
-        raise typer.Exit(0)
-    with progress("Preparing application...", quiet=quiet):
-        svc = _new_app(str(root), cfg)
-    with progress("Applying changes and validating...", quiet=quiet):
-        result = svc.apply_plan(plan, run_tests=run_tests)
-    _finish_apply(result, cfg, path, output_dir, report)
+    svc = _new_app(str(root), cfg)
+    _review_and_apply(svc, plan, cfg, path, output_dir, report, yes, run_tests, quiet)
 
 
 @app.command("report")

@@ -17,7 +17,7 @@ from reducio.models import AppConfig, FileChange, FileInfo, RefactorPlan, Refact
 from reducio.reporter import Reporter
 from reducio.runner import ProjectRunner
 from reducio.runner import TestResult as RunnerResult
-from reducio.services import App, _change_to_diff
+from reducio.services import App
 from reducio.workspace import Workspace
 
 
@@ -347,7 +347,7 @@ def test_target_venv_selected(tmp_path):
     assert ProjectRunner(str(tmp_path)).command()[0] == str(python)
 
 
-def test_public_single_diff_uses_recovery(tmp_path):
+def test_public_whole_file_change_uses_recovery(tmp_path):
     plan = plan_for(tmp_path)
-    result = Workspace(str(tmp_path)).apply_diff("a.py", _change_to_diff(plan.changes[0]))
+    result = Workspace(str(tmp_path)).apply_changes_safe(plan.changes)
     assert result["success"] and result["backup_location"]

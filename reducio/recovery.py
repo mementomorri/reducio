@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import stat
-import tempfile
 import uuid
 from pathlib import Path
 
 from reducio.storage import checked_file
+from reducio.storage import replace_bytes as replace_bytes
 
 
 def safe_target(root: Path, relative: str) -> Path:
@@ -27,19 +26,6 @@ def safe_target(root: Path, relative: str) -> Path:
 
 def fingerprint(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
-
-
-def replace_bytes(path: Path, content: bytes, mode: int) -> None:
-    fd, temporary = tempfile.mkstemp(prefix=".reducio-write-", dir=path.parent)
-    try:
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.chmod(temporary, mode)
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
 
 
 class FileSnapshot:

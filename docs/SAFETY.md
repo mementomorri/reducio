@@ -13,7 +13,7 @@ Model planning sends source to the configured API even in dry-run mode; see
 ## Pipeline
 
 1. Validate plan completeness, paths, syntax, definition names, destination
-   collisions, and every diff's context before any target write.
+   collisions, and exact whole-file original bytes before any target write.
 2. Measure whole affected Python files with the shared AST metrics v2 engine.
 3. Save pre-apply bytes, permissions and existence in
    `<target>/.reducio/recovery/<attempt-id>/`, with a JSON manifest and binary backups.
@@ -29,6 +29,10 @@ The same path handles Git repositories, subdirectories, worktrees, unborn
 repositories, and non-Git directories. Symlinks, hardlinked targets, escaped paths,
 Git metadata and reducio's own storage are rejected as modification targets.
 Existing files cannot be overwritten by a create-file proposal.
+Version-2 plans distinguish creates from replacements and record source encoding.
+Native proposals preserve BOMs and line endings; unreadable/invalid inputs make
+planning incomplete. Unified diffs are previews, not the application mechanism.
+See [migration rules](MIGRATION.md) for legacy replay and configuration changes.
 
 ## Opt-in target tests
 

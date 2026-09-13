@@ -54,13 +54,7 @@ class SessionStore:
 
     def __init__(self, storage_dir: str = ".reducio/sessions"):
         self.storage_dir = Path(storage_dir)
-        self._ensure_storage_dir()
-
-    def _ensure_storage_dir(self):
-        """Create storage directory if it doesn't exist."""
         checked_file(self.storage_dir, "probe.json")
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-        logger.debug(f"Session storage directory: {self.storage_dir}")
 
     def _get_session_path(self, session_id: str) -> Path:
         """Get the file path for a session."""
@@ -124,6 +118,7 @@ class SessionStore:
         }
 
         # Write to file
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
         try:
             write_text(session_path, json.dumps(data, indent=2))
 

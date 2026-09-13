@@ -110,7 +110,8 @@ def test_check_report_writes_markdown(sample_repo):
 
 def test_idiomatize_sample_repo(sample_repo):
     r = _run_cli("idiomatize", str(sample_repo), "--yes")
-    assert r.returncode == 0
+    assert r.returncode == 1  # The fixture corpus contains invalid Python.
+    assert "incomplete" in (r.stdout + r.stderr).lower()
 
 
 def test_idiomatize_never_breaks_valid_python(sample_repo):
@@ -119,9 +120,11 @@ def test_idiomatize_never_breaks_valid_python(sample_repo):
     py_files = [p for p in sample_repo.rglob("*.py") if ".reducio" not in p.parts]
     valid_before = {p for p in py_files if _parses(p)}
     assert valid_before  # corpus has real Python to protect
+    original = {p: p.read_bytes() for p in py_files}
 
     r = _run_cli("idiomatize", str(sample_repo), "--yes")
-    assert r.returncode == 0
+    assert r.returncode == 1
+    assert all(p.read_bytes() == data for p, data in original.items())
 
     regressions = [str(p) for p in valid_before if not _parses(p)]
     assert not regressions, f"idiomatize corrupted valid files: {regressions}"

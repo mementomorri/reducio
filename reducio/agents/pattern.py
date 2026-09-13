@@ -1,139 +1,111 @@
-"""
-Pattern agent for applying design patterns.
-"""
+"""AST-selected advisory patterns; named patterns optionally request a model."""
 
+import ast
 import os
-import re
 
 from reducio.agents.base import BaseAgent, ModelRewriteError
-from reducio.models import FileChange, PatternRequest, PlanningProvenance, RefactorPlan
+from reducio.models import (
+    FileChange,
+    PatternRequest,
+    PlanDiagnostic,
+    PlanningProvenance,
+    RefactorPlan,
+)
 from reducio.plan_review import advisory_path, identifier
-from reducio.session import SessionStore
 
 
 class PatternAgent(BaseAgent):
-    def __init__(self, workspace=None, llm_router=None, session_store: SessionStore | None = None):
-        super().__init__(workspace, llm_router, session_store)
-
     async def apply_pattern(self, request: PatternRequest) -> RefactorPlan:
         self._begin_plan(request.allow_fallback)
         pattern = request.pattern.lower()
-        try:
-            if pattern in _DESIGN_PATTERNS:
-                changes = await self._apply_design_pattern(request.files, pattern)
-            elif pattern == "":
-                changes = await self._detect_and_suggest_patterns(request.files)
-            else:
-                changes = []
-        except ModelRewriteError:
-            changes = []
-
+        if pattern and pattern not in _DESIGN_PATTERNS:
+            raise ValueError("Unknown design pattern")
+        selected = [pattern] if pattern else ["strategy", "factory"]
+        changes = []
+        for file in request.files:
+            template_used = False
+            try:
+                tree = file.tree
+            except SyntaxError, ValueError:
+                self.diagnostics.append(
+                    PlanDiagnostic(
+                        code="invalid_source",
+                        file=file.path,
+                        severity="error",
+                        message="Cannot read or parse source; planning incomplete",
+                    )
+                )
+                continue
+            for name in selected:
+                detect, template, subdir = _DESIGN_PATTERNS[name]
+                if not detect(tree):
+                    continue
+                if pattern and self._llm_enabled():
+                    try:
+                        change = await self._llm_rewrite(
+                            file.content,
+                            file.path,
+                            f"Refactor this Python module to use the {name} design pattern idiomatically, preserving behaviour.",
+                            f"LLM {name} refactor",
+                        )
+                        if change:
+                            change.encoding, change.operation = file.encoding, "replace"
+                            changes.append(change)
+                        continue
+                    except ModelRewriteError:
+                        if not self.allow_fallback:
+                            break
+                changes.append(
+                    FileChange(
+                        path=advisory_path(subdir, file.path, name),
+                        original="",
+                        modified=template(file.path),
+                        operation="create",
+                        description=f"Suggest {name.title()} pattern (advisory module)",
+                    )
+                )
+                template_used = True
+            if template_used or not (pattern and self._llm_enabled()):
+                self.provenance.append(
+                    PlanningProvenance(file=file.path, engine="template", outcome="scanned")
+                )
         return self._finalize_plan(
             changes,
             f"Proposed {pattern or 'detected'} design patterns for {len(changes)} locations.",
             "pattern",
-            pattern=pattern if pattern else "auto-detect",
+            pattern=pattern or "auto-detect",
         )
 
-    async def _apply_design_pattern(self, files, pattern: str) -> list[FileChange]:
-        detect, template_fn, subdir = _DESIGN_PATTERNS[pattern]
-        changes = []
-        for file in files:
-            content, path = self._file_content_path(file)
-            if not detect(content):
-                continue
-            if self._llm_enabled():
-                try:
-                    change = await self._llm_rewrite(
-                        content,
-                        path,
-                        f"Refactor this Python module to use the {pattern} design pattern "
-                        "idiomatically, preserving behaviour.",
-                        f"LLM {pattern} refactor",
-                    )
-                    if change:
-                        changes.append(change)
-                    continue
-                except ModelRewriteError:
-                    if not self.allow_fallback:
-                        raise
-            # Every pattern writes a NEW advisory module (original=""); never overwrite the
-            # source file — that discarded the original code (singleton used to do this).
-            module = _module_name(path)
-            changes.append(
-                FileChange(
-                    path=advisory_path(subdir, path, pattern),
-                    original="",
-                    modified=template_fn(path),
-                    description=f"Extract into {pattern.title()} pattern",
-                )
-            )
-            self.provenance.append(
-                PlanningProvenance(file=path, engine="template", outcome="proposed")
-            )
-        return changes
 
-    async def _detect_and_suggest_patterns(self, files) -> list[FileChange]:
-        # Suggestions are written to NEW advisory modules (like the named-pattern path),
-        # never with original="" against the source file — that would prepend the template
-        # into the real file on apply.
-        changes = []
-        for file in files:
-            content, path = self._file_content_path(file)
-            module = _module_name(path)
-            if _has_complex_conditionals(content):
-                changes.append(
-                    FileChange(
-                        path=advisory_path("strategies", path, "strategy"),
-                        original="",
-                        modified=_generate_strategy_template(path),
-                        description="Suggest Strategy pattern for complex conditionals",
-                    )
-                )
-            if _has_conditional_instantiation(content):
-                changes.append(
-                    FileChange(
-                        path=advisory_path("factories", path, "factory"),
-                        original="",
-                        modified=_generate_factory_template(path),
-                        description="Suggest Factory pattern for conditional instantiation",
-                    )
-                )
-            self.provenance.append(
-                PlanningProvenance(file=path, engine="template", outcome="scanned")
-            )
-        return changes
+def _tree(content):
+    return ast.parse(content) if isinstance(content, str) else content
 
 
-def _has_complex_conditionals(content: str) -> bool:
-    return content.count("if ") + content.count("elif ") >= 5
+def _has_complex_conditionals(content) -> bool:
+    return sum(isinstance(n, ast.If) for n in ast.walk(_tree(content))) >= 5
 
 
-def _has_conditional_instantiation(content: str) -> bool:
-    for pattern in ("new ", "= new ", "return new "):
-        if pattern in content and "if " in content:
-            return True
-    if "if " in content:
-        if re.search(r"return\s+\w+Handler\(\)", content):
-            return True
-        if re.search(r"return\s+\w+Factory\(\)", content):
-            return True
-        if re.search(r"return\s+\w+Client\(\)", content):
-            return True
-        if re.search(r"return\s+\w+\(\)", content) and "elif" in content:
-            return True
-    return False
-
-
-def _has_event_handling(content: str) -> bool:
+def _has_conditional_instantiation(content) -> bool:
     return any(
-        kw in content.lower()
-        for kw in ("emit", "trigger", "dispatch", "notify", "subscribe", "on_")
+        isinstance(n, ast.Return) and isinstance(n.value, ast.Call)
+        for branch in ast.walk(_tree(content))
+        if isinstance(branch, ast.If)
+        for n in ast.walk(branch)
     )
 
 
-def _has_global_state(content: str) -> bool:
-    return "global " in content
+def _has_event_handling(content) -> bool:
+    names = {"emit", "trigger", "dispatch", "notify", "subscribe"}
+    return any(
+        (name := getattr(n.func, "id", getattr(n.func, "attr", ""))) in names
+        or name.startswith("on_")
+        for n in ast.walk(_tree(content))
+        if isinstance(n, ast.Call)
+    )
+
+
+def _has_global_state(content) -> bool:
+    return any(isinstance(n, ast.Global) for n in ast.walk(_tree(content)))
 
 
 def _module_name(path: str) -> str:

@@ -1,5 +1,15 @@
 # Implementation assessment
 
+## Reliability review update — 2026-09-13
+
+The follow-up cleanup replaces duplicate parsing/diff/database machinery with
+shared AST analysis, byte-exact versioned changes and run-local NumPy grouping.
+Scanning and AST naming/pattern checks cover previously missed cases; configuration
+typos fail explicitly. Persistence uses shared atomic writes, and publication waits
+for the shared test/lint/build gate with 90% combined statement/branch coverage.
+See [migration notes](MIGRATION.md) and [verification](TEST_IMPLEMENTATION.md).
+Earlier parser, diff-engine and permissive-config descriptions below are historical.
+
 ## Section 4 update — 2026-09-12
 
 Items 27–30 are implemented locally: explicit optional compatible APIs instead of

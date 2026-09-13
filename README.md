@@ -12,6 +12,7 @@ comparisons. The other supported routes are PyPI and a GitHub Releases executabl
 the distribution, CLI, and Python import are all **`reducio`**.
 PyPI publication is configured and the maintainer has confirmed a successful upload.
 Counting rules: [Metrics v2](docs/METRICS.md).
+Upgrading after the reliability cleanup: [migration notes](docs/MIGRATION.md).
 Application uses file snapshots and never commits changes. Tests are opt-in with
 `--run-tests`; see [safety and runner setup](docs/SAFETY.md).
 

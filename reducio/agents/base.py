@@ -126,6 +126,7 @@ class BaseAgent:
         self, changes: list, description: str, command_type: str, **plan_kw
     ) -> RefactorPlan:
         plan = RefactorPlan(
+            schema_version=2,
             session_id=self._generate_session_id(),
             changes=changes,
             description=description,
@@ -133,6 +134,9 @@ class BaseAgent:
             provenance=self.provenance,
             **plan_kw,
         )
+        for change in plan.changes:
+            if change.operation is None:
+                change.operation = "create" if change.creates_file else "replace"
         # Coalesce truly identical changes, but never silently pick one conflicting version.
         unique = []
         for change in plan.changes:

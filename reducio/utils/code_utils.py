@@ -1,30 +1,6 @@
-"""Helpers for quality checker (Python only)."""
+"""Name suggestions and model-response fence handling."""
 
 import re
-
-
-def extract_python_function_name(line: str) -> str:
-    m = re.match(r"(?:async\s+)?def\s+([a-zA-Z_][a-zA-Z0-9_]*)", line)
-    return m.group(1) if m else ""
-
-
-def find_python_block_end(lines: list[str], start: int) -> int:
-    if start >= len(lines):
-        return len(lines)
-    indent = len(lines[start]) - len(lines[start].lstrip())
-    for i in range(start + 1, len(lines)):
-        if lines[i].strip() and (len(lines[i]) - len(lines[i].lstrip())) <= indent:
-            return i
-    return len(lines)
-
-
-def extract_class_name(line: str) -> str:
-    line = line.replace("class ", "").strip()
-    for char in "(:[{":
-        idx = line.find(char)
-        if idx > 0:
-            line = line[:idx]
-    return line.strip()
 
 
 def to_snake_case(name: str) -> str:

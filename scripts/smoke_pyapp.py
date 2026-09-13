@@ -18,6 +18,7 @@ from pathlib import Path
 
 import reducio
 from reducio.embeddings.service import EmbeddingService
+from reducio.models import CodeBlock, ComplexityMetrics, Language
 
 assert sys.version_info[:2] == (3, 14), sys.version
 assert importlib.metadata.version('reducio') == sys.argv[1]
@@ -26,14 +27,15 @@ assert Path(reducio.__file__).is_relative_to(Path(sys.prefix))
 async def check():
     service = EmbeddingService()
     await service.initialize()
-    assert service._use_real_embeddings, 'Real embeddings failed to initialize'
+    assert service.is_using_real_embeddings, 'Real embeddings failed to initialize'
     assert service.model is not None
-    assert service.collection is not None, 'Chroma failed to initialize'
     vector = await service.embed_text('def add(a, b): return a + b')
     assert len(vector) == 384 and all(math.isfinite(value) for value in vector)
-    service.collection.add(ids=['smoke'], embeddings=[vector], documents=['add'])
-    assert service.collection.count() == 1
-    assert service.collection.query(query_embeddings=[vector], n_results=1)['ids'] == [['smoke']]
+    blocks = [CodeBlock(id=str(i), file=f'{i}.py', start_line=1, end_line=2,
+        content='def add(a, b): return a + b', language=Language.PYTHON,
+        symbol_type='function', symbol_name='add', metrics=ComplexityMetrics()) for i in range(12)]
+    groups = await service.find_duplicates(blocks)
+    assert len(groups) == 1 and len(groups[0]) == 12
     await service.shutdown()
 
 asyncio.run(check())
@@ -167,7 +169,10 @@ def smoke(executable: Path, version: str) -> None:
         result = json.loads(next(reports.glob("*.json")).read_text())
         assert result["complete"] and result["total_symbols"] >= 1, result
         check_cli(run, str(executable), root, version)
-        print("Checking real embeddings and Chroma (first use downloads the model)", flush=True)
+        print(
+            "Checking real embeddings and cosine grouping (first use downloads the model)",
+            flush=True,
+        )
         run(str(installed_python), "-I", "-c", EMBEDDING_CHECK, version)
         run(str(installed_python), "-I", "-c", Path(__file__).with_name("smoke_llm.py").read_text())
         assert run(str(executable), "version", capture=True).stdout.strip() == f"reducio {version}"

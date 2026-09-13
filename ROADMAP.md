@@ -5,12 +5,21 @@ What is shipped today versus what is planned. This is the actionable index;
 
 Status legend: **done** = shipped & tested · **planned** = intended next · **idea** = vision, not scheduled.
 
-## Status: analysis/reporting expanded; modifier safety incomplete
+## Status: analysis/reporting implemented; guarded modifiers remain experimental
 
 The v1 feature set exists. Analysis now has syntax-aware metrics v2, offline HTML
 and JSON reports, and Git revision comparison. Automatic modification is **not
-production-safe**: known behavior-changing rewrites and dirty-tree recovery defects
-remain. See [ASSESSMENT.md](docs/ASSESSMENT.md) and [TODO.md](TODO.md), items 19–24.
+production-safe**. Sections 1–4 safeguards are implemented, including conservative
+idioms and scoped, verified recovery, but do not prove semantic equivalence.
+See [safety limits](docs/SAFETY.md) and [TODO.md](TODO.md).
+
+### Reliability and code reduction — implemented locally
+
+Shared Python AST parsing, byte-preserving scans and versioned whole-file plans,
+AST naming/pattern checks, run-local NumPy similarity, shared rendering/matching,
+atomic persistence, and a shared release verification gate replace duplicate or
+unused machinery. Tests now enforce 90% combined statement/branch coverage.
+See [migration notes](docs/MIGRATION.md) and [verification](docs/TEST_IMPLEMENTATION.md).
 
 ### Analysis and CI reporting — implemented
 
@@ -40,6 +49,10 @@ The entries below record earlier delivered fixes. Their historical test counts
 are not the current suite size, and individual guards do not prove semantic safety.
 
 ### P0 — Apply pipeline correctness — **done**
+
+Historical implementation below: the reliability cleanup subsequently removed
+the diff engine. Exact whole-file byte checks and `test_workspace.py` now provide
+the stale-plan guard; unified diffs remain previews only.
 
 **Was:** heuristic `idiomatize` emitted one `FileChange` per idiom from a 2–3 line *snippet*, so
 `difflib` produced snippet-relative hunks (`@@ -1,N @@`) that `apply_unified_diff` dropped at line 1 of

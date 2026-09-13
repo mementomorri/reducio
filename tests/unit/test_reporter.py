@@ -50,7 +50,7 @@ def test_generate_check_writes_issues(tmp_path):
     text = path.read_text()
     assert "long_function" in text
     assert "a.py" in text
-    assert "split / extract" in text
+    assert "split &#124; extract" in text
     assert path.name.startswith("reducio-check-")
 
 

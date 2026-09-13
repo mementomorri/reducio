@@ -19,6 +19,9 @@ Dependency/reference graphs, rich signature mapping, and entry-point detection a
 **Scenario**: Run the tool on a repository that contains `.py` files and other extensions (e.g. `.md`, `.json`).
 **Status: implemented.** Default analysis scope processes `.py` files; invalid
 Python produces explicit unavailable measurements rather than zero complexity.
+Working-tree and Git scans share target-relative globs and strict Python source
+decoding. Symlinked/nonregular/unreadable inputs make results incomplete. Native
+plan/application tests cover CRLF, UTF-8 BOM and declared non-UTF-8 source.
 
 ## 2. Semantic Compression and Refactoring
 
@@ -30,6 +33,8 @@ functions and propose copied utility modules. Applying writes those modules, but
 does not remove originals or rewrite callers. Extraction is restricted to self-contained
 top-level functions; dependency/scope exclusions are explained. Proposed Python and
 source-qualified destinations are checked during planning and replay.
+Mocked embedding tests cover stable representative groups, more than ten matches,
+batched comparisons, malformed vectors and repeated/reordered runs without model downloads.
 
 ### Test Case: Idiomatic Transformation (Pythonic Alignment)
 

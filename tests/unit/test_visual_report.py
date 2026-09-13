@@ -86,11 +86,13 @@ def test_cli_analyze_all_and_partial_failure(tmp_path):
     success = runner.invoke(app, args)
     assert success.exit_code == 0, success.output
     assert len(list(output.iterdir())) == 3
+    previous_reports = set(output.glob("*.json"))
     (source / "bad.py").write_text("def broken(:")
     failure = runner.invoke(app, args)
     assert failure.exit_code == 1
     assert "Metrics unavailable" in failure.output
-    data = json.loads(sorted(output.glob("*.json"))[-1].read_text())
+    (new_report,) = set(output.glob("*.json")) - previous_reports
+    data = json.loads(new_report.read_text())
     assert not data["complete"] and len(data["functions"]) == 1
 
 

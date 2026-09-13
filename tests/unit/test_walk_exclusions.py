@@ -1,6 +1,6 @@
 """repo.walk must skip the tool's own output and other dot-directories."""
 
-from reducio.repo import _should_exclude_file, walk
+from reducio.repo import included, walk
 
 
 def test_walk_excludes_dot_reducio(tmp_path):
@@ -25,9 +25,7 @@ def test_walk_include_patterns(tmp_path):
     assert {f.path for f in walk(str(tmp_path), include_patterns=["*.py"])} == {"a.py"}
 
 
-def test_should_exclude_file_rules():
-    assert _should_exclude_file(".env") is True
-    assert _should_exclude_file(".gitignore") is False
-    assert _should_exclude_file("a.py") is False
-    assert _should_exclude_file("img.png") is True
-    assert _should_exclude_file("app.min.js") is True
+def test_only_python_files_are_selected():
+    for path in (".env", ".gitignore", "img.png", "app.min.js", ".hidden.py"):
+        assert not included(path, [], [])
+    assert included("a.py", [], [])

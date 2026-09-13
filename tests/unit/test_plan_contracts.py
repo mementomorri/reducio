@@ -19,7 +19,6 @@ from reducio.models import (
     PatternRequest,
     RefactorPlan,
 )
-from reducio.parse import ParserError
 from reducio.plan_review import advisory_path, plan_preview, terminal_text, validate_plan
 from reducio.reporter import Reporter
 from reducio.services import App
@@ -46,24 +45,18 @@ async def test_pattern_model_failure_requires_explicit_fallback(tmp_path, fallba
     assert [p.engine for p in plan.provenance] == (["model", "template"] if fallback else ["model"])
 
 
-def test_parser_initialization_error_is_not_cached(monkeypatch):
+def test_symbols_need_no_external_parser(monkeypatch):
     from reducio import parse
 
     original_import = builtins.__import__
-    attempts = []
 
     def fail(name, *args, **kwargs):
-        if name == "tree_sitter_python":
-            attempts.append(name)
-            raise ImportError("PRIVATE dependency details")
+        if name.startswith("tree_sitter"):
+            raise AssertionError("External parser must not load")
         return original_import(name, *args, **kwargs)
 
-    parse._parser.cache_clear()
     monkeypatch.setattr(builtins, "__import__", fail)
-    for _ in range(2):
-        with pytest.raises(ParserError, match="could not initialize"):
-            parse.get_symbols("def f(): pass", "a.py")
-    assert len(attempts) == 2
+    assert parse.get_symbols("def f(): pass", "a.py")
 
 
 async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatch, caplog):
@@ -210,12 +203,11 @@ def outer(x):
 
 
 async def test_parser_failure_is_incomplete_but_ast_analysis_works(tmp_path, monkeypatch):
-    from reducio import parse
 
-    monkeypatch.setattr(parse, "_parser", MagicMock(side_effect=ParserError("unavailable")))
     (tmp_path / "a.py").write_text("def f():\n    return 1\n")
     app = App(str(tmp_path))
     assert (await app.analyze(str(tmp_path))).complete
+    (tmp_path / "broken.py").write_text("def broken(:")
     emb = MagicMock(is_using_real_embeddings=True, find_duplicates=AsyncMock(return_value=[]))
     plan = await DeduplicatorAgent(app.workspace, emb, session_store=app.sessions).find_duplicates(
         DeduplicateRequest(path=str(tmp_path))

@@ -97,11 +97,10 @@ class DeduplicatorAgent(BaseAgent):
         blocks: list[CodeBlock] = []
         for f in files:
             lang = detect_language(f.path)
-            if lang == Language.UNKNOWN:
+            if not f.error and lang == Language.UNKNOWN:
                 continue
             try:
-                self.workspace.get_symbols(f.path, f.content)
-                tree = ast.parse(f.content)
+                tree = f.tree
                 module_scope = symtable.symtable(f.content, f.path, "exec")
             except ParserError, SyntaxError, ValueError:
                 self.diagnostics.append(

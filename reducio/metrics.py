@@ -206,9 +206,9 @@ def get_complexity(content: str) -> ComplexityMetrics:
     )
 
 
-def line_decisions(content: str) -> Counter[int]:
+def line_decisions(content: str | ast.Module) -> Counter[int]:
     """Count actual AST decisions per line for the quality checker's info rule."""
-    tree = ast.parse(content)
+    tree = ast.parse(content) if isinstance(content, str) else content
     result: Counter[int] = Counter()
     for node in ast.walk(tree):
         if isinstance(node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):

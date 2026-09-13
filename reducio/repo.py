@@ -1,110 +1,130 @@
-"""Repository file walking and language detection."""
+"""Deterministic, byte-preserving Python source discovery shared with Git scans."""
 
 from __future__ import annotations
 
 import hashlib
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
+import io
+import os
+import stat
+import tokenize
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path, PurePosixPath
 
 from reducio.models import FileInfo, Language
 from reducio.progress import status
 
-# Dot-directories (.git, .venv, .reducio, .pytest_cache, ...) are excluded by the
-# leading-dot rule in _should_exclude_dir; only non-dot dirs need listing here.
 DEFAULT_EXCLUDE_DIRS = {"venv", "node_modules", "__pycache__", "dist", "build", "target"}
-BINARY_EXTS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".ico",
-    ".svg",
-    ".woff",
-    ".woff2",
-    ".ttf",
-    ".eot",
-    ".pdf",
-    ".zip",
-    ".tar",
-    ".gz",
-    ".so",
-    ".dll",
-    ".dylib",
-    ".exe",
-    ".bin",
-}
-SKIP_SUFFIXES = (".min.js", ".min.css", ".lock", ".sum")
 
 
 def detect_language(path: str) -> Language:
     return Language.PYTHON if Path(path).suffix.lower() == ".py" else Language.UNKNOWN
 
 
+def matches(path: str, patterns: list[str]) -> bool:
+    candidate = PurePosixPath(path)
+    return any(
+        (
+            candidate.full_match(pattern.rstrip("/"))
+            if "/" in pattern.rstrip("/")
+            else PurePosixPath(candidate.name).full_match(pattern.rstrip("/"))
+        )
+        for pattern in patterns
+    )
+
+
 def _should_exclude_dir(name: str, path: str, patterns: list[str]) -> bool:
-    if name in DEFAULT_EXCLUDE_DIRS or name.startswith("."):
-        return True
-    return any(name == p or p in path for p in patterns)
+    return name.startswith(".") or name in DEFAULT_EXCLUDE_DIRS or matches(path, patterns)
 
 
-def _should_exclude_file(name: str) -> bool:
-    if name.startswith(".") and name not in (".gitignore", ".env.example"):
-        return True
-    if any(name.endswith(s) for s in SKIP_SUFFIXES):
-        return True
-    return Path(name).suffix.lower() in BINARY_EXTS
+def included(path: str, excludes: list[str], includes: list[str]) -> bool:
+    candidate = PurePosixPath(path)
+    return (
+        detect_language(path) == Language.PYTHON
+        and not candidate.name.startswith(".")
+        and not matches(path, excludes)
+        and (not includes or matches(path, includes))
+        and not any(
+            _should_exclude_dir(p.name, str(p), excludes)
+            for p in candidate.parents
+            if str(p) != "."
+        )
+    )
 
 
-def _should_include(path: str, patterns: list[str]) -> bool:
-    if not patterns:
-        return True
-    ext = Path(path).suffix
-    for pattern in patterns:
-        if pattern.startswith("*") and ext == pattern[1:]:
-            return True
-        if path.endswith(pattern):
-            return True
-    return False
+def source_file(path: str, data: bytes) -> FileInfo:
+    encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+    return FileInfo(
+        path=path,
+        content=data.decode(encoding),
+        encoding=encoding,
+        hash=hashlib.sha256(data).hexdigest(),
+    )
 
 
 def _read_one(root: Path, path: Path) -> FileInfo:
-    content = path.read_text(encoding="utf-8", errors="replace")
-    rel = str(path.relative_to(root))
-    digest = hashlib.sha256(content.encode()).hexdigest()
-    return FileInfo(path=rel, content=content, hash=digest)
+    relative = path.relative_to(root).as_posix()
+    try:
+        if any(
+            p.is_symlink() for p in (path, *path.parents) if p != root and p.is_relative_to(root)
+        ):
+            raise ValueError("Symlinked source is not supported")
+        fd = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+        with os.fdopen(fd, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("Only regular source files are supported")
+            return source_file(relative, stream.read())
+    except OSError, UnicodeError, LookupError, SyntaxError, ValueError:
+        return FileInfo(
+            path=relative,
+            content="",
+            error="Cannot safely read/decode source; symlinks and nonregular files are unsupported",
+        )
 
 
 def walk(
-    root: str,
-    exclude_patterns: list[str] | None = None,
-    include_patterns: list[str] | None = None,
+    root: str, exclude_patterns: list[str] | None = None, include_patterns: list[str] | None = None
 ) -> list[FileInfo]:
     root_path = Path(root).resolve()
+    excludes = exclude_patterns or []
+    includes = ["*.py"] if include_patterns is None else include_patterns
     status(f"Exploring {root_path} for matching source files...")
-    exclude_patterns = exclude_patterns or []
-    include_patterns = include_patterns or []
     paths: list[Path] = []
+    errors: list[FileInfo] = []
 
-    import os
+    def failed(error):
+        errors.append(
+            FileInfo(
+                path=Path(error.filename).relative_to(root_path).as_posix(),
+                content="",
+                error="Cannot explore source directory",
+            )
+        )
 
-    for dirpath, dirnames, filenames in os.walk(root_path):
-        dirnames[:] = [
+    for directory, directories, names in os.walk(root_path, onerror=failed):
+        parent = Path(directory)
+        directories[:] = [
             d
-            for d in dirnames
-            if not _should_exclude_dir(d, str(Path(dirpath) / d), exclude_patterns)
+            for d in sorted(directories)
+            if not _should_exclude_dir(d, (parent / d).relative_to(root_path).as_posix(), excludes)
         ]
-        for name in filenames:
-            full = Path(dirpath) / name
-            if _should_exclude_file(name):
-                continue
-            rel = str(full.relative_to(root_path))
-            if not _should_include(rel, include_patterns):
-                continue
-            paths.append(full)
-
+        for d in directories[:]:
+            if (parent / d).is_symlink():
+                errors.append(
+                    FileInfo(
+                        path=(parent / d).relative_to(root_path).as_posix(),
+                        content="",
+                        error="Symlinked source directory is unsupported",
+                    )
+                )
+                directories.remove(d)
+        paths.extend(
+            parent / name
+            for name in names
+            if included((parent / name).relative_to(root_path).as_posix(), excludes, includes)
+        )
     status(f"Reading {len(paths)} source files...")
-    files: list[FileInfo] = []
     with ThreadPoolExecutor(max_workers=32) as pool:
-        futures = {pool.submit(_read_one, root_path, p): p for p in paths}
-        for fut in as_completed(futures):
-            files.append(fut.result())
-    return files
+        files = list(pool.map(lambda p: _read_one(root_path, p), sorted(paths)))
+    return sorted(files + errors, key=lambda f: f.path)

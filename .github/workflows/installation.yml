@@ -28,7 +28,7 @@ jobs:
       - run: pip install build && python -m build
       - run: pip install dist/*.whl && reducio --help
       - name: Base installation needs no HTTP client
-        run: python -c "import reducio.cli, sys; assert 'httpx' not in sys.modules; import importlib.util; assert importlib.util.find_spec('httpx') is None"
+        run: python -I -c "import reducio.cli, importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('httpx', 'tree_sitter', 'chromadb', 'numpy'))"
       - run: pip install 'reducio[llm]'
       - name: Optional API contracts (no live API calls)
         run: python -I scripts/smoke_llm.py

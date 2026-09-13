@@ -2,8 +2,6 @@
 Idiomatizer agent for transforming code to idiomatic patterns (Python heuristics).
 """
 
-import ast
-
 from reducio.agents.base import BaseAgent, ModelRewriteError
 from reducio.models import (
     FileChange,
@@ -14,13 +12,9 @@ from reducio.models import (
     RefactorPlan,
 )
 from reducio.repo import detect_language
-from reducio.session import SessionStore
 
 
 class IdiomatizerAgent(BaseAgent):
-    def __init__(self, workspace=None, llm_router=None, session_store: SessionStore | None = None):
-        super().__init__(workspace, llm_router, session_store)
-
     async def idiomatize(self, request: IdiomatizeRequest) -> RefactorPlan:
         self._begin_plan(request.allow_fallback)
         changes = []
@@ -41,14 +35,17 @@ class IdiomatizerAgent(BaseAgent):
 
     async def _idiomatize_file(self, file) -> tuple[FileChange | None, int]:
         content, path = self._file_content_path(file)
-        if detect_language(path) != Language.PYTHON:
+        if not file.error and detect_language(path) != Language.PYTHON:
             return None, 0
         try:
-            ast.parse(content)  # can't safely rewrite (or validate) a file that doesn't parse
-        except SyntaxError:
+            file.tree  # Validated once, shared with subsequent analysis.
+        except SyntaxError, ValueError:
             self.diagnostics.append(
                 PlanDiagnostic(
-                    code="invalid_source", file=path, message="Skipped invalid Python source"
+                    code="invalid_source",
+                    file=path,
+                    severity="error",
+                    message="Cannot read or parse source; planning incomplete",
                 )
             )
             return None, 0
@@ -60,11 +57,15 @@ class IdiomatizerAgent(BaseAgent):
                     "Rewrite the following Python module to be more idiomatic and concise without changing behaviour.",
                     "LLM idiomatic rewrite",
                 )
+                if change:
+                    change.operation, change.encoding = "replace", file.encoding
                 return change, int(change is not None)
             except ModelRewriteError:
                 if not self.allow_fallback:
                     raise
         change, count = self._idiomatize_python(content, path)
+        if change:
+            change.operation, change.encoding = "replace", file.encoding
         self.provenance.append(
             PlanningProvenance(
                 file=path, engine="heuristic", outcome="proposed" if change else "unchanged"

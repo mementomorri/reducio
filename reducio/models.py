@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 from datetime import datetime
 from enum import StrEnum
+from functools import cached_property
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field, field_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 class Language(StrEnum):
@@ -18,6 +20,16 @@ class FileInfo(BaseModel):
     path: str
     content: str
     hash: str | None = None
+    encoding: str = "utf-8"
+    error: str | None = None
+
+    @cached_property
+    def tree(self) -> ast.Module:
+        if self.error:
+            raise ValueError(self.error)
+        tree = ast.parse(self.content, filename=self.path)
+        compile(tree, self.path, "exec")
+        return tree
 
 
 class Symbol(BaseModel):
@@ -34,7 +46,6 @@ class ComplexityMetrics(BaseModel):
     cyclomatic_complexity: int = 0
     cognitive_complexity: int = 0
     lines_of_code: int = 0
-    maintainability_index: float = 0.0
 
 
 class CodeBlock(BaseModel):
@@ -62,6 +73,13 @@ class FileChange(BaseModel):
     original: str
     modified: str
     description: str
+    operation: Literal["create", "replace"] | None = None
+    encoding: str = "utf-8"
+
+    @property
+    def creates_file(self) -> bool:
+        # Missing operation is the v1 contract: empty original means create.
+        return self.operation == "create" or (self.operation is None and not self.original)
 
 
 class PlanDiagnostic(BaseModel):
@@ -79,6 +97,7 @@ class PlanningProvenance(BaseModel):
 
 
 class RefactorPlan(BaseModel):
+    schema_version: Literal[1, 2] = 1
     session_id: str
     changes: list[FileChange]
     description: str
@@ -108,38 +127,10 @@ class RefactorResult(BaseModel):
     measurements_after: AnalyzeResult | None = None
     measurements_attempted: AnalyzeResult | None = None
 
-    @field_serializer("metrics_before", "metrics_after")
-    def serialize_measured_totals(self, metric):
-        return metric.model_dump(exclude={"maintainability_index"}) if metric is not None else None
-
     @model_validator(mode="after")
     def truthful_tests(self):
         self.tests_passed = self.test_status == "passed"
         return self
-
-
-class PatternApplied(BaseModel):
-    pattern: str
-    files: list[str]
-    description: str
-
-
-class MetricsDelta(BaseModel):
-    cyclomatic_complexity_delta: int = 0
-    cognitive_complexity_delta: int = 0
-    maintainability_index_delta: float = 0.0
-
-
-class Report(BaseModel):
-    session_id: str
-    generated_at: datetime = Field(default_factory=datetime.now)
-    loc_before: int
-    loc_after: int
-    loc_reduced: int
-    duplicates_found: int = 0
-    patterns_applied: list[PatternApplied] = Field(default_factory=list)
-    files_modified: list[str]
-    metrics_delta: MetricsDelta
 
 
 class ComplexityHotspot(BaseModel):
@@ -151,8 +142,6 @@ class ComplexityHotspot(BaseModel):
 
 
 class FunctionMetrics(ComplexityMetrics):
-    # Inherited for compatibility, but not measured or published as a fake zero.
-    maintainability_index: float = Field(default=0.0, exclude=True)
     file: str
     name: str
     qualified_name: str
@@ -234,20 +223,19 @@ class CompareResult(BaseModel):
 
 
 class ComplexityThresholds(BaseModel):
-    cyclomatic_complexity: int = 10
-    cognitive_complexity: int = 15
-    lines_of_code: int = 50
+    model_config = ConfigDict(extra="forbid")
+    cyclomatic_complexity: int = Field(default=10, gt=0)
+    cognitive_complexity: int = Field(default=15, gt=0)
+    lines_of_code: int = Field(default=50, gt=0)
 
 
 class AppConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     complexity_thresholds: ComplexityThresholds = Field(default_factory=ComplexityThresholds)
-    pre_approve: bool = False
     test_command: list[str] | None = Field(default=None, min_length=1)
     test_python: str | None = None
     test_runner: Literal["pytest", "unittest"] = "pytest"
     test_timeout_seconds: int = Field(default=300, gt=0)
-    dry_run: bool = False
-    report: bool = False
     verbose: bool = False
     model: str = ""
     llm_api: Literal["openai", "anthropic"] | None = None
@@ -263,6 +251,10 @@ class AppConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_commit_setting(cls, data):
+        if isinstance(data, dict) and {"dry_run", "report", "pre_approve"}.intersection(data):
+            raise ValueError(
+                "Use CLI --dry-run, --report or --yes instead of these retired settings"
+            )
         if isinstance(data, dict) and {
             "prefer_local",
             "prefer_remote",
@@ -294,7 +286,7 @@ class AnalyzeRequest(BaseModel):
 class DeduplicateRequest(BaseModel):
     path: str
     files: list[FileInfo] = Field(default_factory=list)
-    similarity_threshold: float = 0.85
+    similarity_threshold: float = Field(default=0.85, ge=0, le=1, allow_inf_nan=False)
 
 
 class IdiomatizeRequest(BaseModel):

@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import ast
 import hashlib
 from pathlib import Path
 
-from reducio import diff as diff_mod
 from reducio import parse, repo
 from reducio.git_safety import GitSafety
-from reducio.models import AppConfig, ComplexityMetrics, FileInfo, Symbol
+from reducio.models import AppConfig, ComplexityMetrics, FileChange, FileInfo, Symbol
 from reducio.runner import ProjectRunner
 
 
@@ -40,11 +38,11 @@ class Workspace:
         )
 
     def read_file(self, path: str) -> FileInfo:
-        full = self._resolve_path(path)
-        content = full.read_text(encoding="utf-8", errors="replace")
-        rel = str(full.relative_to(self.root))
-        h = hashlib.sha256(content.encode()).hexdigest()
-        return FileInfo(path=rel, content=content, hash=h)
+        self._resolve_path(path)
+        file = repo._read_one(self.root, self.root / path)
+        if file.error:
+            raise ValueError(file.error)
+        return file
 
     def get_symbols(self, path: str, content: str | None = None) -> list[Symbol]:
         if content is None:
@@ -61,30 +59,8 @@ class Workspace:
             content = self.read_file(path).content
         return parse.get_complexity(content)
 
-    def apply_diff(self, path: str, diff_text: str) -> dict:
-        result = self.apply_changes_safe([(path, diff_text)])
-        if not result["success"]:
-            raise diff_mod.DiffError(result["error"])
-        return {**result, "path": path}
-
-    def _invalid_python(self, changes: list[tuple[str, str]]) -> str | None:
-        """Return the first changed .py file that no longer parses, else None."""
-        seen: set[str] = set()
-        for path, _ in changes:
-            if path in seen or not path.endswith(".py"):
-                continue
-            seen.add(path)
-            full = self._resolve_path(path)
-            if not full.exists():
-                continue
-            try:
-                ast.parse(full.read_text(encoding="utf-8"))
-            except SyntaxError as e:
-                return f"{path}: {e}"
-        return None
-
     def apply_changes_safe(
-        self, changes: list[tuple[str, str]], run_tests: bool = False, validate_after=None
+        self, changes: list[FileChange], run_tests: bool = False, validate_after=None
     ) -> dict:
         """Apply scoped changes with verified recovery; never mutate Git HEAD/index."""
         from reducio.recovery import FileSnapshot, safe_target
@@ -101,23 +77,29 @@ class Workspace:
             return {**outcome, "success": True}
         snapshot = None
         try:
-            # Simulate every hunk before writing anything, including repeated paths.
-            proposed: dict[str, str] = {}
+            proposed: dict[str, bytes] = {}
             originals = {}
-            for relative, diff_text in changes:
+            for change in changes:
+                relative = change.path
                 path = safe_target(self.root, relative)
-                original = proposed.get(relative)
-                if original is None:
-                    originals[relative] = path.read_bytes() if path.exists() else None
-                    original = (originals[relative] or b"").decode("utf-8")
-                if diff_text.lstrip().startswith("--- /dev/null") and (
-                    path.exists() or relative in proposed
-                ):
-                    raise ValueError(f"refusing to create over existing file: {relative}")
-                proposed[relative] = diff_mod.apply_unified_diff(original, diff_text)
+                key = str(path.resolve())
+                if key in originals:
+                    raise ValueError("Duplicate change destination")
+                original = path.read_bytes() if path.exists() else None
+                if change.creates_file:
+                    if original is not None or change.original:
+                        raise ValueError(f"Refusing to create over existing file: {relative}")
+                elif original is None or original != change.original.encode(change.encoding):
+                    raise ValueError(f"Original bytes differ: {relative}; regenerate the plan")
+                content = change.modified.encode(change.encoding)
+                if relative.lower().endswith(".py"):
+                    compile(content, relative, "exec")
+                originals[key] = original
+                proposed[relative] = content
             snapshot = FileSnapshot(self.root, list(proposed))
             outcome["backup_location"] = str(snapshot.directory)
-            for relative, original_bytes in originals.items():
+            for relative in proposed:
+                original_bytes = originals[str((self.root / relative).resolve())]
                 expected = (
                     hashlib.sha256(original_bytes).hexdigest()
                     if original_bytes is not None
@@ -126,9 +108,7 @@ class Workspace:
                 if snapshot.records[relative]["before"] != expected:
                     raise ValueError(f"Target changed concurrently: {relative}")
             for relative, content in proposed.items():
-                snapshot.write(relative, content.encode("utf-8"))
-            if broken := self._invalid_python(changes):
-                raise ValueError(f"apply produced invalid Python: {broken}")
+                snapshot.write(relative, content)
             if validate_after is not None:
                 validate_after()
             if run_tests:

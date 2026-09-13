@@ -149,3 +149,25 @@ def test_source_symlink_is_not_followed(temp_git_repo):
     result = compare_revisions(str(temp_git_repo), base)
     assert not result.complete
     assert "symlink" in result.after.diagnostics[0].message
+
+
+def test_worktree_and_git_share_globs_encoding_and_metrics(temp_git_repo):
+    from reducio.analysis import analyze_files
+    from reducio.repo import walk
+
+    base = git(temp_git_repo, "rev-parse", "HEAD")
+    (temp_git_repo / "src/nested").mkdir(parents=True)
+    for name in ("src/a.py", "src/nested/b.py", "src/skip.py", "outside.py"):
+        (temp_git_repo / name).write_bytes(
+            b'# coding: latin-1\r\ndef f():\r\n    return "caf\xe9"\r\n'
+        )
+    git(temp_git_repo, "add", "-A")
+    git(temp_git_repo, "commit", "-m", "encoded sources")
+    cfg = AppConfig(include_patterns=["src/**/*.py"], exclude_patterns=["skip.py"])
+    working = analyze_files(
+        walk(str(temp_git_repo), cfg.exclude_patterns, cfg.include_patterns), cfg
+    )
+    committed = compare_revisions(str(temp_git_repo), base, cfg=cfg).after
+    assert working.complete and committed.complete
+    assert working.file_lines == committed.file_lines == {"src/a.py": 3, "src/nested/b.py": 3}
+    assert working.functions == committed.functions

@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-import io
 import subprocess
-import tokenize
-from collections import defaultdict
 from pathlib import Path, PurePosixPath
 
-from reducio.analysis import analysis_configuration, analyze_files
+from reducio.analysis import analysis_configuration, analyze_files, match_functions
 from reducio.models import (
     AnalysisDiagnostic,
     AppConfig,
     CompareResult,
-    FileInfo,
-    FunctionComparison,
-    FunctionMetrics,
 )
 from reducio.progress import status as report_status
-from reducio.repo import _should_exclude_dir, _should_exclude_file, _should_include
+from reducio.repo import included, source_file
 
 
 class CompareError(ValueError):
@@ -46,16 +40,7 @@ def _included(path: str | None, scope: str, cfg: AppConfig) -> bool:
     if not candidate.is_relative_to(scope):
         return False
     relative = candidate.relative_to(scope)
-    return (
-        relative.suffix == ".py"
-        and not _should_exclude_file(relative.name)
-        and _should_include(str(relative), cfg.include_patterns)
-        and not any(
-            _should_exclude_dir(p.name, str(p), cfg.exclude_patterns)
-            for p in relative.parents
-            if str(p) != "."
-        )
-    )
+    return included(str(relative), cfg.exclude_patterns, cfg.include_patterns)
 
 
 def _changed_files(root: Path, base: str, head: str, scope: str, cfg: AppConfig) -> list[dict]:
@@ -97,8 +82,7 @@ def _snapshot(root: Path, revision: str, paths: list[str], cfg: AppConfig, scope
             if not entry.startswith((b"100644 ", b"100755 ")):
                 raise CompareError("Source is not a regular Git blob (symlinks are not followed)")
             data = _git(root, "cat-file", "blob", f"{revision}:{path}")
-            encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
-            files.append(FileInfo(path=path, content=data.decode(encoding)))
+            files.append(source_file(path, data))
         except (CompareError, UnicodeError, LookupError, SyntaxError) as error:
             diagnostics.append(AnalysisDiagnostic(file=path, message=str(error), revision=revision))
     result = analyze_files(files, cfg, scope)
@@ -107,30 +91,6 @@ def _snapshot(root: Path, revision: str, paths: list[str], cfg: AppConfig, scope
     for diagnostic in result.diagnostics:
         diagnostic.revision = revision
     return result
-
-
-def _comparison(before: FunctionMetrics | None, after: FunctionMetrics | None, threshold: int):
-    was_hot = before is not None and before.cyclomatic_complexity >= threshold
-    now_hot = after is not None and after.cyclomatic_complexity >= threshold
-    values: dict = dict(
-        before=before,
-        after=after,
-        new_hotspot=now_hot and not was_hot,
-        resolved_hotspot=was_hot and not now_hot,
-    )
-    if before is None or after is None:
-        return FunctionComparison(status="added" if before is None else "removed", **values)
-    cc = after.cyclomatic_complexity - before.cyclomatic_complexity
-    cognitive = after.cognitive_complexity - before.cognitive_complexity
-    up, down = max(cc, cognitive) > 0, min(cc, cognitive) < 0
-    status = "mixed" if up and down else "regressed" if up else "improved" if down else "unchanged"
-    return FunctionComparison(
-        status=status,
-        cyclomatic_delta=cc,
-        cognitive_delta=cognitive,
-        lines_delta=after.lines_of_code - before.lines_of_code,
-        **values,
-    )
 
 
 def compare_revisions(
@@ -163,28 +123,10 @@ def compare_revisions(
         before=before,
         after=after,
     )
-    grouped = []
-    for snapshot in (before, after):
-        index: dict[str, dict[str, list[FunctionMetrics]]] = defaultdict(lambda: defaultdict(list))
-        for function in snapshot.functions:
-            index[function.file][function.qualified_name].append(function)
-        grouped.append(index)
-    bad_before = {d.file for d in before.diagnostics}
-    bad_after = {d.file for d in after.diagnostics}
-    threshold = cfg.complexity_thresholds.cyclomatic_complexity
-    for file in files:
-        if file["before"] in bad_before or file["after"] in bad_after:
-            continue  # unavailable is not an addition, removal, or improvement
-        old, new = grouped[0].get(file["before"], {}), grouped[1].get(file["after"], {})
-        for name in sorted(old.keys() | new.keys()):
-            left, right = old.get(name, []), new.get(name, [])
-            if len(left) == len(right) == 1:
-                result.changes.append(_comparison(left[0], right[0], threshold))
-            else:
-                if len(left) > 1 or len(right) > 1:
-                    result.notes.append(
-                        f"Ambiguous definition {file['after'] or file['before']}:{name}; shown unmatched"
-                    )
-                result.changes.extend(_comparison(f, None, threshold) for f in left)
-                result.changes.extend(_comparison(None, f, threshold) for f in right)
+    result.changes, result.notes = match_functions(
+        before,
+        after,
+        cfg.complexity_thresholds.cyclomatic_complexity,
+        [(f["before"], f["after"]) for f in files],
+    )
     return result

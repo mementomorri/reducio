@@ -1,9 +1,9 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main, develop]
-    tags: ['v*']
   pull_request:
     branches: [main]
 
@@ -25,6 +25,7 @@ jobs:
         run: pytest tests/ -v
 
       - name: Assert fixture corpus unmodified
+        if: always()
         run: git diff --exit-code test-python-code/
 
       - name: CLI smoke
@@ -38,8 +39,8 @@ jobs:
         with:
           python-version: '3.14'
       - run: pip install -e ".[dev]"
-      - run: ruff check reducio/
-      - run: black --check reducio/
+      - run: ruff check reducio/ tests/ scripts/
+      - run: black --check reducio/ tests/ scripts/
       - run: mypy reducio/ --ignore-missing-imports
 
   build:
@@ -51,7 +52,11 @@ jobs:
         with:
           python-version: '3.14'
       - run: pip install build && python -m build
+      - name: Verify built wheel before publication (no model downloads)
+        run: python -m scripts.smoke_pypi --local --wheel-directory dist --commit "$(git rev-parse HEAD)"
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist/
+          overwrite: true
+          if-no-files-found: error

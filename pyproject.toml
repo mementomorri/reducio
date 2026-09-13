@@ -15,15 +15,13 @@ dependencies = [
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
     "gitpython>=3.1.0",
-    "tree-sitter>=0.21.0",
-    "tree-sitter-python>=0.21.0",
 ]
 
 [project.optional-dependencies]
 llm = ["httpx>=0.28,<1"]
 reports = ["plotly>=6,<8"]
 embeddings = [
-    "chromadb>=1.5.0",
+    "numpy>=1.26",
     "sentence-transformers>=2.2.0",
 ]
 dev = [
@@ -73,7 +71,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=reducio --cov-report=term-missing --cov-fail-under=60"
+addopts = "--cov=reducio --cov-branch --cov-report=term-missing --cov-fail-under=90"
 markers = [
     "embeddings: requires sentence-transformers model download",
 ]

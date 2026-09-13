@@ -6,30 +6,19 @@ import difflib
 import hashlib
 import keyword
 import re
-import unicodedata
 from pathlib import Path
 
 from reducio.models import FileChange, PlanDiagnostic, RefactorPlan
+from reducio.presentation import terminal_text as terminal_text
 from reducio.storage import StorageError, validate_session_id
-
-
-def terminal_text(text: str) -> str:
-    return "".join(
-        (
-            char
-            if char in "\n\t" or not unicodedata.category(char).startswith("C")
-            else ascii(char)[1:-1]
-        )
-        for char in text
-    )
 
 
 def unified_preview(change: FileChange) -> str:
     lines = difflib.unified_diff(
         change.original.splitlines(keepends=True),
         change.modified.splitlines(keepends=True),
-        fromfile=f"a/{change.path}" if change.original else "/dev/null",
-        tofile=f"b/{change.path}" if change.modified else "/dev/null",
+        fromfile=f"a/{change.path}" if not change.creates_file else "/dev/null",
+        tofile=f"b/{change.path}",  # Replacing with empty content does not delete the file.
     )
     return "".join(
         line if line.endswith("\n") else line + "\n\\ No newline at end of file\n" for line in lines
@@ -76,6 +65,15 @@ def validate_plan(plan: RefactorPlan, root: Path | None = None) -> list[PlanDiag
         )
     seen: dict[str, FileChange] = {}
     for change in plan.changes:
+        if plan.schema_version == 2 and change.operation is None:
+            errors.append(
+                PlanDiagnostic(
+                    code="operation_required",
+                    file=change.path,
+                    message="Version 2 changes need create/replace operation",
+                    severity="error",
+                )
+            )
         try:
             if root is not None:
                 target = (root / change.path).resolve()
@@ -107,7 +105,7 @@ def validate_plan(plan: RefactorPlan, root: Path | None = None) -> list[PlanDiag
         seen[key] = change
         if (
             root is not None
-            and not change.original
+            and change.creates_file
             and (target.exists() or (root / change.path).is_symlink())
         ):
             errors.append(
@@ -118,10 +116,10 @@ def validate_plan(plan: RefactorPlan, root: Path | None = None) -> list[PlanDiag
                     severity="error",
                 )
             )
-        if change.path.endswith(".py"):
+        if change.path.lower().endswith(".py"):
             try:
-                compile(change.modified, change.path, "exec")
-            except SyntaxError, ValueError:
+                compile(change.modified.encode(change.encoding), change.path, "exec")
+            except SyntaxError, ValueError, LookupError, UnicodeError:
                 errors.append(
                     PlanDiagnostic(
                         code="invalid_python",

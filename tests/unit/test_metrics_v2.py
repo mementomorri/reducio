@@ -108,7 +108,7 @@ async def test_analyze_and_check_agree(tmp_path):
     quality = await QualityCheckerAgent(Workspace(str(tmp_path), cfg)).check_quality(files, ".")
     issue = next(i for i in quality.issues if i.issue_type == "high_complexity_function")
     assert issue.symbol == analysis.hotspots[0].symbol == "C.f"
-    assert "complexity 2 " in issue.message
+    assert "2 cyclomatic complexity" in issue.message
     assert len(analysis.hotspots) == 1
 
 

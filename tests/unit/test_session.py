@@ -8,6 +8,7 @@ from reducio.session import SessionStore
 
 def test_save_plan_metadata_includes_session_id(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
+    store.storage_dir.mkdir(exist_ok=True)
     plan = RefactorPlan(
         session_id="sess-abc",
         changes=[
@@ -26,6 +27,7 @@ def test_save_plan_metadata_includes_session_id(tmp_path):
 
 def test_list_sessions_legacy_metadata_uses_filename(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
+    store.storage_dir.mkdir(exist_ok=True)
     path = store.storage_dir / "legacy-id.json"
     path.write_text("""{
   "metadata": {
@@ -68,6 +70,7 @@ _LEGACY_SESSION_JSON = """{
 
 def test_get_session_info_legacy_metadata(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
+    store.storage_dir.mkdir(exist_ok=True)
     (store.storage_dir / "legacy-id.json").write_text(_LEGACY_SESSION_JSON)
     info = store.get_session_info("legacy-id")
     assert info is not None
@@ -77,6 +80,7 @@ def test_get_session_info_legacy_metadata(tmp_path):
 
 def test_cleanup_old_sessions_pops_cache_for_legacy_metadata(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
+    store.storage_dir.mkdir(exist_ok=True)
     (store.storage_dir / "legacy-id.json").write_text(_LEGACY_SESSION_JSON)
     store.load_plan("legacy-id")
     assert store.load_plan("legacy-id") is not None

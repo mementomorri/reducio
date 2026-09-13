@@ -1,13 +1,16 @@
 """Regression guards for the tree-sitter `Language` shadow bug (commit efb9188)."""
 
 from reducio.models import Language
-from reducio.parse import _parser, get_symbols
+from reducio.parse import get_symbols
 
 
-def test_parser_builds_not_shadowed():
-    # If tree_sitter.Language is shadowed by the models enum again, _parser()
-    # swallows the constructor error and returns None -> get_symbols() == [].
-    assert _parser() is not None
+def test_nested_function_is_not_a_method():
+    symbols = get_symbols("class A:\n    def outer(self):\n        def inner(): pass\n", "a.py")
+    assert {s.name: s.type for s in symbols} == {
+        "A": "class",
+        "outer": "method",
+        "inner": "function",
+    }
 
 
 def test_get_symbols_extracts_class_and_method():

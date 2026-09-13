@@ -30,7 +30,8 @@ pip install "reducio[llm]"         # optional compatible API proposals
 reducio analyze . --report
 ```
 
-Release CI verifies the exact published wheel hash and its installed CLI outside
+Release CI gates publication on shared tests/lint and an isolated built-wheel smoke,
+then verifies the exact published wheel hash and its installed CLI outside
 the checkout before allowing executable publication. Maintainers must configure
 PyPI Trusted Publishing for the `reducio` project before tagging a release.
 
@@ -83,7 +84,7 @@ assets fail rather than being overwritten. Existing release notes are preserved.
 
 | Extra | Purpose |
 |-------|---------|
-| `embeddings` | Semantic deduplication (ChromaDB + sentence-transformers) |
+| `embeddings` | Semantic similarity (batched NumPy cosine + sentence-transformers) |
 | `reports` | Self-contained interactive HTML dashboards (Plotly); Markdown/JSON need no extra |
 | `dev` | pytest, ruff, black, mypy (contributors) |
 
@@ -194,7 +195,10 @@ to bypass prompts; other modifier configuration policies remain separate work.
 
 ## Architecture
 
-Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, tree-sitter, git, pytest) + agents (optional compatible APIs + optional embeddings). Plans persist under `.reducio/sessions/`.
+Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, Python AST, read-only Git, opt-in tests) + agents (optional compatible APIs + optional embeddings). Plans persist under `.reducio/sessions/`.
+
+See [migration notes](MIGRATION.md) for strict configuration/glob rules, source
+encoding, versioned byte-exact plans and removed Python APIs.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md).
 

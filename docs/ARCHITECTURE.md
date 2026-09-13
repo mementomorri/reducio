@@ -8,7 +8,7 @@ Python 3.14+ CLI for semantic compression of **Python source code**. One process
 User
   → reducio.cli (Typer)
        → reducio.services.App
-            → Workspace (repo walk *.py, parse, diff, git, pytest)
+            → Workspace (repo walk *.py, AST, whole-file apply, git, tests)
             → Agents (analyze, deduplicate, idiomatize, pattern, check)
             → LLMClient (optional explicit compatible API)
             → EmbeddingService ([embeddings] extra)
@@ -22,13 +22,14 @@ User
 |--------|------|
 | `cli.py` | Commands, git dirty check, asyncio bridge, session subcommands |
 | `services.py` | `App`: orchestrates agents, apply, embedding lazy init |
-| `workspace.py` | Files, symbols, diffs, git, tests |
+| `workspace.py` | Files, symbols, exact-content application, git, tests |
 | `repo.py` | Walk repo; include `*.py` by default; `detect_language` → Python or unknown |
-| `parse.py` | Tree-sitter symbols for refactoring; compatibility metric import |
+| `parse.py` | Python AST symbols for refactoring; compatibility metric import |
 | `metrics.py`, `analysis.py` | Shared AST metrics and complete function analysis |
 | `compare.py` | Read-only Git blob snapshots, changed-file selection, function matching |
 | `visual_report.py` | Markdown, JSON, and optional offline Plotly HTML dashboards |
-| `diff.py` | Apply unified diffs with context validation (raises `DiffError` on mismatch) |
+| `plan_review.py` | Unified diff previews and versioned plan preflight |
+| `presentation.py`, `storage.py` | Shared escaping/tables and atomic validated persistence |
 | `git_safety.py` | Read-only repository discovery and dirty-state warnings (GitPython) |
 | `recovery.py` | Durable per-attempt file snapshots, scoped restoration and verification |
 | `runner.py` | `pytest` / `unittest` for Python projects |
@@ -38,7 +39,7 @@ User
 | `models.py` | Pydantic models and `AppConfig` |
 | `agents/*` | Planning agents (idiomatize is Python-only) |
 | `llm/router.py` | Explicit text-only OpenAI/Anthropic-compatible requests |
-| `embeddings/service.py` | ChromaDB similarity for deduplication |
+| `embeddings/service.py` | Run-local batched NumPy cosine similarity for deduplication |
 
 ## Request flows
 
@@ -66,7 +67,7 @@ suggestion-only — it proposes a shared `utils/<symbol>_dedup.py` module and do
 
 ### Apply
 
-`apply_changes_safe` preflights all diffs, snapshots affected bytes/modes/existence,
+`apply_changes_safe` checks all original bytes and operations, snapshots affected bytes/modes/existence,
 then performs per-file atomic writes, syntax/metrics validation and opt-in target
 tests. Failures and exceptions trigger scoped restoration with verification.
 No Git history/index mutation occurs. This is not crash-proof or multi-file atomic;
@@ -95,10 +96,10 @@ Noninteractive application requires `--yes`. See [API setup and migration](LLM.m
 |---------|------------|
 | CLI | Typer |
 | Models | Pydantic v2 |
-| Parse | Python AST (metrics), tree-sitter-python (refactoring symbols) |
+| Parse | Standard-library Python AST (metrics and refactoring symbols) |
 | Dashboards | Plotly, optional `[reports]` extra |
 | LLM | HTTPX, optional `[llm]` extra, lazy-loaded on request |
 | VCS | GitPython |
-| Dedup | ChromaDB, sentence-transformers |
+| Dedup | NumPy, sentence-transformers (optional) |
 
 See [SAFETY.md](SAFETY.md) for the apply/rollback safety model and [ONBOARDING.md](ONBOARDING.md) for maintainer workflows.

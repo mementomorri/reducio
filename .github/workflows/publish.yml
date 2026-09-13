@@ -12,7 +12,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    uses: ./.github/workflows/test.yml
+
   pypi:
+    needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,8 +26,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - run: pip install build
-      - run: python -m build
+      - name: Download verified distributions (do not rebuild)
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
       - name: Save the wheel being published
         uses: actions/upload-artifact@v4
         with:
