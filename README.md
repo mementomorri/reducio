@@ -18,6 +18,36 @@ Application uses file snapshots and never commits changes. Tests are opt-in with
 
 Requires **Python 3.14+**. Only **`.py`** files in the target repository are analyzed.
 
+## Everyday workflow
+
+reducio helps reviewers see where Python changes add or reduce complexity.
+Use it primarily for **read-only code review**, with optional, manually reviewed
+refactoring proposals—not as proof that code is correct.
+
+1. **While coding:** run `reducio check .` for quality findings or
+   `reducio analyze .` for complexity hotspots in current files.
+2. **On a PR:** compare the branch's common ancestor with `main` against the PR
+   head. This covers the whole PR, not just its last commit, measuring complete
+   functions in changed Python files. Review the Actions summary or HTML artifact.
+3. **After merging:** run a full overview on `main`; optionally publish its latest
+   dashboard to GitHub Pages. PR reports stay in Actions artifacts.
+
+To review your committed branch locally (`reducio[reports]` adds HTML charts):
+
+```bash
+git fetch origin main
+reducio compare . --base "$(git merge-base origin/main HEAD)" \
+  --head HEAD --report --format all
+```
+
+Use `--base HEAD~1` instead to inspect only the last commit. Comparison ignores
+uncommitted edits; complexity increases are informational, not automatic CI failures.
+Reports default to `.reducio/`; open the HTML directly in a browser, without a server.
+
+Start with the [CI setup guide](docs/GITHUB_CI.md). For optional code changes,
+preview with `reducio idiomatize . --dry-run` and review before applying with
+`--run-tests`. Deduplication remains suggestion-only; it does not rewrite callers.
+
 ## License
 
 [MIT](LICENSE) © 2026 Alex Karsten
