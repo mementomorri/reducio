@@ -11,7 +11,24 @@ The v1 feature set exists. Analysis now has syntax-aware metrics v2, offline HTM
 and JSON reports, and Git revision comparison. Automatic modification is **not
 production-safe**. Sections 1–4 safeguards are implemented, including conservative
 idioms and scoped, verified recovery, but do not prove semantic equivalence.
-See [safety limits](docs/SAFETY.md) and [TODO.md](TODO.md).
+See [safety limits](docs/SAFETY.md) and the enhancement opportunities below.
+
+### Daily review and history — implemented locally
+
+- [x] Rebuilt Git history (default 100 first-parent commits), consistent current
+  metrics, explicit old-root aliases and gaps, run-local batched blob reuse.
+- [x] Offline trend dashboard: size, median/p95 complexity, hotspot count/share,
+  new/resolved hotspots, persistent hotspots and commit/range/function exploration.
+- [x] Main-only history CI and Pages, alongside the standalone latest overview;
+  no persistent data branch and no PR publication.
+- [x] `compare --against` and explicit `--worktree`, optional PR warnings and
+  new-hotspot/regression gates; report-only remains the default.
+- [x] Per-rule severity/off and per-path quality ignores with visible suppressed
+  findings and unsuppressible source errors.
+- [x] Bounded f-string and dictionary-get idioms with behavior/encoding tests.
+
+These changes are in source; a new PyPI/PyApp release and Pages deployment are
+separate maintainer actions. See [usage](docs/CI.md) and [verification](docs/TEST_IMPLEMENTATION.md).
 
 ### Reliability and code reduction — implemented locally
 
@@ -29,8 +46,9 @@ See [migration notes](docs/MIGRATION.md) and [verification](docs/TEST_IMPLEMENTA
   snapshots, qualified-name matching, deltas and unmatched additions/removals.
 - Markdown/JSON/offline HTML from the same result; overview and comparison charts.
 - Independent overview and PR comparison jobs in the Analysis workflow, summaries
-  and downloadable artifacts. Complexity verdicts are informational; actual errors fail.
-- Main-only GitHub Pages publication of the latest successful overview, preserving
+  and downloadable artifacts. Complexity verdicts are informational by default;
+  opt-in gates enforce policy, and actual errors fail.
+- Main-only GitHub Pages publication of rebuilt history and the latest overview, preserving
   the landing page and keeping PR/develop reports artifact-only.
 - Rules and use: [METRICS.md](docs/METRICS.md), [CI.md](docs/CI.md).
 
@@ -118,11 +136,12 @@ and CLI cases in `tests/e2e/test_cli_smoke.py`. Suite at 112 tests / ~73% covera
 | Capability | Status | Notes |
 |------------|--------|-------|
 | `analyze` — AST symbols + function-level metrics v2 | done | Static, no LLM; Markdown/JSON/HTML reports. |
-| `compare` — committed revision comparison | done | Changed-file function deltas; independent PR job. |
-| `idiomatize` — comprehensions, `is None`, truthiness, membership | bounded support | AST/token-aware, closed built-in cases only; uncertain cases skipped. Optional unverified LLM proposals. |
+| `compare` — revisions or explicit working tree | done | Merge-base convenience, changed-file deltas, opt-in PR gates/annotations. |
+| `history` — rebuilt first-parent trends | implemented locally | Configurable 100-commit default, gaps, persistent hotspots and offline drill-down. |
+| `idiomatize` — comprehensions, `is None`, truthiness, membership, f-strings, dict get | bounded support | AST/token-aware, closed built-in cases only; uncertain cases skipped. Optional unverified LLM proposals. |
 | `deduplicate` — embedding clustering → proposed `utils/<symbol>_dedup.py` | done (suggest-only) | Honestly labeled; does **not** remove dupes or rewrite call sites. See Near-term. |
 | `pattern` — factory/strategy/observer/singleton templates | done | Default paths write advisory modules. Opt-in LLM via model configuration. |
-| `check` — naming, function length, per-function cyclomatic complexity | done | `critical` when CC ≥ 2× threshold; opt-in `--fail-on` severity gate. |
+| `check` — naming, function length, per-function cyclomatic complexity | done | Severity gates, per-rule overrides and per-path suppression; source errors remain fatal. |
 | Unified thresholds | done | `check` and `analyze` both read `AppConfig.complexity_thresholds`. |
 | Apply — validated diffs, file snapshots, syntax/metrics checks | done (bounded) | No Git writes; opt-in tests; verified scoped recovery and explicit failures. Not crash-proof/multi-file atomic. |
 | Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducio/sessions/`. |
@@ -152,8 +171,8 @@ broader semantic guarantees are not claimed. Ordered from clarity to broader fea
   safe prompt logging, and disclosure of model/embedding downloads.
 - [ ] **Cognitive threshold policy:** define how CC and cognitive thresholds select
   findings, then apply it consistently to analysis, checks, comparisons, and charts.
-- [ ] **More validated idioms:** add narrowly scoped context-manager, enumerate,
-  f-string, and other transformations only with tested safety preconditions.
+- [ ] **More validated idioms:** context-manager, enumerate and wider f-string/get
+  support still need tested safety preconditions; closed-value f-string/get cases exist.
 - [ ] **Dependency/reference mapping:** resolve imports, symbols, and callers for
   impact analysis; report ambiguity instead of guessing.
 - [ ] **Real deduplication and pattern integration:** use reference analysis to
@@ -165,7 +184,7 @@ broader semantic guarantees are not claimed. Ordered from clarity to broader fea
 ## Near-term (planned)
 
 - **More idioms (heuristic tail)** — remaining patterns in `test-python-code/python/style/non_idiomatic.py`
-  that need multi-line body rewrites: `enumerate` (drop `range(len(...))`), f-strings, `with`-statement
+  that need multi-line body rewrites: `enumerate` (drop `range(len(...))`), wider string formatting, `with`-statement
   context managers, `itertools.product`, `str.join`. Require supported preconditions
   and behavior tests; opt-in LLM output is not a substitute for validation.
 - **Real deduplication** — rewrite call sites to import the extracted util, not just emit the module.
@@ -176,7 +195,8 @@ broader semantic guarantees are not claimed. Ordered from clarity to broader fea
 
 - **Cross-file impact analysis** — re-introduce an LSP/symbol-graph layer *only when a command consumes it*
   (dead-code detection, safe-rename impact, real dedup rewrite).
-- **Further reporting** — historical trends, hosted PR previews, and optional PR comments.
+- **Further reporting** — hosted PR previews and optional PR comments; rebuilt
+  history trends and Actions warning annotations are implemented locally.
 - **CI mode** — non-interactive `--ci` / pre-commit integration with meaningful exit codes.
 
 ## Vision (from DESIGN.md — not scheduled)

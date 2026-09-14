@@ -20,6 +20,7 @@ from reducio.models import (
     AnalysisDiagnostic,
     AppConfig,
     CompareResult,
+    HistoryResult,
     RefactorPlan,
     RefactorResult,
 )
@@ -59,6 +60,9 @@ def _get_cfg(
     llm_api: str | None = None,
     llm_base_url: str | None = None,
     check_fail_on: str | None = None,
+    compare_fail_on: str | None = None,
+    history_limit: int | None = None,
+    history_path_aliases: list[str] | None = None,
 ) -> AppConfig:
     try:
         cfg = apply_env(load_config(str(config) if config is not None else None))
@@ -70,6 +74,9 @@ def _get_cfg(
                 ("llm_api", llm_api),
                 ("llm_base_url", llm_base_url),
                 ("check_fail_on", check_fail_on),
+                ("compare_fail_on", compare_fail_on),
+                ("history_limit", history_limit),
+                ("history_path_aliases", history_path_aliases),
             )
             if value is not None
         }
@@ -283,7 +290,11 @@ def analyze(
 def _write_analysis_reports(result, output_dir: Path, format: ReportFormat) -> None:
     try:
         for path in write_reports(result, output_dir, format):
-            label = "Comparison" if isinstance(result, CompareResult) else "Baseline"
+            label = (
+                "History"
+                if isinstance(result, HistoryResult)
+                else "Comparison" if isinstance(result, CompareResult) else "Baseline"
+            )
             typer.echo(f"{label} report: {path}")
     except (ReportError, OSError, StorageError) as error:
         typer.echo(f"Report failed: {error}", err=True)
@@ -293,11 +304,23 @@ def _write_analysis_reports(result, output_dir: Path, format: ReportFormat) -> N
 @app.command()
 def compare(
     path: Path = typer.Argument(Path("."), help="Git repository or source subdirectory"),
-    base: str = typer.Option(
-        ..., "--base", help="Base revision (exact ref, not an implicit merge base)"
+    base: str | None = typer.Option(
+        None, "--base", help="Base revision (exact ref, not an implicit merge base)"
     ),
-    head: str = typer.Option(
-        "HEAD", "--head", help="Head revision; working-tree edits are ignored"
+    head: str | None = typer.Option(
+        None, "--head", help="Head revision (default HEAD); working-tree edits are ignored"
+    ),
+    against: str | None = typer.Option(
+        None, "--against", help="Compare from REF's merge base with HEAD; refs are not fetched"
+    ),
+    worktree: bool = typer.Option(
+        False,
+        "--worktree",
+        help="Measure current files, including nonignored untracked Python files",
+    ),
+    fail_on: str | None = typer.Option(None, "--fail-on", help="none, new-hotspots or regressions"),
+    annotations: str | None = typer.Option(
+        None, "--annotations", help="github: emit up to ten Actions warnings"
     ),
     report: bool = typer.Option(False, "--report", "-r"),
     format: ReportFormat = typer.Option(
@@ -308,18 +331,33 @@ def compare(
     verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
 ):
-    """Compare functions in changed Python files at two committed revisions. Informational only."""
-    cfg = _get_cfg(config, verbose)
+    """Compare changed Python files; committed revisions by default, gates opt-in."""
+    if (
+        bool(base) == bool(against)
+        or head is not None
+        and (worktree or against)
+        or annotations not in (None, "github")
+    ):
+        typer.echo(
+            "Choose --base or --against; --head cannot accompany --against/--worktree. Annotations: github.",
+            err=True,
+        )
+        raise typer.Exit(2)
+    cfg = _get_cfg(config, verbose, compare_fail_on=fail_on)
     root = _resolve_repo(path)
     try:
         with progress("Preparing revision comparison...", quiet=quiet):
-            result = compare_revisions(root, base, head, cfg)
+            result = compare_revisions(
+                root, base, head or "HEAD", cfg, against=against, worktree=worktree
+            )
     except CompareError as error:
         empty = analyze_files([], cfg, str(path))
         result = CompareResult(
             scope=str(path),
-            base_revision=base,
-            head_revision=head,
+            base_revision=base or against or "",
+            head_revision=head or "HEAD",
+            head_source="worktree" if worktree else "commit",
+            gate_threshold=cfg.compare_fail_on,
             before=empty,
             after=empty,
             configuration=analysis_configuration(cfg),
@@ -338,15 +376,72 @@ def compare(
             function = change.after or change.before
             assert function is not None
             typer.echo(
-                f"{function.file}:{function.line} {function.qualified_name} "
+                f"{function.file!r}:{function.line} {function.qualified_name} "
                 f"{change.status} CC delta={change.cyclomatic_delta} cognitive delta={change.cognitive_delta}"
             )
     if report:
         with progress("Generating comparison reports...", quiet=quiet):
             _write_analysis_reports(result, _report_dir(path, output_dir), format)
     for diagnostic in result.diagnostics + result.before.diagnostics + result.after.diagnostics:
-        typer.echo(f"Comparison incomplete: {diagnostic.file}: {diagnostic.message}", err=True)
-    if not result.complete:
+        typer.echo(f"Comparison incomplete: {diagnostic.file!r}: {diagnostic.message!r}", err=True)
+    if annotations:
+        from reducio.annotations import github_annotations
+
+        for message in github_annotations(result):
+            typer.echo(message)
+    typer.echo(
+        f"Comparison gate: {result.gate_threshold}; {'unavailable' if not result.complete else 'failed' if result.gate_failed else 'disabled' if result.gate_threshold == 'none' else 'passed'}"
+    )
+    if not result.complete or result.gate_failed:
+        raise typer.Exit(1)
+
+
+@app.command()
+def history(
+    path: Path = typer.Argument(Path(".")),
+    ref: str = typer.Option("HEAD", "--ref", help="Newest commit; history follows first parents"),
+    limit: int | None = typer.Option(
+        None, "--limit", min=1, help="Commit limit (default 100; configurable)"
+    ),
+    path_alias: list[str] | None = typer.Option(
+        None,
+        "--path-alias",
+        help="Former source root, repository-relative; repeat in fallback order",
+    ),
+    report: bool = typer.Option(False, "--report", "-r"),
+    format: ReportFormat = typer.Option(ReportFormat.MARKDOWN, "--format"),
+    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    config: Path | None = typer.Option(None, "--config", "-c"),
+    quiet: bool = typer.Option(False, "--quiet", "-q"),
+):
+    """Rebuild historical metrics; old gaps are warnings, an incomplete head fails."""
+    from reducio.history import history_revisions
+
+    cfg = _get_cfg(config, history_limit=limit, history_path_aliases=path_alias or None)
+    root = _resolve_repo(path)
+    try:
+        with progress("Preparing historical analysis...", quiet=quiet):
+            result = history_revisions(root, ref, cfg)
+    except CompareError as error:
+        typer.echo(f"History unavailable: {str(error)!r}", err=True)
+        raise typer.Exit(1) from None
+    except ValueError as error:
+        typer.echo(str(error), err=True)
+        raise typer.Exit(2) from None
+    gaps = sum(not s.measurement.complete for s in result.snapshots)
+    typer.echo(
+        f"Snapshots: {len(result.snapshots)}  Historical gaps: {gaps}  Unique blobs analyzed: {result.unique_blobs_analyzed}"
+    )
+    if report:
+        with progress("Generating historical reports...", quiet=quiet):
+            _write_analysis_reports(result, _report_dir(path, output_dir), format)
+    if gaps:
+        typer.echo(
+            "Unavailable snapshots are gaps, not zero complexity; inspect history diagnostics.",
+            err=True,
+        )
+    if not result.head_complete:
+        typer.echo("Latest snapshot is incomplete; dashboard must not be published.", err=True)
         raise typer.Exit(1)
 
 
@@ -494,6 +589,8 @@ def check(
         f"Issues: {result['total_issues']} "
         f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
     )
+    if result.get("suppressed_count"):
+        typer.echo(f"Suppressed findings: {result['suppressed_count']} (not counted by the gate)")
     from reducio.quality_gate import evaluate_gate
 
     result.update(evaluate_gate(result, cfg.check_fail_on))

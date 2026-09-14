@@ -79,8 +79,12 @@ def check_cli(run, executable: str, root: Path, version: str) -> None:
         "-m",
         "head",
     )
-    for command in ("analyze", "compare"):
-        extra = ["--base", "HEAD~1"] if command == "compare" else []
+    for command, extra in (
+        ("analyze", []),
+        ("compare", ["--base", "HEAD~1"]),
+        ("compare", ["--against", "HEAD~1", "--worktree", "--annotations", "github"]),
+        ("history", ["--limit", "2"]),
+    ):
         run(
             executable,
             command,
@@ -98,6 +102,9 @@ def check_cli(run, executable: str, root: Path, version: str) -> None:
     ).stdout
     for suffix in ("md", "json", "html"):
         assert list((target / ".reducio").glob(f"*.{suffix}")), suffix
+    historical = next((target / ".reducio").glob("reducio-history-*.json"))
+    assert len(json.loads(historical.read_text())["snapshots"]) == 2
+    assert 'id="history-function"' in historical.with_suffix(".html").read_text()
     run(executable, "idiomatize", str(target), "--config", str(config), "--dry-run", "--quiet")
     session = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())["plan"]
     assert session["complete"] and session["provenance"]

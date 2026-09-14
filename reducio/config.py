@@ -77,6 +77,8 @@ def apply_env(cfg: AppConfig) -> AppConfig:
         "llm_timeout_seconds",
         "llm_max_tokens",
         "check_fail_on",
+        "compare_fail_on",
+        "history_limit",
     ):
         if value := os.environ.get("REDUCIO_" + name.upper()):
             values[name] = value

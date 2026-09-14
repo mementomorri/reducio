@@ -26,8 +26,11 @@ def analysis_configuration(cfg: AppConfig) -> dict:
     }
 
 
-def analyze_files(files: Iterable[FileInfo], cfg: AppConfig, scope: str = ".") -> AnalyzeResult:
-    status("Analyzing Python functions and measuring complexity...")
+def analyze_files(
+    files: Iterable[FileInfo], cfg: AppConfig, scope: str = ".", *, announce: bool = True
+) -> AnalyzeResult:
+    if announce:
+        status("Analyzing Python functions and measuring complexity...")
     result = AnalyzeResult(
         total_files=0,
         total_symbols=0,

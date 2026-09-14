@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      history_limit:
+        description: 'History commits (blank: repository REDUCIO_HISTORY_LIMIT variable, otherwise 100)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -69,8 +74,41 @@ jobs:
             echo "Reports unavailable; inspect the failed step above." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  history:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      REDUCIO_HISTORY_LIMIT: ${{ inputs.history_limit || vars.REDUCIO_HISTORY_LIMIT || '100' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install
+        run: pip install -e ".[reports]"
+      - name: Rebuild main history
+        run: reducio history reducio/ --ref HEAD --path-alias reducto/ --path-alias python/ai_sidecar/ --report --format all --output-dir ci-reports/history
+      - name: Upload history
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reducio-history
+          path: ci-reports/history/
+          if-no-files-found: warn
+      - name: History summary
+        if: always()
+        run: |
+          for report in ci-reports/history/*.md; do
+            [ -f "$report" ] || continue
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          done
+
   publish-pages:
-    needs: overview
+    needs: [overview, history]
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
@@ -94,6 +132,12 @@ jobs:
           name: reducio-overview
           path: ci-reports/overview/
 
+      - name: Download successful history
+        uses: actions/download-artifact@v4
+        with:
+          name: reducio-history
+          path: ci-reports/history/
+
       - name: Stage Pages site
         shell: bash
         run: |
@@ -103,9 +147,15 @@ jobs:
             echo "Expected exactly one overview dashboard" >&2
             exit 1
           fi
+          history=(ci-reports/history/reducio-history-*.html)
+          if [ "${#history[@]}" -ne 1 ]; then
+            echo "Expected exactly one history dashboard" >&2
+            exit 1
+          fi
           mkdir -p ci-reports/pages/dashboard
           cp docs/index.html ci-reports/pages/index.html
-          cp "${reports[0]}" ci-reports/pages/dashboard/index.html
+          cp "${reports[0]}" ci-reports/pages/dashboard/overview.html
+          cp "${history[0]}" ci-reports/pages/dashboard/index.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -124,6 +174,7 @@ jobs:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           echo "[Open the main-branch dashboard](${PAGE_URL%/}/dashboard/)" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Open the latest standalone overview](${PAGE_URL%/}/dashboard/overview.html)" >> "$GITHUB_STEP_SUMMARY"
 
   comparison:
     if: github.event_name == 'pull_request'
@@ -153,9 +204,10 @@ jobs:
         env:
           BASE_SHA: ${{ steps.revisions.outputs.base }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REDUCIO_COMPARE_FAIL_ON: ${{ vars.REDUCIO_COMPARE_FAIL_ON || 'none' }}
         run: |
           reducio compare reducio/ --base "$BASE_SHA" --head "$HEAD_SHA" \
-            --report --format all --output-dir ci-reports/comparison -v
+            --annotations github --report --format all --output-dir ci-reports/comparison -v
 
       - name: Upload comparison
         id: reports

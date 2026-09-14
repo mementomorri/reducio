@@ -238,11 +238,93 @@ def rewrite(content: str, path: str) -> tuple[str, list[str], list[PlanDiagnosti
             + ("list comprehension" if keys is None else "dict comprehension"),
         )
 
+    def dict_get(statements, index, env):
+        node = statements[index]
+        if dynamic or not isinstance(node, ast.If) or len(node.body) != 1:
+            return
+        test = node.test
+        if not (
+            isinstance(test, ast.Compare)
+            and len(test.ops) == 1
+            and isinstance(test.ops[0], ast.In)
+            and isinstance(test.comparators[0], ast.Name)
+        ):
+            return
+        name, key = test.comparators[0], test.left
+        branch = node.body[0]
+        fallback = node.orelse or statements[index + 1 : index + 2]
+        if not (
+            isinstance(branch, ast.Return)
+            and isinstance(branch.value, ast.Subscript)
+            and len(fallback) == 1
+            and isinstance(fallback[0], ast.Return)
+        ):
+            return
+        lookup, default = branch.value, fallback[0].value or ast.Constant(value=None)
+        if ast.dump(lookup.value) != ast.dump(name) or ast.dump(lookup.slice) != ast.dump(key):
+            return
+        if not isinstance(key, (ast.Name, ast.Constant)) or not isinstance(
+            default, (ast.Name, ast.Constant)
+        ):
+            raise ValueError()
+        scalar = (str, int, float, bool, bytes, type(None))
+        if (
+            type(value(name, env)) is not dict
+            or type(value(key, env)) not in scalar
+            or type(value(default, env)) not in scalar
+        ):
+            raise ValueError()
+        edit(
+            node,
+            node if node.orelse else fallback[0],
+            f"return {name.id}.get({source(key)}, {ast.unparse(default)})",
+            "Use get() on a proven built-in dictionary",
+        )
+
+    def f_string(node, env):
+        parts = []
+
+        def flatten(part):
+            if isinstance(part, ast.BinOp) and isinstance(part.op, ast.Add):
+                flatten(part.left)
+                flatten(part.right)
+            else:
+                parts.append(part)
+
+        flatten(node)
+        values = []
+        for part in parts:
+            if isinstance(part, ast.Constant) and type(part.value) is str:
+                values.append(ast.Constant(value=part.value))
+            elif isinstance(part, ast.Name) and type(value(part, env)) is str:
+                values.append(ast.FormattedValue(value=part, conversion=-1))
+            elif (
+                isinstance(part, ast.Call)
+                and isinstance(part.func, ast.Name)
+                and part.func.id == "str"
+                and "str" not in bound
+                and len(part.args) == 1
+                and not part.keywords
+                and type(value(part.args[0], env)) in (str, int, float, bool, bytes, type(None))
+            ):
+                values.append(ast.FormattedValue(value=part.args[0], conversion=ord("s")))
+            else:
+                raise ValueError()
+        if any(isinstance(v, ast.FormattedValue) for v in values):
+            edit(
+                node,
+                node,
+                ast.unparse(ast.JoinedStr(values=values)),
+                "Use an f-string for proven built-in concatenation",
+            )
+
     def expression_edit(node, env, boolean_context=False):
         if dynamic:
             return
         scalar = (int, float, bool, str, bytes, type(None))
-        if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            f_string(node, env)
+        elif isinstance(node, ast.Compare) and len(node.ops) == 1:
             right = node.comparators[0]
             if (
                 isinstance(right, ast.Constant)
@@ -313,6 +395,7 @@ def rewrite(content: str, path: str) -> tuple[str, list[str], list[PlanDiagnosti
         env: dict = {}
         for index, statement in enumerate(function.body):
             try:
+                dict_get(function.body, index, env)
                 if isinstance(statement, ast.For):
                     loop(function.body, index, env, function)
                 node = getattr(statement, "test", None) or getattr(statement, "value", None)

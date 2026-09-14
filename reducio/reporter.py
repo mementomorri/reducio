@@ -63,6 +63,7 @@ class Reporter:
                         ("Critical", "critical"),
                         ("Warning", "warning"),
                         ("Info", "info"),
+                        ("Suppressed", "suppressed_count"),
                     )
                 ],
             )
@@ -80,6 +81,27 @@ class Reporter:
                 + table(
                     ["Severity", "Type", "File", "Line", "Symbol", "Message", "Suggestion"],
                     [[issue.get(key, "") for key in keys] for issue in issues],
+                )
+            )
+        suppressed = result.get("suppressed_issues") or []
+        if suppressed:
+            lines.append(
+                "\n## Suppressed findings (not counted by the gate)\n\n"
+                + table(
+                    ["Type", "File", "Line", "Symbol", "Reason"],
+                    [
+                        [
+                            issue.get(key, "")
+                            for key in (
+                                "issue_type",
+                                "file",
+                                "line",
+                                "symbol",
+                                "suppression_reason",
+                            )
+                        ]
+                        for issue in suppressed
+                    ],
                 )
             )
         write_text(path, "".join(lines))

@@ -5,8 +5,8 @@ import re
 from dataclasses import asdict, dataclass, field
 
 from reducio.metrics import functions_from_tree, line_decisions
-from reducio.models import ComplexityThresholds, FileInfo, Language
-from reducio.repo import detect_language
+from reducio.models import AppConfig, FileInfo, Language
+from reducio.repo import detect_language, matches
 from reducio.utils.code_utils import to_pascal_case, to_snake_case
 from reducio.workspace import Workspace
 
@@ -23,6 +23,7 @@ class QualityIssue:
     message: str
     symbol: str = ""
     suggestion: str = ""
+    suppression_reason: str = ""
 
 
 @dataclass
@@ -32,16 +33,16 @@ class QualityReport:
     warning: int = 0
     info: int = 0
     issues: list[QualityIssue] = field(default_factory=list)
+    suppressed_issues: list[QualityIssue] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return asdict(self) | {"suppressed_count": len(self.suppressed_issues)}
 
 
 class QualityCheckerAgent:
     def __init__(self, workspace: Workspace | None = None):
-        self.thresholds = (
-            workspace.cfg.complexity_thresholds if workspace else ComplexityThresholds()
-        )
+        self.cfg = workspace.cfg if workspace else AppConfig()
+        self.thresholds = self.cfg.complexity_thresholds
 
     async def check_quality(self, files: list[FileInfo], path: str) -> QualityReport:
         issues = []
@@ -60,18 +61,37 @@ class QualityCheckerAgent:
                         f"Metrics unavailable: {getattr(error, 'msg', str(error))}",
                     )
                 )
-        issues.sort(
+        active: list[QualityIssue] = []
+        suppressed: list[QualityIssue] = []
+        settings: dict[str, str] = {key: value for key, value in self.cfg.quality_rules.items()}
+        for issue in issues:
+            if issue.issue_type == "parse_error":
+                active.append(issue)
+                continue
+            setting = settings.get(issue.issue_type)
+            if setting and setting != "off":
+                issue.severity = setting
+            if setting == "off":
+                issue.suppression_reason = "Rule disabled by quality_rules"
+            for pattern, rules in self.cfg.quality_ignores.items():
+                if issue.issue_type in rules and matches(issue.file, [pattern]):
+                    issue.suppression_reason = f"Ignored by quality_ignores: {pattern}"
+                    break
+            (suppressed if issue.suppression_reason else active).append(issue)
+        issues = sorted(
+            active,
             key=lambda i: (
                 ("critical", "warning", "info").index(i.severity),
                 i.file,
                 i.line,
                 i.issue_type,
                 i.symbol,
-            )
+            ),
         )
         return QualityReport(
             total_issues=len(issues),
             issues=issues,
+            suppressed_issues=suppressed,
             critical=sum(i.severity == "critical" for i in issues),
             warning=sum(i.severity == "warning" for i in issues),
             info=sum(i.severity == "info" for i in issues),

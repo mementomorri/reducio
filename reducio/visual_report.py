@@ -7,7 +7,7 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from reducio.models import AnalyzeResult, CompareResult, FunctionMetrics
+from reducio.models import AnalyzeResult, CompareResult, FunctionMetrics, HistoryResult
 from reducio.presentation import table as _table
 from reducio.progress import status
 from reducio.storage import checked_file, report_stem, write_text
@@ -97,6 +97,11 @@ def _summary(result: Result) -> list[tuple[str, str]]:
     if isinstance(result, CompareResult):
         counts = result.counts
         return [
+            ("Head source", result.head_source),
+            (
+                "Comparison gate",
+                f"{result.gate_threshold}: {'unavailable' if not result.complete else 'failed' if result.gate_failed else 'passed' if result.gate_threshold != 'none' else 'disabled'}",
+            ),
             ("Changed Python files", str(len(result.files))),
             ("Matched functions", str(len(_matched(result)))),
             (
@@ -164,7 +169,7 @@ def _context(result: Result) -> str:
     if isinstance(result, CompareResult):
         return (
             f"Changed files under {result.scope}. "
-            f"{result.base_revision} → {result.head_revision}. "
+            f"{result.base_revision} → {result.head_revision}{' (WORKTREE; SHA is HEAD anchor)' if result.head_source == 'worktree' else ''}. "
             "Totals cover changed files only, not the entire repository. "
             "Improvements/regressions describe complexity, not functionality or correctness."
         )
@@ -385,7 +390,14 @@ def _figures(result: Result) -> list[Any]:
     return figures
 
 
-def html_report(result: Result) -> str:
+def html_report(
+    result: Result,
+    *,
+    title: str | None = None,
+    intro: str = "",
+    scripts: str = "",
+    status_label: str = "Status",
+) -> str:
     figures = _figures(result)
     charts = "".join(
         '<section class="chart">'
@@ -399,7 +411,9 @@ def html_report(result: Result) -> str:
         + "</section>"
         for index, figure in enumerate(figures)
     )
-    title = "Change impact" if isinstance(result, CompareResult) else "Code overview"
+    title = escape(
+        title or ("Change impact" if isinstance(result, CompareResult) else "Code overview")
+    )
     cards = "".join(
         f'<div class="card"><span>{escape(label)}</span><strong>{escape(value)}</strong></div>'
         for label, value in _summary(result)
@@ -441,8 +455,8 @@ def html_report(result: Result) -> str:
 <a href="https://github.com/mementomorri/reducio">GitHub</a></nav></div>
 <div class="eyebrow">The Shrinking Charm / metrics v{result.metrics_version}</div>
 <h1>{title}</h1><p>{escape(_context(result))}</p>
-<div class="status">Status: <strong>{'Complete' if result.complete else 'INCOMPLETE — see unavailable measurements'}</strong></div></header>
-<main><div class="cards">{cards}</div>{errors}{empty}{charts}
+<div class="status">{escape(status_label)}: <strong>{'Complete' if result.complete else 'INCOMPLETE — see unavailable measurements'}</strong></div></header>
+<main>{intro}<div class="cards">{cards}</div>{errors}{empty}{charts}
 <section id="measurements"><h2>All function measurements</h2>{notes}{_table(headers, rows, html=True)}</section>
 <section><h2>Reading these results</h2><p>Lower complexity can make code easier to understand, but does not prove correctness.
 Added and removed functions are separate from changes to existing functions. A mixed result means one complexity metric rose while the other fell.
@@ -451,16 +465,22 @@ Physical line counts include comments and blank lines; fewer lines alone are not
 it does not claim Sonar compatibility. Hotspots have cyclomatic complexity ≥ {_threshold(result)}.
 Nested functions are measured independently. Module/class-body control flow is outside the function-level scores.</p>
 <details><summary>Measurement configuration</summary><pre>{escape(str(result.configuration))}</pre></details></section>
-<footer>Self-contained report · works offline · complete data also available with --format json or all.</footer></main></body></html>"""
+<footer>Self-contained report · works offline · complete data also available with --format json or all.</footer></main>{scripts}</body></html>"""
 
 
 def write_reports(
-    result: Result, output_dir: str | Path, format: ReportFormat = ReportFormat.MARKDOWN
+    result: Result | HistoryResult,
+    output_dir: str | Path,
+    format: ReportFormat = ReportFormat.MARKDOWN,
 ) -> list[Path]:
     output = Path(output_dir)
     checked_file(output, "probe")
     output.mkdir(parents=True, exist_ok=True)
-    kind = "compare" if isinstance(result, CompareResult) else "baseline"
+    kind = (
+        "history"
+        if isinstance(result, HistoryResult)
+        else "compare" if isinstance(result, CompareResult) else "baseline"
+    )
     stem = report_stem(kind)
     paths = []
     formats = (
@@ -470,7 +490,20 @@ def write_reports(
     )
     for selected in formats:
         status(f"Generating {selected.value} report...")
-        if selected == ReportFormat.MARKDOWN:
+        if isinstance(result, HistoryResult):
+            from reducio.history_report import html_history, markdown_history
+
+            suffix = selected.value if selected != ReportFormat.MARKDOWN else "md"
+            content = (
+                result.model_dump_json(indent=2)
+                if selected == ReportFormat.JSON
+                else (
+                    html_history(result)
+                    if selected == ReportFormat.HTML
+                    else markdown_history(result)
+                )
+            )
+        elif selected == ReportFormat.MARKDOWN:
             suffix, content = "md", markdown_report(result)
         elif selected == ReportFormat.JSON:
             suffix, content = "json", result.model_dump_json(indent=2)

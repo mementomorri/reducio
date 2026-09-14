@@ -9,25 +9,66 @@ For a copy-paste workflow for another repository, start with the short
 pip install -e ".[reports]"  # from a source checkout; adds Plotly
 reducio analyze reducio/ --report --format all --output-dir ci-reports/overview
 reducio compare reducio/ --base HEAD~1 --head HEAD --report --format all --output-dir ci-reports/comparison
+reducio history reducio/ --report --format all --output-dir ci-reports/history
 ```
 
 In another installed target project, use `.` or its source directory in place of
 `reducio/`. No LLM or embeddings are needed. `analyze` reads current files;
-`compare` reads **committed Git blobs**, ignoring staged/unstaged/untracked edits.
+`compare` reads **committed Git blobs** by default, ignoring local edits.
 It does not check out revisions, import target modules, or run target tests.
 The optional directory target must exist in the current checkout.
 
-`--base` is required and means that exact revision; `--head` defaults to `HEAD`.
-For a branch comparison, resolve a merge base explicitly:
+Choose `--base` for an exact revision (`--head` defaults to `HEAD`), or `--against`
+to resolve the merge base with `HEAD`. Fetch your remote refs yourself when needed:
 
 ```bash
 git fetch origin main
-reducio compare . --base "$(git merge-base origin/main HEAD)" --head HEAD --report --format all
+reducio compare . --against origin/main --report --format all
+reducio compare . --against origin/main --worktree --report --format all
+reducio compare . --base HEAD --worktree  # only current uncommitted work
 ```
 
 Include/exclude patterns and thresholds come from one current configuration on
 both sides, not each revision's old config. Pass `--config path/to/config.yaml`
 to make that choice explicit. See [METRICS.md](METRICS.md) for counting rules.
+
+`--worktree` reads actual tracked working files plus nonignored untracked Python
+files, including deletions. It does not measure a staged-only snapshot or change
+the index. Its report labels `head_revision` as a HEAD anchor, not the measured
+contents. `--base` and `--against` are mutually exclusive; explicit `--head` cannot
+accompany `--against` or `--worktree`. Missing refs fail without automatic fetching.
+
+## History dashboard
+
+`history` rebuilds up to **100 first-parent commits** ending at `--ref HEAD`, oldest
+first. There is no data branch, database or persistent cache. Git blobs are read
+in batches; identical contents are parsed once per run. Historical code is never
+checked out, imported or executed. Use full Git history (`fetch-depth: 0` in CI).
+
+Configure the limit with `--limit`, `REDUCIO_HISTORY_LIMIT`, or YAML `history_limit`
+(in that precedence order). Explicit former source roots preserve continuity:
+
+```bash
+reducio history reducio/ --limit 100 --path-alias reducto/ \
+  --path-alias python/ai_sidecar/ --report --format all
+```
+
+Aliases are optional, repository-relative roots, tried in order only if the
+current root is absent. YAML uses `history_path_aliases: [old_source]`. Include/
+exclude patterns are relative to whichever source root is selected. Root changes
+are labeled; other file/function renames are not inferred by history.
+
+Open the HTML to select a commit range, inspect any commit's functions and deltas,
+or click a persistent hotspot to see its function history. Charts show physical
+LOC/function count, median/p95 CC and cognitive complexity, hotspot count/share,
+and new/resolved hotspots. All snapshots use the current engine/configuration;
+these are remeasurements, not an archive of old tool outputs.
+
+Older invalid/absent source appears as a **gap**, not a zero or an improvement.
+Adjacent deltas across gaps are unavailable. Historical gaps alone exit 0;
+incomplete latest source, Git failures or report errors exit 1 and block Pages.
+Invalid input/configuration exits 2. Runtime and report size grow with the selected
+history; reduce the limit or source scope for large repositories.
 
 ## Where results appear
 
@@ -56,7 +97,7 @@ is explicitly enabled. Progress stops before interactive approval prompts.
 
 ## This repository's GitHub Actions workflow
 
-[Analysis](../.github/workflows/analysis.yml) has two analysis jobs and a main-only
+[Analysis](../.github/workflows/analysis.yml) has three analysis jobs and a main-only
 publishing job:
 
 - **overview:** on `main`/`develop` pushes and manual runs. Analyzes `reducio/`,
@@ -64,17 +105,21 @@ publishing job:
 - **comparison:** on pull requests targeting `main`. Fetches full history and
   compares the PR merge base against the explicit PR head SHA, scoped to
   `reducio/`. It does not use GitHub's synthetic merge commit as the head.
-- **publish-pages:** after a successful overview, on `main` pushes or manual runs
-  explicitly selecting `main`. Reuses that run's HTML artifact, preserves the
-  landing page, and publishes the dashboard at `/dashboard/`. Never runs for PRs,
+- **history:** on `main` pushes/manual runs only. Rebuilds Git history with both
+  former source-root aliases. Limit: manual `history_limit` input → repository
+  Actions variable `REDUCIO_HISTORY_LIMIT` → 100.
+- **publish-pages:** after successful overview **and history**, on `main` pushes or
+  manual runs explicitly selecting `main`. Reuses both HTML artifacts, preserves
+  the landing page, and publishes history at `/dashboard/`, with the standalone
+  latest overview at `/dashboard/overview.html`. Never runs for PRs,
   `develop`, or manual runs on other branches. Failed analysis does not replace
   the last published dashboard. Only this job receives Pages deployment permissions.
 
 Open **Actions → Analysis → run → Summary** for the compact results. Download
-`reducio-overview` or `reducio-comparison` from the run's **Artifacts** section
+`reducio-overview`, `reducio-history` or `reducio-comparison` from the run's **Artifacts** section
 (also linked in the summary), unzip it, and open its `.html` file in a browser.
 PR and `develop` dashboards remain download-only. The latest successful `main`
-overview is also hosted on GitHub Pages; its deployment summary includes a link.
+history and overview are hosted on GitHub Pages; the deployment summary links there.
 GitHub documents [Markdown job summaries](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-commands#adding-a-job-summary)
 and [workflow artifacts](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflow-artifacts).
 
@@ -93,13 +138,17 @@ Optionally restrict the `github-pages` environment's deployment branches to `mai
 as an additional safeguard. Setup follows GitHub's
 [custom Pages workflow instructions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
 
-The public site contains only the existing landing HTML and latest overview HTML;
-JSON, quality reports, and PR comparisons remain in Actions artifacts. Pages
-updates the existing site, not a historical report archive.
+The public site contains only landing, history and latest-overview HTML. These
+include embedded metrics, paths and commit metadata, but not source code. JSON
+files, quality reports and PR comparisons remain in Actions artifacts. Each run
+replaces the dashboard rather than storing separate pages per past run.
 
 Reports upload with `if: always()` so available partial results survive a failed
-analysis. Missing refs, unreadable/invalid source, or report errors fail the job;
-complexity regressions and quality findings alone do not. Docs-only changes yield
+analysis. Missing refs, incomplete current analysis or report errors fail the job.
+Comparison emits up to ten GitHub warning annotations; full reports are not capped.
+Set repository variable `REDUCIO_COMPARE_FAIL_ON` to `new-hotspots` or `regressions`
+for an enforced comparison gate (default `none`). Existing unchanged hotspots do
+not fail it. Quality findings require their own opt-in `check` gate. Docs-only changes yield
 a successful empty comparison. Branch-protection rules are not changed by this
 workflow update. A failure before report generation is explained in job logs.
 

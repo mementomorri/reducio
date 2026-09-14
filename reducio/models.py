@@ -204,6 +204,9 @@ class CompareResult(BaseModel):
     changes: list[FunctionComparison] = Field(default_factory=list)
     diagnostics: list[AnalysisDiagnostic] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+    head_source: Literal["commit", "worktree"] = "commit"
+    gate_threshold: Literal["none", "new-hotspots", "regressions"] = "none"
+    gate_failed: bool = False
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -220,6 +223,49 @@ class CompareResult(BaseModel):
         counts["new_hotspots"] = sum(c.new_hotspot for c in self.changes)
         counts["resolved_hotspots"] = sum(c.resolved_hotspot for c in self.changes)
         return counts
+
+
+class HistorySnapshot(BaseModel):
+    revision: str
+    committed_at: str
+    subject: str = ""
+    actual_scope: str | None = None
+    measurement: AnalyzeResult
+    changes: list[FunctionComparison] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    comparison_available: bool = False
+
+
+class HistoryResult(BaseModel):
+    schema_version: Literal[1] = 1
+    metrics_version: int = 2
+    tool_version: str
+    scope: str
+    ref_revision: str
+    limit: int
+    configuration: dict
+    snapshots: list[HistorySnapshot] = Field(default_factory=list)
+    unique_blobs_analyzed: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def complete(self) -> bool:
+        return bool(self.snapshots) and all(s.measurement.complete for s in self.snapshots)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def head_complete(self) -> bool:
+        return bool(self.snapshots) and self.snapshots[-1].measurement.complete
+
+
+QualityRule = Literal[
+    "long_function",
+    "high_complexity_function",
+    "high_complexity_line",
+    "naming_convention",
+    "bad_parameter_name",
+    "bad_variable_name",
+]
 
 
 class ComplexityThresholds(BaseModel):
@@ -243,6 +289,13 @@ class AppConfig(BaseModel):
     llm_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     llm_max_tokens: int = Field(default=2048, gt=0)
     check_fail_on: Literal["none", "info", "warning", "critical"] = "none"
+    compare_fail_on: Literal["none", "new-hotspots", "regressions"] = "none"
+    history_limit: int = Field(default=100, gt=0)
+    history_path_aliases: list[str] = Field(default_factory=list)
+    quality_rules: dict[QualityRule, Literal["off", "info", "warning", "critical"]] = Field(
+        default_factory=dict
+    )
+    quality_ignores: dict[str, list[QualityRule]] = Field(default_factory=dict)
     exclude_patterns: list[str] = Field(
         default_factory=lambda: [".git", "node_modules", "venv", "__pycache__"]
     )

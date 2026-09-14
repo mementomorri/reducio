@@ -26,7 +26,10 @@ User
 | `repo.py` | Walk repo; include `*.py` by default; `detect_language` → Python or unknown |
 | `parse.py` | Python AST symbols for refactoring; compatibility metric import |
 | `metrics.py`, `analysis.py` | Shared AST metrics and complete function analysis |
-| `compare.py` | Read-only Git blob snapshots, changed-file selection, function matching |
+| `compare.py` | Exact/merge-base Git snapshots or explicit working files, changed-file selection |
+| `history.py` | First-parent snapshots, batched Git blobs, run-local metric reuse and source-root aliases |
+| `history_report.py`, `history_view.js` | Shared dashboard shell with offline trend/range/function views |
+| `annotations.py`, `quality_gate.py` | Bounded Actions warnings and opt-in quality/comparison failure policy |
 | `visual_report.py` | Markdown, JSON, and optional offline Plotly HTML dashboards |
 | `plan_review.py` | Unified diff previews and versioned plan preflight |
 | `presentation.py`, `storage.py` | Shared escaping/tables and atomic validated persistence |
@@ -56,6 +59,19 @@ User
 Git renames, read regular blobs without checkout, analyze both snapshots using
 the same configuration, match qualified function names, and render deltas.
 No target imports, LLM calls, tests, or working-tree edits. See [CI.md](CI.md).
+`--against` resolves a merge base without fetching. Explicit `--worktree` selects
+current tracked files plus nonignored untracked Python files, not the index alone.
+Optional gates and bounded GitHub warnings consume the same comparison result.
+
+### History
+
+`cli.history` → `history_revisions`: list up to 100 first-parent commits, select
+the current source root or explicit fallback aliases, read object IDs using Git
+batch mode, and reuse one parsed measurement per unique blob within that run.
+Remap file paths and match adjacent complete snapshots using the shared engine.
+Older unavailable source becomes a chart gap; current-head/Git/report failure
+blocks main-only Pages. JSON embeds measurements/configuration; Markdown and
+offline Plotly/JavaScript consume that same result, without a data branch or server.
 
 ### Deduplicate / idiomatize / pattern / check
 
@@ -80,6 +96,8 @@ CLI configuration resolves YAML → environment → explicit options. `App` copi
 an explicitly supplied resolved configuration without reapplying environment.
 Model tiers/preferences were removed; requests require explicit API/model configuration.
 `check` defaults to report-only, with an opt-in inclusive severity gate.
+Per-rule overrides and path ignores partition active/suppressed findings before
+counts and gates are computed; parse/read errors cannot be suppressed.
 Noninteractive application requires `--yes`. See [API setup and migration](LLM.md).
 
 ## Distribution

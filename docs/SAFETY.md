@@ -113,6 +113,20 @@ rewrites require locally established built-in values; unknown/overloaded values
 and side-effecting expressions are skipped. Truthiness is restricted to supported
 single-evaluation conditions, not while-loop invariants.
 
+Two additional closed-value cases are supported inside function bodies:
+
+- String concatenations become f-strings only for proven built-in strings and
+  unshadowed `str(...)` of supported built-in scalar expressions. Unknown types,
+  user-defined formatting and side-effecting calls are skipped; braces/quotes
+  are escaped through the AST renderer.
+- An `if key in mapping: return mapping[key]` with an `else: return default` (or
+  following return) becomes `mapping.get(key, default)` only for a proven local
+  built-in dictionary and pure known scalar keys/defaults. Calls as defaults are
+  skipped because `get` would evaluate them eagerly.
+
+Both use the same comment/overlap checks, exact-byte saved plans, review and
+opt-in test/recovery pipeline. They do not expand deduplication into caller rewrites.
+
 The supported subset is deliberately narrow; there is no unsafe heuristic override.
 Reflection/tracing, monkeypatched builtins and resource-exhaustion equivalence are
 not guaranteed. Wider patterns are enhancement opportunities, not current support.

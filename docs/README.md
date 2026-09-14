@@ -104,6 +104,8 @@ Run commands from the root of a **Python project** (with `.py` sources):
 ```bash
 reducio analyze .              # Complexity hotspots and symbols
 reducio compare . --base HEAD~1 # Changed-file complexity vs a committed revision
+reducio compare . --against origin/main --worktree # Whole branch plus current edits
+reducio history . --report --format all # Git history trends (up to 100 commits)
 reducio deduplicate .          # Similar blocks → proposed utils modules
 reducio idiomatize .           # Pythonic heuristics (comprehensions, etc.)
 reducio pattern factory .      # Design-pattern templates
@@ -133,18 +135,20 @@ Flags are command-specific, not global:
 
 | Commands | Supported options |
 | --- | --- |
-| `analyze`, `compare`, `deduplicate`, `idiomatize`, `pattern`, `check`, `apply` | `--config` / `-c`, `--quiet` / `-q` (hide progress only) |
+| `analyze`, `compare`, `history`, `deduplicate`, `idiomatize`, `pattern`, `check`, `apply` | `--config` / `-c`, `--quiet` / `-q` (hide progress only) |
 | `analyze`, `compare`, `deduplicate`, `idiomatize`, `check` | `--verbose` / `-v`, `--no-verbose` |
 | `deduplicate`, `idiomatize`, `pattern` | `--dry-run` (save unified diff, diagnostics, provenance, and session JSON) |
 | `idiomatize`, `pattern` | `--allow-fallback` (explicitly permit heuristic/template fallback after model failure) |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
-| `analyze`, `compare`, `check` | `--report` / `-r` |
+| `analyze`, `compare`, `history`, `check` | `--report` / `-r` |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |
 | `idiomatize`, `pattern` | `--model`, `--llm-api openai\|anthropic`, `--llm-base-url` |
 | `check` | `--fail-on none\|info\|warning\|critical` (default `none`) |
-| `analyze`, `compare` | `--format markdown\|json\|html\|all` |
-| `analyze`, `compare`, `check`, `deduplicate`, `idiomatize`, `pattern`, `apply` | `--output-dir` |
-| `compare` | Required `--base`, optional `--head` (default `HEAD`) |
+| `analyze`, `compare`, `history` | `--format markdown\|json\|html\|all` |
+| `analyze`, `compare`, `history`, `check`, `deduplicate`, `idiomatize`, `pattern`, `apply` | `--output-dir` |
+| `compare` | `--base REF` with optional `--head REF`, or `--against REF` (merge base with HEAD); `--worktree` cannot accompany explicit `--head` |
+| `compare` | `--fail-on none\|new-hotspots\|regressions`, `--annotations github` (up to ten warnings) |
+| `history` | `--ref HEAD`, `--limit 100`, repeatable `--path-alias old_source/` |
 | `report` | `--config` / `-c`, `--path` / `-C`, `--output-dir`; optional positional session ID |
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
 
@@ -156,10 +160,12 @@ Model planning sends source text to the configured endpoint, including during dr
 There is no model discovery or provider switching. In CI/non-TTY, nonempty application
 requires explicit `--yes`; dry runs and empty plans do not require approval.
 
-For `analyze` and `compare`, add `--report --format all` for Markdown, JSON, and an
+For `analyze`, `compare` and `history`, add `--report --format all` for Markdown, JSON, and an
 offline HTML dashboard, or choose one format. `--output-dir` controls where those
-reports go. Comparison is informational; parse/read failures exit nonzero and
-produce incomplete reports. See [Reports and CI](CI.md) and [Metrics v2](METRICS.md).
+reports go. Comparison is informational by default; optional gates can fail on new
+hotspots or regressions. Parse/read failures exit nonzero and produce incomplete
+reports. History permits older gaps, but not an incomplete latest snapshot.
+See [Reports and CI](CI.md) and [Metrics v2](METRICS.md).
 
 Generated plans print `Session ID: …`; dry-runs print `Dry run report: …`.
 Full unified diffs print before approval, including `--yes`, and in `sessions show`.
@@ -171,11 +177,11 @@ automatically searched. Incomplete plans remain inspectable but cannot be applie
 An empty plan skips application. Successful application and ordinary declined
 approval exit 0; failed application exits 1 with a reason on stderr. Declining
 the dirty-tree warning exits 1. Input/configuration errors exit 2. Quality findings
-and complexity regressions alone do not fail CI.
+and complexity regressions only fail CI when their respective gates are enabled.
 
 ### Configuration precedence
 
-For model, verbosity, and local preference: **explicit CLI options → environment
+For supported settings: **explicit CLI options → environment
 → selected YAML file → built-in defaults**. Omitted options preserve lower-level
 settings; `--no-verbose` overrides enabled verbosity and `--model ""` clears a
 configured model. This replaces the previous environment-over-CLI behavior.
@@ -184,14 +190,23 @@ configured model. This replaces the previous environment-over-CLI behavior.
 `.reducio.yaml` in the current working directory, then `~/.reducio.yaml`.
 Files are not merged and discovery is not relative to a separate analysis target.
 An empty file is valid; a missing explicit file or malformed configuration fails.
-The supported environment settings are `REDUCIO_MODEL`, `REDUCIO_VERBOSE`, and
-`REDUCIO_PREFER_LOCAL`. Boolean values accept true/false, yes/no, on/off, or 1/0
+Supported environment settings include `REDUCIO_MODEL`, `REDUCIO_VERBOSE`,
+`REDUCIO_CHECK_FAIL_ON`, `REDUCIO_COMPARE_FAIL_ON` and `REDUCIO_HISTORY_LIMIT`;
+API settings are documented in [LLM.md](LLM.md). `REDUCIO_PREFER_LOCAL` is retired.
+Boolean values accept true/false, yes/no, on/off, or 1/0
 (case-insensitive); empty values are ignored, other values fail.
 
 For library callers, an explicit `AppConfig` passed to `App` is copied and used
 as resolved; it is not overridden again by environment variables. Omitting it
 loads file/environment settings. CLI approval still requires explicit `--yes`
 to bypass prompts; other modifier configuration policies remain separate work.
+
+History uses YAML `history_limit` (default 100) and `history_path_aliases` (former
+repository-relative source roots). `check` accepts `quality_rules` for per-rule
+severity/disable settings and `quality_ignores` for per-path rule suppression.
+See the [configuration example](GITHUB_CI.md#optional-quality-gate); quote `"off"`
+in YAML. Suppressed findings remain visible separately; parse/read errors are
+unsuppressible. These settings do not change metrics used by other commands.
 
 ## Architecture
 

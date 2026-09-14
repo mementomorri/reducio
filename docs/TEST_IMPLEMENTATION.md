@@ -2,6 +2,38 @@
 
 Requires **Python 3.14+** (matches CI and `pyproject.toml`).
 
+## Daily workflow and history — 2026-09-14
+
+Verified the working-tree implementation on baseline `9664ee9`: **594 tests
+passed, 93.10% combined statement/branch coverage**. Ruff, Black and mypy pass;
+wheel/sdist build and fresh isolated installed-wheel smoke pass. The shared
+PyPI/PyApp smoke now exercises history (including its bundled JavaScript), exact
+and merge-base/worktree comparisons, reports and saved-session inspection.
+
+New regression cases cover the default 100-commit limit, first-parent merges,
+source-root aliases, blob reuse across commits and batches larger than 128, strict
+decoding, historical gaps versus incomplete heads, p95, escaped embedded data,
+staged/unstaged/untracked/deleted/renamed working files, optional gates/annotations,
+quality suppression and conservative f-string/dictionary-get transformations.
+Pages tests enforce main-only execution and successful overview/history prerequisites.
+
+The shipped dashboard controller is exercised with dependency-free Node stubs in
+pytest (skipped only if Node is absent). A separate local Chromium smoke loaded
+the actual HTML via `file://`, changed range/commit/function selections, clicked
+persistent hotspots, and checked desktop/mobile layouts: no JavaScript errors or
+external requests, and no document overflow at 390 px width. Browser binaries are
+not required for normal Python tests or tool usage.
+
+A local Git-only rebuild measured **65 snapshots / 279 unique blobs in 1.96 s**
+on Python 3.14.7; two absent-source snapshots remained visible gaps. This excludes
+report rendering and is not a CI speed guarantee. The offline HTML is about
+16 MiB for this history; reduce `--limit`/source scope for larger repositories.
+
+Tracked fixtures are unchanged. No commit, push, publication, remote workflow,
+model download, live API call or full PyApp build was performed. New behavior
+becomes available on Pages/PyPI/Releases only after the respective maintainer
+workflow runs; local wheel verification is not a public-release verification.
+
 ## Reliability/code-reduction review — 2026-09-13
 
 Verified the working-tree implementation against baseline `32244f7`:
@@ -188,7 +220,9 @@ strip ANSI styling before checking option spelling, not from the actual CLI.
 ## CI analysis job
 
 `.github/workflows/analysis.yml` runs a source overview on pushes/manual runs and
-a separate merge-base-to-PR-head comparison on pull requests. Reports use distinct
+a separate merge-base-to-PR-head comparison on pull requests, with optional
+annotations/gates. Main-only history is rebuilt in another job; Pages requires
+both overview and history to succeed. Reports use distinct
 non-hidden directories and artifacts; Markdown is included in each job summary.
 The overview validates JSON counts rather than grepping terminal output.
 See [CI.md](CI.md) for commands and artifact access. The five invalid fixture files

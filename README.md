@@ -29,19 +29,26 @@ refactoring proposals—not as proof that code is correct.
 2. **On a PR:** compare the branch's common ancestor with `main` against the PR
    head. This covers the whole PR, not just its last commit, measuring complete
    functions in changed Python files. Review the Actions summary or HTML artifact.
-3. **After merging:** run a full overview on `main`; optionally publish its latest
-   dashboard to GitHub Pages. PR reports stay in Actions artifacts.
+3. **After merging:** rebuild history on `main` to explore size, complexity trends
+   and persistent hotspots. This repo publishes history to GitHub Pages and keeps
+   the latest overview alongside it. PR reports stay in Actions artifacts.
 
 To review your committed branch locally (`reducio[reports]` adds HTML charts):
 
 ```bash
 git fetch origin main
-reducio compare . --base "$(git merge-base origin/main HEAD)" \
-  --head HEAD --report --format all
+reducio compare . --against origin/main --report --format all
+# Include your current edits and nonignored untracked Python files:
+reducio compare . --against origin/main --worktree --report --format all
+# Explore up to 100 first-parent commits, rebuilt with today's metric engine:
+reducio history . --report --format all
 ```
 
-Use `--base HEAD~1` instead to inspect only the last commit. Comparison ignores
-uncommitted edits; complexity increases are informational, not automatic CI failures.
+Use `--base HEAD~1` instead to inspect only the last commit, or `--base HEAD
+--worktree` for uncommitted work only. reducio never fetches refs automatically.
+Comparison ignores uncommitted edits unless `--worktree` is explicit. Add
+`--fail-on new-hotspots` or `--fail-on regressions` to enforce an optional PR gate;
+otherwise complexity increases remain informational.
 Reports default to `.reducio/`; open the HTML directly in a browser, without a server.
 
 Start with the [CI setup guide](docs/GITHUB_CI.md). For optional code changes,
