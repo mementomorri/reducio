@@ -2,6 +2,10 @@ name: CI
 
 on:
   workflow_call:
+    inputs:
+      release_tag:
+        type: string
+        default: ''
   push:
     branches: [main, develop]
   pull_request:
@@ -51,7 +55,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
-      - run: pip install build && python -m build
+      - run: python -m pip install build packaging
+      - name: Set package version from release tag
+        if: inputs.release_tag != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python scripts/release_version.py "$RELEASE_TAG"
+      - run: python -m build
       - name: Verify built wheel before publication (no model downloads)
         run: python -m scripts.smoke_pypi --local --wheel-directory dist --commit "$(git rev-parse HEAD)"
       - uses: actions/upload-artifact@v4

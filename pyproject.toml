@@ -25,6 +25,7 @@ embeddings = [
     "sentence-transformers>=2.2.0",
 ]
 dev = [
+    "hatchling",  # release artifact regression tests
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=7.0.0",

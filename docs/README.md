@@ -39,6 +39,22 @@ The GitHub Trusted Publisher must use owner `mementomorri`, repository `reducio`
 workflow filename `publish.yml`, and no environment (the current workflow has none).
 Update any pending publisher registered before the repository rename to match.
 
+To publish, commit and push your changes, then create and push a **new version tag**
+on that commit (for example `git tag v0.1.1` then `git push origin v0.1.1`).
+Publish derives the wheel, source distribution, and CLI version from the tag:
+`v0.1.1` publishes PyPI version `0.1.1` and executable/release `reducio-v0.1.1`.
+CI stamps both version declarations in its build checkout before building and
+smoke-testing; no manual source version bump is required. Tags must contain a
+valid public Python version (for example `v0.2.0rc1`); commit hashes are not versions.
+
+Inspect the **Publish** workflow for that tag, not just the latest commit's CI
+checks. Pushing `main` alone does not publish, and an existing tag does not move
+when new commits are pushed. The tagged commit must contain the workflow fixes.
+Do not move published tags or reuse a PyPI version for changed code: PyPI rejects
+previously uploaded filenames. After a downstream failure, re-run failed jobs
+instead of re-running the successful upload. Version `1.0.0` was already published;
+new `0.x` releases are valid but will not supersede `1.0.0` for an unpinned install.
+
 ### Upgrading from the previous name
 
 Use `reducio` instead of `reducto` in commands/imports and `REDUCIO_*` instead
