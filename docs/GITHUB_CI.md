@@ -68,7 +68,7 @@ jobs:
 Commit and push to `main`, open a PR targeting `main`, or select **Actions →
 reducio → Run workflow** once the workflow is on your default branch. Change
 `main` and the `.` analysis target if your branch/source directory differs.
-Pin the published version for reproducible runs. No model, embeddings, API key, or target-project install is needed.
+Pin the published version for reproducible runs. No model, API key, or target-project install is needed.
 Use `pull_request`, not `pull_request_target`; do not add secrets to PR analysis.
 
 ## Optional PR gate and annotations
@@ -86,7 +86,7 @@ the `if: always()` summary/upload steps.
 
 ## Optional quality gate
 
-With a release containing the section 4 changes, add this step before the summary:
+With a release that includes `--fail-on` for `check`, add this step before the summary:
 
 ```yaml
       - name: Quality gate

@@ -28,8 +28,10 @@ class BaseAgent:
     ):
         self.workspace = workspace
         self.llm = llm_router
+        if session_store is None and workspace is None:
+            raise ValueError("Agents need a workspace or a session store")
         self.session_store = session_store or SessionStore(
-            str(workspace.root / ".reducio" / "sessions") if workspace else ".reducio/sessions"
+            str(workspace.root / ".reducio" / "sessions")  # type: ignore[union-attr]
         )
         self._begin_plan()
 
@@ -38,19 +40,8 @@ class BaseAgent:
         self.diagnostics: list[PlanDiagnostic] = []
         self.provenance: list[PlanningProvenance] = []
 
-    def _generate_session_id(self) -> str:
-        return str(uuid.uuid4())
-
     def _save_plan(self, plan: RefactorPlan, command_type: str) -> None:
         self.session_store.save_plan(plan, command_type=command_type)
-
-    def get_plan(self, session_id: str) -> RefactorPlan | None:
-        return self.session_store.load_plan(session_id)
-
-    def _file_content_path(self, file) -> tuple[str, str]:
-        if hasattr(file, "content"):
-            return file.content, file.path
-        return file["content"], file["path"]
 
     def _llm_enabled(self) -> bool:
         # An explicit model request must not silently degrade when no router is wired.
@@ -63,7 +54,7 @@ class BaseAgent:
             )
         )
 
-    async def _llm_rewrite(
+    def _llm_rewrite(
         self, content: str, path: str, instruction: str, description: str
     ) -> FileChange | None:
         """Ask the LLM to rewrite a whole module; returns a reviewable change or None."""
@@ -76,9 +67,7 @@ class BaseAgent:
         try:
             if self.llm is None:
                 raise ModelRewriteError("No model router available")
-            raw = await self.llm.complete(
-                prompt, system_prompt="You are an expert Python engineer."
-            )
+            raw = self.llm.complete(prompt, system_prompt="You are an expert Python engineer.")
             code = strip_code_fence(raw)
             if not code.strip():
                 raise ValueError("Empty model response")
@@ -127,7 +116,7 @@ class BaseAgent:
     ) -> RefactorPlan:
         plan = RefactorPlan(
             schema_version=2,
-            session_id=self._generate_session_id(),
+            session_id=str(uuid.uuid4()),
             changes=changes,
             description=description,
             diagnostics=self.diagnostics,

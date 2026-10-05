@@ -1,7 +1,8 @@
 """Unit tests for parsing."""
 
-from reducio.models import Language
-from reducio.parse import get_complexity, get_symbols
+import ast
+
+from reducio.parse import get_complexity, symbols_from_tree
 
 
 def test_get_complexity_counts_branches():
@@ -12,7 +13,7 @@ def test_get_complexity_counts_branches():
 
 def test_python_symbols():
     code = "class Foo:\n    def bar(self):\n        pass\n"
-    syms = get_symbols(code, "t.py", Language.PYTHON)
+    syms = symbols_from_tree(ast.parse(code), "t.py")
     names = {s.name for s in syms}
     assert "Foo" in names
     assert "bar" in names

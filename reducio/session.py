@@ -11,7 +11,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from reducio.models import RefactorPlan
-from reducio.storage import StorageError, checked_file, read_text, validate_session_id, write_text
+from reducio.storage import (
+    StorageError,
+    checked_file,
+    ignore_storage,
+    read_text,
+    validate_session_id,
+    write_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,16 +33,6 @@ class SessionInfo:
     file_count: int
     change_count: int
     description: str = ""
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "created_at": self.created_at.isoformat(),
-            "command_type": self.command_type,
-            "file_count": self.file_count,
-            "change_count": self.change_count,
-            "description": self.description,
-        }
 
     @classmethod
     def from_dict(cls, data: dict) -> SessionInfo:
@@ -119,6 +116,7 @@ class SessionStore:
 
         # Write to file
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        ignore_storage(self.storage_dir)
         try:
             write_text(session_path, json.dumps(data, indent=2))
 
@@ -188,29 +186,6 @@ class SessionStore:
         sessions.sort(key=lambda s: s.created_at.timestamp(), reverse=True)
         return sessions
 
-    def delete_session(self, session_id: str) -> bool:
-        """
-        Delete a session from storage.
-
-        Args:
-            session_id: The session ID to delete
-
-        Returns:
-            True if deleted, False if not found
-        """
-        session_path = self._get_session_path(session_id)
-
-        if not session_path.exists():
-            return False
-
-        try:
-            session_path.unlink()
-            logger.info(f"Deleted session {session_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete session {session_id}: {e}")
-            return False
-
     def cleanup_old_sessions(self, max_age_days: int = 7) -> int:
         """
         Delete sessions older than max_age_days.
@@ -244,29 +219,3 @@ class SessionStore:
             logger.info(f"Cleaned up {deleted} old sessions")
 
         return deleted
-
-    def get_session_info(self, session_id: str) -> SessionInfo | None:
-        """
-        Get metadata for a session without loading the full plan.
-
-        Args:
-            session_id: The session ID
-
-        Returns:
-            SessionInfo if found, None otherwise
-        """
-        session_path = self._get_session_path(session_id)
-
-        if not session_path.exists():
-            return None
-
-        data = self._read_session_file(session_path)
-        if not data:
-            return None
-        metadata = data.get("metadata", {})
-        if not metadata:
-            return None
-        return SessionInfo.from_dict(self._metadata_with_session_id(metadata, session_path))
-
-    def clear_cache(self):
-        """Compatibility no-op: sessions are always read and validated from disk."""

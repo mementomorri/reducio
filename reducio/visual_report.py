@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from reducio.models import AnalyzeResult, CompareResult, FunctionMetrics, HistoryResult
+from reducio.presentation import markdown_cell as _md_cell
 from reducio.presentation import table as _table
 from reducio.progress import status
-from reducio.storage import checked_file, report_stem, write_text
+from reducio.storage import checked_file, ignore_storage, report_stem, write_text
 
 Result = AnalyzeResult | CompareResult
 
@@ -100,7 +101,7 @@ def _summary(result: Result) -> list[tuple[str, str]]:
             ("Head source", result.head_source),
             (
                 "Comparison gate",
-                f"{result.gate_threshold}: {'unavailable' if not result.complete else 'failed' if result.gate_failed else 'passed' if result.gate_threshold != 'none' else 'disabled'}",
+                f"{result.gate_threshold}: {result.gate_status}",
             ),
             ("Changed Python files", str(len(result.files))),
             ("Matched functions", str(len(_matched(result)))),
@@ -220,7 +221,7 @@ def markdown_report(result: Result) -> str:
         "",
     ]
     if isinstance(result, CompareResult):
-        lines.extend(result.notes)
+        lines.extend(_md_cell(note) for note in result.notes)
         if not result.files and result.complete:
             lines += ["No Python changes in the selected scope.", ""]
     if diagnostics := _diagnostics(result):
@@ -476,6 +477,7 @@ def write_reports(
     output = Path(output_dir)
     checked_file(output, "probe")
     output.mkdir(parents=True, exist_ok=True)
+    ignore_storage(output)
     kind = (
         "history"
         if isinstance(result, HistoryResult)

@@ -932,11 +932,11 @@
                 <div class="features-grid">
                     <div class="feature-card" data-animate>
                         <h3>Duplication Detection</h3>
-                        <p>Find similar functions across Python files with the optional embeddings extra. Generate shared-utility suggestions; originals and call sites are not rewritten.</p>
+                        <p>Find structural clones (same code, renamed identifiers or literals) across Python files with a built-in AST fingerprint. Generate shared-utility suggestions; originals and call sites are not rewritten.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <h3>Experimental Idiom Proposals</h3>
-                        <p>Propose comprehensions, None comparisons, truthiness, and membership rewrites. Start with dry-run: current rules can change behavior and require code review.</p>
+                        <p>With an explicitly configured model API, propose idiomatic whole-module rewrites. Start with dry-run: model output can change behavior and requires code review.</p>
                     </div>
                     <div class="feature-card" data-animate>
                         <h3>Pattern Suggestions</h3>
@@ -952,14 +952,14 @@
                     </div>
                     <div class="feature-card" data-animate>
                         <h3>Optional Model Support</h3>
-                        <p>Analysis and comparison need no LLM. Refactoring defaults to heuristics or templates; a configured model enables optional rewrites. Model planning sends source code to your explicitly configured compatible API, even during dry runs. There is no automatic provider switching.</p>
+                        <p>Analysis and comparison need no LLM. Pattern suggestions default to templates; idiom proposals need an explicitly configured model. Model planning sends source code to your explicitly configured compatible API, even during dry runs. There is no automatic provider switching.</p>
                     </div>
                 </div>
             </div>
         </section>
 
         <aside class="container" aria-label="Refactoring safety">
-            <p><strong>Automatic modification is not production-safe.</strong> Known behavior-changing rewrites and recovery defects remain.
+            <p><strong>Automatic modification is not production-safe.</strong> Template and model proposals are not verified as behavior-preserving, and recovery is not crash-proof.
             Approval is per plan and can be bypassed with <code>--yes</code>. Keep an independent backup and review the
             <a href="https://github.com/mementomorri/reducio/blob/main/docs/SAFETY.md">safety limits</a> before applying changes.
             Missing capabilities are tracked as <a href="https://github.com/mementomorri/reducio/blob/main/ROADMAP.md#enhancement-opportunities">enhancement opportunities</a>.</p>
@@ -984,7 +984,7 @@
                     <div class="step" data-animate>
                         <div class="step-number">III</div>
                         <h3>Review &amp; Validate</h3>
-                        <p>Apply only after reviewing the proposal, preferably in a disposable clean checkout. Syntax checks, scoped file backups and opt-in target tests are safeguards, not guarantees. Unknown heuristic cases are skipped; model proposals still require behavior review.</p>
+                        <p>Apply only after reviewing the proposal, preferably in a disposable clean checkout. Syntax checks, scoped file backups and opt-in target tests are safeguards, not guarantees. Model proposals still require behavior review.</p>
                     </div>
                 </div>
             </div>
@@ -1035,8 +1035,8 @@
                     </div>
                     <div class="install-card" data-animate>
                         <h3>GitHub Releases Executable</h3>
-                        <p>PyApp packages a Linux x64 executable with reports and embeddings. First launch downloads Python and dependencies; Git is still needed for revision comparisons.</p>
-                        <p>Publication is gated by verified PyPI installation and executable smoke checks. Available after the first successful release.</p>
+                        <p>PyApp packages a Linux x64 executable with HTML reports and the optional model API client. First launch downloads Python and dependencies; Git is still needed for revision comparisons.</p>
+                        <p>Publication is gated by verified PyPI installation and executable smoke checks. Download it from GitHub Releases.</p>
                         <p><a href="https://github.com/mementomorri/reducio/releases">Browse releases →</a></p>
                     </div>
                 </div>
@@ -1060,7 +1060,7 @@
                         <p><span class="terminal-prompt">$</span> reducio compare reducio/ --base HEAD~1 --head HEAD --report --format all</p>
                         <p class="terminal-output"># Compare committed changes, ignoring working-tree edits.</p>
                         <br>
-                        <p><span class="terminal-prompt">$</span> reducio idiomatize reducio/ --dry-run</p>
+                        <p><span class="terminal-prompt">$</span> reducio deduplicate reducio/ --dry-run</p>
                         <p class="terminal-output"># Save an experimental proposal without changing source files.</p>
                         <br>
                         <p class="terminal-output"># HTML dashboards need the reports extra.</p>

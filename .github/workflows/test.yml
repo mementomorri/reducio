@@ -23,14 +23,14 @@ jobs:
           python-version: '3.14'
 
       - name: Install
-        run: pip install -e ".[dev,embeddings,reports,llm]"
+        run: pip install -e ".[dev,reports,llm]"
 
       - name: Tests
         run: pytest tests/ -v
 
-      - name: Assert fixture corpus unmodified
+      - name: Assert tests left no files behind
         if: always()
-        run: git diff --exit-code test-python-code/
+        run: test -z "$(git status --porcelain --ignored test-python-code/ .reducio)"
 
       - name: CLI smoke
         run: reducio --help && reducio version

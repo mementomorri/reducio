@@ -11,14 +11,15 @@ from reducio.models import (
     RefactorResult,
 )
 from reducio.reporter import Reporter
+from reducio.visual_report import write_reports
 
 
 def test_generate_baseline_with_hotspots(tmp_path):
     hs = ComplexityHotspot(
         file="a.py", line=1, symbol="f", cyclomatic_complexity=12, cognitive_complexity=7
     )
-    path = Reporter(output_dir=str(tmp_path / ".reducio")).generate_baseline(
-        AnalyzeResult(total_files=1, total_symbols=3, hotspots=[hs], symbols=[])
+    [path] = write_reports(
+        AnalyzeResult(total_files=1, total_symbols=3, hotspots=[hs]), tmp_path / ".reducio"
     )
     text = path.read_text()
     assert "Complexity Hotspots" in text

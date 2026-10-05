@@ -10,10 +10,8 @@ import tokenize
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path, PurePosixPath
 
-from reducio.models import FileInfo, Language
+from reducio.models import AppConfig, FileInfo, Language
 from reducio.progress import status
-
-DEFAULT_EXCLUDE_DIRS = {"venv", "node_modules", "__pycache__", "dist", "build", "target"}
 
 
 def detect_language(path: str) -> Language:
@@ -33,7 +31,7 @@ def matches(path: str, patterns: list[str]) -> bool:
 
 
 def _should_exclude_dir(name: str, path: str, patterns: list[str]) -> bool:
-    return name.startswith(".") or name in DEFAULT_EXCLUDE_DIRS or matches(path, patterns)
+    return name.startswith(".") or matches(path, patterns)
 
 
 def included(path: str, excludes: list[str], includes: list[str]) -> bool:
@@ -87,7 +85,7 @@ def walk(
     root: str, exclude_patterns: list[str] | None = None, include_patterns: list[str] | None = None
 ) -> list[FileInfo]:
     root_path = Path(root).resolve()
-    excludes = exclude_patterns or []
+    excludes = AppConfig().exclude_patterns if exclude_patterns is None else exclude_patterns
     includes = ["*.py"] if include_patterns is None else include_patterns
     status(f"Exploring {root_path} for matching source files...")
     paths: list[Path] = []

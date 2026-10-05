@@ -37,7 +37,7 @@ def test_pypi_gate_requires_exact_artifact_bytes(tmp_path, monkeypatch, matching
     if matching:
         smoke_pypi.smoke(tmp_path, "a" * 40)
         assert checked
-        assert any(smoke_pypi.EMBEDDING_CHECK in command for command in commands)
+        assert any(any("[reports,llm]" in part for part in command) for command in commands)
     else:
         with pytest.raises(AssertionError, match="differs"):
             smoke_pypi.smoke(tmp_path, "a" * 40)
@@ -62,9 +62,7 @@ def test_local_wheel_gate_avoids_model_download_and_pypi_lookup(tmp_path, monkey
     monkeypatch.setattr(smoke_pypi, "check_cli", lambda *args: checked.append(args))
     smoke_pypi.smoke(tmp_path, "a" * 40, local=True)
     assert checked
-    assert not any(
-        "download" in command or smoke_pypi.EMBEDDING_CHECK in command for command in commands
-    )
+    assert not any("download" in command for command in commands)
     assert any(f"{wheel}[reports,llm]" in command for command in commands)
     assert any("-I" in command for command in commands)
 

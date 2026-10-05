@@ -44,7 +44,7 @@ class QualityCheckerAgent:
         self.cfg = workspace.cfg if workspace else AppConfig()
         self.thresholds = self.cfg.complexity_thresholds
 
-    async def check_quality(self, files: list[FileInfo], path: str) -> QualityReport:
+    def check_quality(self, files: list[FileInfo], path: str) -> QualityReport:
         issues = []
         for file in files:
             if not file.error and detect_language(file.path) == Language.UNKNOWN:
@@ -188,8 +188,8 @@ def _binding_name(node: ast.AST) -> str:
             return name or ""
         case ast.MatchMapping(rest=name):
             return name or ""
-        case ast.alias(asname=alias, name=qualified):
-            return alias or qualified.split(".")[0]
+        case ast.alias(asname=alias):
+            return alias or ""  # plain imports bind the module's own name
         case _:
             return ""
 

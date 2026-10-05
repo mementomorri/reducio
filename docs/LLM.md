@@ -22,7 +22,7 @@ Equivalent `.reducio.yaml` (never put the token here):
 llm_api: openai                 # openai or anthropic; no default selection
 model: YOUR_MODEL_ID
 llm_base_url: https://api.openai.com/v1
-llm_timeout_seconds: 60         # total request deadline
+llm_timeout_seconds: 60         # per connect/read/write phase, not a total deadline
 llm_max_tokens: 2048
 ```
 
@@ -49,8 +49,9 @@ and completion markers. Responses API, tool calls, model discovery, automatic
 provider switching and retries are not supported. Not every model accepts this
 text-only request format. Truncated/refused/empty/malformed replies fail planning.
 
-Missing API/model/token/dependency or request failures produce an incomplete plan
-(exit 1). Only explicit `--allow-fallback` permits heuristic/template fallback,
+`idiomatize` is model-only: without `--llm-api` and `--model` it exits 2 before
+scanning. Missing token/dependency or request failures produce an incomplete plan
+(exit 1). For `pattern`, only explicit `--allow-fallback` permits template fallback,
 recorded in the saved plan. An unchanged successful reply does not trigger fallback.
 
 ## GitHub CI
@@ -61,13 +62,4 @@ a GitHub Actions secret to `REDUCIO_API_KEY` in that step's `env`. Use `--dry-ru
 and upload the proposal for review. Never expose secrets to untrusted PR code or
 use `pull_request_target` to run it. API usage can incur charges.
 
-## Migration
-
-Removed `LLMRouter`, `ModelTier`, LiteLLM and tier/discovery logic. Library callers
-can use `LLMClient(AppConfig(llm_api="openai", model="..."))` and `await complete(...)`.
-Remove retired `prefer_local`, `prefer_remote`, `model_tiers`, `tier`,
-`REDUCIO_PREFER_LOCAL` and `REDUCIO_PREFER_REMOTE`: these now fail configuration
-validation. Ineffective model/preference flags on analyze/deduplicate are removed.
-Model IDs are passed unchanged; migrate old provider-prefixed IDs explicitly.
-Existing saved plans/results remain readable and replay without an API request.
-Session `clear_cache()` remains a compatibility no-op; plans are read from disk.
+Upgrade notes for removed router/tier APIs are in [MIGRATION.md](MIGRATION.md#model-apis).

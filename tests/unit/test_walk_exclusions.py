@@ -29,3 +29,11 @@ def test_only_python_files_are_selected():
     for path in (".env", ".gitignore", "img.png", "app.min.js", ".hidden.py"):
         assert not included(path, [], [])
     assert included("a.py", [], [])
+
+
+def test_build_dirs_are_default_excludes_and_overridable(tmp_path):
+    package = tmp_path / "pkg" / "build"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("x = 1\n")
+    assert walk(str(tmp_path)) == []
+    assert [f.path for f in walk(str(tmp_path), ["venv"])] == ["pkg/build/__init__.py"]

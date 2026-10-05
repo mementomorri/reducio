@@ -171,3 +171,20 @@ def test_worktree_and_git_share_globs_encoding_and_metrics(temp_git_repo):
     assert working.complete and committed.complete
     assert working.file_lines == committed.file_lines == {"src/a.py": 3, "src/nested/b.py": 3}
     assert working.functions == committed.functions
+
+
+def test_repeated_names_pair_in_source_order(temp_git_repo):
+    # An unchanged complex property setter must not become a "new hotspot".
+    setter = "".join(f"        if x == {i}: x = {i + 1}\n" for i in range(9))
+    source = (
+        "class C:\n    @property\n    def v(self):\n        return self._v\n\n"
+        f"    @v.setter\n    def v(self, x):\n{setter}        self._v = x\n\n\n"
+        "def other():\n    return 1\n"
+    )
+    base = commit(temp_git_repo, {"m.py": source})
+    commit(temp_git_repo, {"m.py": source.replace("return 1", "return 2")})
+    result = compare_revisions(
+        str(temp_git_repo), base, cfg=AppConfig(compare_fail_on="new-hotspots")
+    )
+    assert result.counts["unchanged"] == 3 and not result.notes
+    assert not result.gate_failed

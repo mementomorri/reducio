@@ -13,7 +13,7 @@ reducio history reducio/ --report --format all --output-dir ci-reports/history
 ```
 
 In another installed target project, use `.` or its source directory in place of
-`reducio/`. No LLM or embeddings are needed. `analyze` reads current files;
+`reducio/`. No model or API key is needed. `analyze` reads current files;
 `compare` reads **committed Git blobs** by default, ignoring local edits.
 It does not check out revisions, import target modules, or run target tests.
 The optional directory target must exist in the current checkout.

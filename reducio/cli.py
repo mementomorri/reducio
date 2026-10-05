@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 import typer
 from pydantic import ValidationError
 
 from reducio import __version__
 from reducio.analysis import analysis_configuration, analyze_files
-from reducio.compare import CompareError, compare_revisions
+from reducio.compare import CompareError, compare_revisions, worktree_clean
 from reducio.config import ConfigError, apply_env, load_config
-from reducio.git_safety import GitSafety
 from reducio.models import (
     AnalysisDiagnostic,
     AppConfig,
@@ -51,6 +49,23 @@ app = typer.Typer(
     help="Semantic code compression engine",
     no_args_is_help=True,
 )
+
+# Shared options: defaults live on each parameter, as Typer requires with Annotated.
+Target = Annotated[Path, typer.Argument(help="Repository path")]
+Config = Annotated[Path | None, typer.Option("--config", "-c")]
+Verbose = Annotated[bool | None, typer.Option("--verbose/--no-verbose", "-v")]
+Quiet = Annotated[bool, typer.Option("--quiet", "-q", help="Hide progress, not results or errors")]
+OutputDir = Annotated[
+    Path | None, typer.Option("--output-dir", help="Report directory (default: TARGET/.reducio)")
+]
+DryRun = Annotated[bool, typer.Option("--dry-run")]
+Yes = Annotated[bool, typer.Option("--yes")]
+RunTests = Annotated[
+    bool, typer.Option("--run-tests", help="Run target tests after edits; restore on failure")
+]
+LlmApi = Annotated[str | None, typer.Option("--llm-api", help="openai or anthropic")]
+LlmBaseUrl = Annotated[str | None, typer.Option("--llm-base-url", help="API root including /v1")]
+Model = Annotated[str | None, typer.Option("--model")]
 
 
 def _get_cfg(
@@ -113,8 +128,7 @@ def _resolve_repo(path: Path) -> str:
 
 
 def _check_git(path: str, yes: bool) -> None:
-    git = GitSafety(path)
-    if not git.is_repo() or git.is_clean():
+    if worktree_clean(path):
         return
     typer.echo("Warning: uncommitted changes detected.")
     if yes:
@@ -124,9 +138,9 @@ def _check_git(path: str, yes: bool) -> None:
         raise typer.Exit(1)
 
 
-def _run(coro):
+def _run(fn, *args, **kwargs):
     try:
-        return asyncio.run(coro)
+        return fn(*args, **kwargs)
     except OSError, StorageError:
         typer.echo(
             "Cannot read source or save the plan; check paths and storage permissions.", err=True
@@ -243,25 +257,43 @@ def _review_and_apply(
     _finish_apply(result, cfg, path, output_dir, report)
 
 
+def _plan_command(command, make, cfg, path, output_dir, report, yes, run_tests, quiet, dry_run):
+    root = _resolve_repo(path)
+    with progress(f"Preparing {command} proposals...", quiet=quiet):
+        svc = _new_app(root, cfg)
+        plan = _run(make, svc)
+    _review_and_apply(
+        svc,
+        plan,
+        cfg,
+        path,
+        output_dir,
+        report,
+        yes,
+        run_tests,
+        quiet,
+        dry_run=dry_run,
+        command=command,
+    )
+
+
 @app.command()
 def analyze(
-    path: Path = typer.Argument(Path("."), help="Repository path"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
+    path: Target = Path("."),
+    config: Config = None,
+    verbose: Verbose = None,
     report: bool = typer.Option(False, "--report", "-r"),
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
-    output_dir: Path | None = typer.Option(
-        None, "--output-dir", help="Report directory (default: TARGET/.reducio)"
-    ),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    output_dir: OutputDir = None,
+    quiet: Quiet = False,
 ):
     """Scan for complexity hotspots."""
     cfg = _get_cfg(config, verbose)
     with progress("Preparing analysis...", quiet=quiet):
         svc = _new_app(_resolve_repo(path), cfg)
-        result = _run(svc.analyze(str(path)))
+        result = _run(svc.analyze, str(path))
     typer.echo(
         f"Files: {result.total_files}  Symbols: {result.total_symbols}  Hotspots: {len(result.hotspots)}"
     )
@@ -326,10 +358,10 @@ def compare(
     format: ReportFormat = typer.Option(
         ReportFormat.MARKDOWN, "--format", help="Format used with --report"
     ),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    output_dir: OutputDir = None,
+    config: Config = None,
+    verbose: Verbose = None,
+    quiet: Quiet = False,
 ):
     """Compare changed Python files; committed revisions by default, gates opt-in."""
     if (
@@ -389,16 +421,14 @@ def compare(
 
         for message in github_annotations(result):
             typer.echo(message)
-    typer.echo(
-        f"Comparison gate: {result.gate_threshold}; {'unavailable' if not result.complete else 'failed' if result.gate_failed else 'disabled' if result.gate_threshold == 'none' else 'passed'}"
-    )
+    typer.echo(f"Comparison gate: {result.gate_threshold}; {result.gate_status}")
     if not result.complete or result.gate_failed:
         raise typer.Exit(1)
 
 
 @app.command()
 def history(
-    path: Path = typer.Argument(Path(".")),
+    path: Target = Path("."),
     ref: str = typer.Option("HEAD", "--ref", help="Newest commit; history follows first parents"),
     limit: int | None = typer.Option(
         None, "--limit", min=1, help="Commit limit (default 100; configurable)"
@@ -410,9 +440,9 @@ def history(
     ),
     report: bool = typer.Option(False, "--report", "-r"),
     format: ReportFormat = typer.Option(ReportFormat.MARKDOWN, "--format"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    quiet: bool = typer.Option(False, "--quiet", "-q"),
+    output_dir: OutputDir = None,
+    config: Config = None,
+    quiet: Quiet = False,
 ):
     """Rebuild historical metrics; old gaps are warnings, an incomplete head fails."""
     from reducio.history import history_revisions
@@ -447,27 +477,21 @@ def history(
 
 @app.command()
 def deduplicate(
-    path: Path = typer.Argument(Path(".")),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    yes: bool = typer.Option(False, "--yes"),
-    run_tests: bool = typer.Option(
-        False, "--run-tests", help="Run target tests after edits; restore on failure"
-    ),
+    path: Target = Path("."),
+    dry_run: DryRun = False,
+    yes: Yes = False,
+    run_tests: RunTests = False,
     report: bool = typer.Option(False, "--report"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    output_dir: OutputDir = None,
+    config: Config = None,
+    verbose: Verbose = None,
+    quiet: Quiet = False,
 ):
     """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
     cfg = _get_cfg(config, verbose)
-    root = _resolve_repo(path)
-    with progress("Preparing duplicate detection...", quiet=quiet):
-        svc = _new_app(root, cfg)
-        plan = _run(svc.deduplicate(str(path)))
-    _review_and_apply(
-        svc,
-        plan,
+    _plan_command(
+        "deduplicate",
+        lambda svc: svc.deduplicate(str(path)),
         cfg,
         path,
         output_dir,
@@ -475,40 +499,33 @@ def deduplicate(
         yes,
         run_tests,
         quiet,
-        dry_run=dry_run,
-        command="deduplicate",
+        dry_run,
     )
 
 
 @app.command()
 def idiomatize(
-    path: Path = typer.Argument(Path(".")),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
-    allow_fallback: bool = typer.Option(
-        False, "--allow-fallback", help="Allow heuristics if the selected model fails"
-    ),
-    yes: bool = typer.Option(False, "--yes"),
+    path: Target = Path("."),
+    dry_run: DryRun = False,
+    output_dir: OutputDir = None,
+    yes: Yes = False,
     report: bool = typer.Option(False, "--report"),
-    run_tests: bool = typer.Option(
-        False, "--run-tests", help="Run target tests after edits; restore on failure"
-    ),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
-    llm_api: str | None = typer.Option(None, "--llm-api", help="openai or anthropic"),
-    llm_base_url: str | None = typer.Option(None, "--llm-base-url", help="API root including /v1"),
-    model: str | None = typer.Option(None, "--model"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    run_tests: RunTests = False,
+    config: Config = None,
+    verbose: Verbose = None,
+    llm_api: LlmApi = None,
+    llm_base_url: LlmBaseUrl = None,
+    model: Model = None,
+    quiet: Quiet = False,
 ):
-    """Rewrite code to idiomatic Python (e.g. list comprehensions)."""
+    """Propose idiomatic rewrites with the configured model API (see docs/LLM.md)."""
     cfg = _get_cfg(config, verbose, model, llm_api, llm_base_url)
-    root = _resolve_repo(path)
-    with progress("Preparing idiom proposals...", quiet=quiet):
-        svc = _new_app(root, cfg)
-        plan = _run(svc.idiomatize(str(path), allow_fallback=allow_fallback))
-    _review_and_apply(
-        svc,
-        plan,
+    if not (cfg.llm_api and cfg.model.strip()):
+        typer.echo("idiomatize needs --llm-api and --model (see docs/LLM.md).", err=True)
+        raise typer.Exit(2)
+    _plan_command(
+        "idiomatize",
+        lambda svc: svc.idiomatize(str(path)),
         cfg,
         path,
         output_dir,
@@ -516,8 +533,7 @@ def idiomatize(
         yes,
         run_tests,
         quiet,
-        dry_run=dry_run,
-        command="idiomatize",
+        dry_run,
     )
 
 
@@ -527,22 +543,20 @@ _PATTERNS = ("factory", "strategy", "observer", "singleton")
 @app.command()
 def pattern(
     pattern_name: str = typer.Argument("", help="factory|strategy|observer|singleton"),
-    path: Path = typer.Argument(Path(".")),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    path: Target = Path("."),
+    dry_run: DryRun = False,
+    output_dir: OutputDir = None,
     allow_fallback: bool = typer.Option(
         False, "--allow-fallback", help="Allow templates if the selected model fails"
     ),
-    yes: bool = typer.Option(False, "--yes"),
+    yes: Yes = False,
     report: bool = typer.Option(False, "--report"),
-    run_tests: bool = typer.Option(
-        False, "--run-tests", help="Run target tests after edits; restore on failure"
-    ),
-    llm_api: str | None = typer.Option(None, "--llm-api", help="openai or anthropic"),
-    llm_base_url: str | None = typer.Option(None, "--llm-base-url", help="API root including /v1"),
-    model: str | None = typer.Option(None, "--model"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    run_tests: RunTests = False,
+    llm_api: LlmApi = None,
+    llm_base_url: LlmBaseUrl = None,
+    model: Model = None,
+    config: Config = None,
+    quiet: Quiet = False,
 ):
     """Apply or suggest a design pattern (factory|strategy|observer|singleton)."""
     if pattern_name and pattern_name.lower() not in _PATTERNS:
@@ -551,13 +565,9 @@ def pattern(
         )
         raise typer.Exit(2)
     cfg = _get_cfg(config, model=model, llm_api=llm_api, llm_base_url=llm_base_url)
-    root = _resolve_repo(path)
-    with progress("Preparing pattern suggestions...", quiet=quiet):
-        svc = _new_app(root, cfg)
-        plan = _run(svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback))
-    _review_and_apply(
-        svc,
-        plan,
+    _plan_command(
+        "pattern",
+        lambda svc: svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback),
         cfg,
         path,
         output_dir,
@@ -565,35 +575,31 @@ def pattern(
         yes,
         run_tests,
         quiet,
-        dry_run=dry_run,
-        command="pattern",
+        dry_run,
     )
 
 
 @app.command()
 def check(
-    path: Path = typer.Argument(Path(".")),
+    path: Target = Path("."),
     fail_on: str | None = typer.Option(None, "--fail-on", help="none, info, warning or critical"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    verbose: bool | None = typer.Option(None, "--verbose/--no-verbose", "-v"),
+    config: Config = None,
+    verbose: Verbose = None,
     report: bool = typer.Option(False, "--report", "-r"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    output_dir: OutputDir = None,
+    quiet: Quiet = False,
 ):
     """Report naming, function-length, and cyclomatic-complexity issues."""
     cfg = _get_cfg(config, verbose, check_fail_on=fail_on)
     with progress("Preparing quality check...", quiet=quiet):
         svc = _new_app(_resolve_repo(path), cfg)
-        result = _run(svc.check(str(path)))
+        result = _run(svc.check, str(path))
     typer.echo(
         f"Issues: {result['total_issues']} "
         f"(critical={result['critical']}, warning={result['warning']}, info={result['info']})"
     )
     if result.get("suppressed_count"):
         typer.echo(f"Suppressed findings: {result['suppressed_count']} (not counted by the gate)")
-    from reducio.quality_gate import evaluate_gate
-
-    result.update(evaluate_gate(result, cfg.check_fail_on))
     typer.echo(
         f"Quality gate: {cfg.check_fail_on}; {'failed' if result['gate_failed'] else 'passed' if cfg.check_fail_on != 'none' else 'disabled'}"
     )
@@ -624,15 +630,13 @@ def check(
 @app.command()
 def apply(
     session_id: str = typer.Argument(..., help="Session ID from a prior command"),
-    path: Path = typer.Argument(Path(".")),
-    yes: bool = typer.Option(False, "--yes"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    path: Target = Path("."),
+    yes: Yes = False,
+    output_dir: OutputDir = None,
     report: bool = typer.Option(False, "--report"),
-    run_tests: bool = typer.Option(
-        False, "--run-tests", help="Run target tests after edits; restore on failure"
-    ),
-    config: Path | None = typer.Option(None, "--config", "-c"),
-    quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide progress, not results or errors"),
+    run_tests: RunTests = False,
+    config: Config = None,
+    quiet: Quiet = False,
 ):
     """Apply a previously saved plan by session ID."""
     cfg = _get_cfg(config)
@@ -649,9 +653,9 @@ def apply(
 @app.command("report")
 def report_cmd(
     session_id: str = typer.Argument("", help="Session ID or empty for latest"),
-    config: Path | None = typer.Option(None, "--config", "-c"),
+    config: Config = None,
     path: Path = typer.Option(Path("."), "--path", "-C", help="Repository path"),
-    output_dir: Path | None = typer.Option(None, "--output-dir"),
+    output_dir: OutputDir = None,
 ):
     """Print a saved report (latest, or the given session ID)."""
     cfg = _get_cfg(config)

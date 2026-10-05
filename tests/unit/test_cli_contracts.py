@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import Mock
 
 import pytest
 from typer.testing import CliRunner
@@ -11,7 +11,7 @@ from reducio.cli import app
 from reducio.models import FileChange, RefactorPlan, RefactorResult
 from reducio.session import SessionStore
 
-COMMANDS = ["deduplicate", "idiomatize", "pattern", "apply"]
+COMMANDS = ["deduplicate", "pattern", "apply"]
 
 
 @pytest.mark.parametrize("command", COMMANDS)
@@ -43,7 +43,7 @@ def test_apply_report_includes_failures(cli_case, command, success, tmp_path):
 def test_report_failure_distinguishes_applied_state(cli_case, monkeypatch, success):
     cli_case.service.apply_plan.return_value.success = success
     monkeypatch.setattr("reducio.cli.Reporter.generate", Mock(side_effect=OSError("read-only")))
-    result = cli_case.invoke("idiomatize", "--yes", "--report", "--quiet")
+    result = cli_case.invoke("deduplicate", "--yes", "--report", "--quiet")
     assert result.exit_code == 1
     assert ("Changes applied" if success else "Application failed") in result.output
     assert "report failed" in result.output
@@ -66,9 +66,9 @@ def cli_case(tmp_path, monkeypatch):
         ],
     )
     service = SimpleNamespace(
-        deduplicate=AsyncMock(return_value=plan),
-        idiomatize=AsyncMock(return_value=plan),
-        pattern=AsyncMock(return_value=plan),
+        deduplicate=Mock(return_value=plan),
+        idiomatize=Mock(return_value=plan),
+        pattern=Mock(return_value=plan),
         apply_plan=Mock(
             return_value=RefactorResult(
                 session_id=plan.session_id, success=True, changes=plan.changes, tests_passed=True
@@ -151,8 +151,7 @@ def test_dry_run_reports_and_session_ids(cli_case, command, empty):
     ],
 )
 def test_saved_plan_dirty_warning(cli_case, monkeypatch, options, answer, code, applied):
-    monkeypatch.setattr("reducio.cli.GitSafety.is_repo", lambda self: True)
-    monkeypatch.setattr("reducio.cli.GitSafety.is_clean", lambda self: False)
+    monkeypatch.setattr("reducio.cli.worktree_clean", lambda path: False)
     result = cli_case.invoke("apply", *options, input=answer)
     assert result.exit_code == code, result.output
     assert "Warning: uncommitted changes" in result.output
@@ -216,7 +215,8 @@ def test_invalid_explicit_config_is_clean_error(tmp_path, monkeypatch, command):
             {"REDUCIO_MODEL": "env-model", "REDUCIO_LLM_API": "openai", "REDUCIO_VERBOSE": "false"},
             ("cli-model", "anthropic", True),
         ),
-        (["--model", "", "--no-verbose"], {"REDUCIO_MODEL": "env-model"}, ("", "anthropic", False)),
+        # An explicitly cleared model leaves idiomatize unconfigured: input error, no scan.
+        (["--model", "", "--no-verbose"], {"REDUCIO_MODEL": "env-model"}, None),
     ],
 )
 def test_cli_configuration_precedence(cli_case, monkeypatch, options, environment, expected):
@@ -224,6 +224,9 @@ def test_cli_configuration_precedence(cli_case, monkeypatch, options, environmen
     for key, value in environment.items():
         monkeypatch.setenv(key, value)
     result = cli_case.invoke("idiomatize", "--dry-run", *options)
+    if expected is None:
+        assert result.exit_code == 2 and "needs --llm-api and --model" in result.output
+        return cli_case.factory.assert_not_called()
     assert result.exit_code == 0, result.output
     cfg = cli_case.factory.call_args.args[1]
     assert (cfg.model, cfg.llm_api, cfg.verbose) == expected

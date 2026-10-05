@@ -1,18 +1,14 @@
-"""Deduplicator agent — semantic duplicate detection."""
+"""Deduplicator agent — structural clone detection by AST fingerprint."""
 
 from __future__ import annotations
 
 import ast
 import builtins
 import symtable
-from typing import TYPE_CHECKING
+from collections import defaultdict
 
 from reducio.agents.base import BaseAgent
-
-if TYPE_CHECKING:
-    from reducio.embeddings.service import EmbeddingService
 from reducio.models import (
-    CodeBlock,
     DeduplicateRequest,
     FileChange,
     FileInfo,
@@ -21,88 +17,49 @@ from reducio.models import (
     PlanningProvenance,
     RefactorPlan,
 )
-from reducio.parse import ParserError, get_complexity
 from reducio.plan_review import advisory_path
 from reducio.repo import detect_language
-from reducio.session import SessionStore
 from reducio.workspace import Workspace
+
+Block = tuple[str, ast.FunctionDef | ast.AsyncFunctionDef, str]  # (path, node, source)
 
 
 class DeduplicatorAgent(BaseAgent):
     workspace: Workspace
 
-    def __init__(
-        self,
-        workspace: Workspace,
-        embedding_service: EmbeddingService,
-        llm_router=None,
-        session_store: SessionStore | None = None,
-    ):
-        super().__init__(workspace, llm_router, session_store)
-        self.embedding_service = embedding_service
-
-    async def find_duplicates(self, request: DeduplicateRequest) -> RefactorPlan:
+    def find_duplicates(self, request: DeduplicateRequest) -> RefactorPlan:
         self._begin_plan()
-        files = request.files or self.workspace.list_files()
-        if not self.embedding_service.is_using_real_embeddings:
-            self.diagnostics.append(
-                PlanDiagnostic(
-                    code="embeddings_unavailable",
-                    severity="error",
-                    message="Semantic embeddings unavailable; install reducio[embeddings] and retry.",
-                )
-            )
-            return self._finalize_plan(
-                [],
-                "Semantic embeddings unavailable; no duplicates analyzed. See installation docs for the embeddings extra.",
-                "deduplicate",
-            )
-        blocks = self._extract_blocks(files)
-        try:
-            groups = await self.embedding_service.find_duplicates(
-                blocks, request.similarity_threshold
-            )
-        except Exception:
-            self.diagnostics.append(
-                PlanDiagnostic(
-                    code="embeddings_failed",
-                    severity="error",
-                    message="Semantic duplicate search failed; no application permitted.",
-                )
-            )
-            groups = []
+        groups: dict[str, list[Block]] = defaultdict(list)
+        for block in self._extract_blocks(request.files or self.workspace.list_files()):
+            if key := _fingerprint(block[2]):
+                groups[key].append(block)
+        duplicates = [group for group in groups.values() if len(group) > 1]
         self.provenance.append(
             PlanningProvenance(
                 file="",
-                engine="embeddings",
+                engine="heuristic",
                 outcome=(
                     "failed" if any(d.severity == "error" for d in self.diagnostics) else "scanned"
                 ),
             )
         )
-        changes = []
-        for group in groups:
-            if len(group) >= 2:
-                ch = self._create_dedup_change(group)
-                if ch:
-                    changes.append(ch)
+        changes = [_dedup_change(group) for group in duplicates]
         return self._finalize_plan(
             changes,
-            f"Found {len(groups)} duplicate group(s); proposing {len(changes)} shared-util "
+            f"Found {len(duplicates)} duplicate group(s); proposing {len(changes)} shared-util "
             "suggestion(s) (review before adopting — call sites are not rewritten).",
             "deduplicate",
         )
 
-    def _extract_blocks(self, files: list[FileInfo]) -> list[CodeBlock]:
-        blocks: list[CodeBlock] = []
+    def _extract_blocks(self, files: list[FileInfo]) -> list[Block]:
+        blocks: list[Block] = []
         for f in files:
-            lang = detect_language(f.path)
-            if not f.error and lang == Language.UNKNOWN:
+            if not f.error and detect_language(f.path) == Language.UNKNOWN:
                 continue
             try:
                 tree = f.tree
                 module_scope = symtable.symtable(f.content, f.path, "exec")
-            except ParserError, SyntaxError, ValueError:
+            except SyntaxError, ValueError:
                 self.diagnostics.append(
                     PlanDiagnostic(
                         code="parser_failed",
@@ -122,15 +79,14 @@ class DeduplicatorAgent(BaseAgent):
                             message=f"Skipped {node.name}: methods and nested functions are not standalone utilities.",
                         )
                     )
+            bindings = {
+                s.get_name()
+                for s in module_scope.get_symbols()
+                if s.is_assigned() or s.is_imported()
+            }
             for node in top:
                 content = ast.get_source_segment(f.content, node) or ""
-                bindings = {
-                    s.get_name()
-                    for s in module_scope.get_symbols()
-                    if s.is_assigned() or s.is_imported()
-                }
-                dependencies = _dependencies(content, node.name, bindings)
-                if node.decorator_list or dependencies:
+                if node.decorator_list or _dependencies(content, node.name, bindings):
                     self.diagnostics.append(
                         PlanDiagnostic(
                             code="dependencies",
@@ -139,39 +95,40 @@ class DeduplicatorAgent(BaseAgent):
                         )
                     )
                     continue
-                try:
-                    metrics = get_complexity(content)
-                except SyntaxError, ValueError:
-                    continue  # invalid snippets have no trustworthy numeric score
-                blocks.append(
-                    CodeBlock(
-                        id=f"{f.path}:{node.lineno}:{node.name}",
-                        file=f.path,
-                        start_line=node.lineno,
-                        end_line=node.end_lineno or node.lineno,
-                        content=content,
-                        language=lang,
-                        symbol_type="function",
-                        symbol_name=node.name,
-                        metrics=metrics,
-                    )
-                )
+                blocks.append((f.path, node, content))
         return blocks
 
-    def _create_dedup_change(self, group: list[CodeBlock]) -> FileChange | None:
-        primary = group[0]
-        return FileChange(
-            path=advisory_path(
-                "utils", primary.file, f"{primary.symbol_name}_{primary.start_line}_dedup"
-            ),
-            original="",
-            modified=primary.content,
-            description=(
-                f"Proposed shared util for '{primary.symbol_name}' from {len(group)} sites "
-                "(suggestion only; applying writes the utility module; "
-                "originals and call sites are not rewritten)"
-            ),
-        )
+
+def _fingerprint(content: str) -> str | None:
+    """Key equal for functions that differ only in identifiers, literals and docstring."""
+    node = ast.parse(content).body[0]
+    assert isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    if ast.get_docstring(node) is not None:
+        node.body = node.body[1:]
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name):
+            n.id = "_"
+        elif isinstance(n, ast.arg):
+            n.arg, n.annotation = "_", None
+        elif isinstance(n, ast.Constant):
+            n.value = type(n.value).__name__
+    node.name, node.returns = "_", None
+    # ponytail: exact structural clones of 2+ statements only; near-miss clones need a fuzzy matcher.
+    return ast.dump(node) if len(node.body) > 1 else None
+
+
+def _dedup_change(group: list[Block]) -> FileChange:
+    path, node, content = group[0]
+    return FileChange(
+        path=advisory_path("utils", path, f"{node.name}_{node.lineno}_dedup"),
+        original="",
+        modified=content,
+        description=(
+            f"Proposed shared util for '{node.name}' from {len(group)} sites "
+            "(suggestion only; applying writes the utility module; "
+            "originals and call sites are not rewritten)"
+        ),
+    )
 
 
 def _dependencies(content: str, name: str, module_bindings: set[str]) -> set[str]:

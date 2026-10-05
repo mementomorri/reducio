@@ -71,9 +71,13 @@
       ...(s.comparison_available ? [] : ["Previous-commit deltas unavailable."]),
       ...s.changes.filter(c => c.status === "removed").map(c => `Removed: ${label(c.before)}`),
     ].join("\n");
+    const byFunction = new Map();
+    s.changes.filter(c => c.after).forEach(c => {
+      const key = identity(c.after) + c.after.line;
+      byFunction.set(key, byFunction.has(key) ? null : c);  // null marks an ambiguous match
+    });
     table("functions", ["Function", "Line", "CC", "Cognitive", "LOC", "Change vs previous", "Δ CC", "Δ cognitive"], s.measurement.functions.map(f => {
-      const matches = s.changes.filter(c => c.after && identity(c.after) === identity(f) && c.after.line === f.line);
-      const c = matches.length === 1 ? matches[0] : null;
+      const c = byFunction.get(identity(f) + f.line) ?? null;
       return [label(f), f.line, f.cyclomatic_complexity, f.cognitive_complexity, f.lines_of_code, c?.status, c?.cyclomatic_delta, c?.cognitive_delta];
     }));
   }

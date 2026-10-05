@@ -3,14 +3,11 @@
 import subprocess
 import sys
 
-import pytest
-
 from reducio.models import FileChange, RefactorPlan
 from reducio.services import App
 
 
-@pytest.mark.asyncio
-async def test_apply_plan_no_tests(temp_git_repo):
+def test_apply_plan_no_tests(temp_git_repo):
     app = App(str(temp_git_repo))
     plan = RefactorPlan(
         session_id="e2e-1",

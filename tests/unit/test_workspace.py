@@ -4,18 +4,13 @@ import pytest
 
 from reducio.models import FileChange
 from reducio.runner import TestResult as RunnerTestResult
-from reducio.workspace import PathEscapeError, Workspace
+from reducio.workspace import Workspace
 
 
 def change(path="a.py", before="x = 1\n", after="x = 2\n", operation="replace"):
     return FileChange(
         path=path, original=before, modified=after, operation=operation, description="change"
     )
-
-
-def test_path_escape(tmp_path):
-    with pytest.raises(PathEscapeError):
-        Workspace(str(tmp_path)).read_file("../../etc/passwd")
 
 
 def test_apply_changes_no_git(tmp_path):

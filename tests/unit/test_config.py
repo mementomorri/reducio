@@ -26,13 +26,6 @@ def test_retired_or_secret_settings_rejected(tmp_path, field):
         AppConfig.model_validate({field: "SECRET"})
 
 
-def test_public_complexity_alias():
-    from reducio.metrics import get_complexity
-    from reducio.utils import calculate_complexity
-
-    assert calculate_complexity("x = 1") == get_complexity("x = 1")
-
-
 def test_apply_env_model_override(monkeypatch):
     monkeypatch.setenv("REDUCIO_MODEL", "gpt-test")
     assert apply_env(AppConfig()).model == "gpt-test"

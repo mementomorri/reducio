@@ -1,6 +1,5 @@
 """Installed-client API contracts, using only mock transports and fake credentials."""
 
-import asyncio
 import os
 
 import httpx
@@ -9,8 +8,8 @@ from reducio.llm import LLMClient
 from reducio.models import AppConfig
 
 
-async def check() -> None:
-    real_client = httpx.AsyncClient
+def check() -> None:
+    real_client = httpx.Client
     prior = os.environ.get("REDUCIO_API_KEY")
     os.environ["REDUCIO_API_KEY"] = "smoke-placeholder"
     try:
@@ -26,14 +25,12 @@ async def check() -> None:
                 )
                 return httpx.Response(200, json=body)
 
-            httpx.AsyncClient = lambda **kw: real_client(
-                transport=httpx.MockTransport(respond), **kw
-            )
+            httpx.Client = lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw)
             client = LLMClient(AppConfig(llm_api=protocol, model="mock-model"))
-            assert await client.complete("x = 1") == "x = 1"
+            assert client.complete("x = 1") == "x = 1"
             assert len(requests) == 1
     finally:
-        httpx.AsyncClient = real_client
+        httpx.Client = real_client
         if prior is None:
             os.environ.pop("REDUCIO_API_KEY", None)
         else:
@@ -41,5 +38,5 @@ async def check() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(check())
+    check()
     print("Optional API client verified with mocked transports")

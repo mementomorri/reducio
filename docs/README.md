@@ -3,9 +3,8 @@
 **Semantic code compression for Python codebases**
 
 Analyze Python complexity, compare revisions, and review experimental refactoring
-proposals. Heuristics now skip uncertain cases; file recovery is scoped and verified,
-but neither tests nor safeguards prove semantic equivalence. Model proposals still
-require review. See [SAFETY.md](SAFETY.md).
+proposals. File recovery is scoped and verified, but neither tests nor safeguards
+prove semantic equivalence. Template and model proposals require review. See [SAFETY.md](SAFETY.md).
 
 reducio is a **Python 3.14+** CLI and library. It only analyzes and refactors **`.py` files** in target repositories.
 
@@ -25,7 +24,6 @@ upload on 2026-09-12:
 ```bash
 pip install reducio
 pip install "reducio[reports]"     # interactive HTML dashboards
-pip install "reducio[embeddings]"  # semantic duplicate detection
 pip install "reducio[llm]"         # optional compatible API proposals
 reducio analyze . --report
 ```
@@ -43,7 +41,7 @@ To publish, commit and push your changes, then create and push a **new version t
 on that commit (for example `git tag v0.1.1` then `git push origin v0.1.1`).
 Publish derives the wheel, source distribution, and CLI version from the tag:
 `v0.1.1` publishes PyPI version `0.1.1` and executable/release `reducio-v0.1.1`.
-CI stamps both version declarations in its build checkout before building and
+CI stamps `reducio/__init__.py` (the single version source) in its build checkout before building and
 smoke-testing; no manual source version bump is required. Tags must contain a
 valid public Python version (for example `v0.2.0rc1`); commit hashes are not versions.
 
@@ -55,19 +53,12 @@ previously uploaded filenames. After a downstream failure, re-run failed jobs
 instead of re-running the successful upload. Version `1.0.0` was already published;
 new `0.x` releases are valid but will not supersede `1.0.0` for an unpinned install.
 
-### Upgrading from the previous name
-
-Use `reducio` instead of `reducto` in commands/imports and `REDUCIO_*` instead
-of `REDUCTO_*` environment variables. Configuration is now `.reducio.yaml`, and
-reports/sessions use `.reducio/`. Existing `.reducto` files are left untouched;
-copy any configuration or sessions you want to retain to the new locations.
-There are no legacy command/import aliases. The repository and Pages links use
-`mementomorri/reducio` and `https://mementomorri.github.io/reducio/`.
+Renamed from `reducto`? See [migration notes](MIGRATION.md#renamed-from-reducto).
 
 ### 3. GitHub Releases executable
 
 After successful PyPI verification, tagged releases built by Publish provide a Linux x64 executable
-with `reports`, `embeddings` and dormant `llm` support enabled. Download the executable and matching
+with `reports` and dormant `llm` support enabled. Download the executable and matching
 `.sha256` file from [GitHub Releases](https://github.com/mementomorri/reducio/releases).
 The executable and release title use the pushed tag: `v0.1.0` produces
 `reducio-v0.1.0`. Replace `v0.1.0` below with your chosen release tag:
@@ -82,7 +73,7 @@ chmod +x reducio-v0.1.0
 The executable is built on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl,
 macOS, Windows, and ARM are not supported by this download. Python 3.14 and
 dependencies install automatically on first launch, requiring internet access
-and writable user storage. Semantic embeddings download their model on first use.
+and writable user storage.
 This is not an offline bundle. Git operations still require Git on `PATH`, and
 target-project tests require their own configured environment.
 
@@ -90,7 +81,7 @@ Download a newer executable to upgrade; PyApp management commands are disabled.
 The `version` command continues to report the Python package version.
 
 Maintainers: the executable embeds the exact wheel uploaded by the PyPI job and
-is published only after executable, report, and real-embedding smoke checks pass.
+is published only after executable, report, and API-client smoke checks pass.
 If the executable job fails after PyPI succeeds, use **Re-run failed jobs** on
 that workflow run. It reuses the saved wheel without republishing to PyPI. Release
 retries upload missing assets and skip identical assets; differing existing
@@ -100,9 +91,9 @@ assets fail rather than being overwritten. Existing release notes are preserved.
 
 | Extra | Purpose |
 |-------|---------|
-| `embeddings` | Semantic similarity (batched NumPy cosine + sentence-transformers) |
 | `reports` | Self-contained interactive HTML dashboards (Plotly); Markdown/JSON need no extra |
-| `dev` | pytest, ruff, black, mypy (contributors) |
+| `llm` | HTTPX client for [explicit compatible APIs](LLM.md) (`idiomatize`, named `pattern`) |
+| `dev` | pytest, pytest-cov, coverage, hatchling, ruff, black, mypy (contributors) |
 
 Only these three usage routes are maintained. Contributor environment setup is
 documented separately in [ONBOARDING.md](ONBOARDING.md).
@@ -110,7 +101,6 @@ documented separately in [ONBOARDING.md](ONBOARDING.md).
 ## Prerequisites
 
 - **Python 3.14+** (provisioned automatically by the Linux executable)
-- *(Optional)* **Ollama** for local LLM inference
 - *(Optional)* `[llm]` extra and an API token for [explicit compatible APIs](LLM.md)
 
 ## Usage
@@ -122,8 +112,8 @@ reducio analyze .              # Complexity hotspots and symbols
 reducio compare . --base HEAD~1 # Changed-file complexity vs a committed revision
 reducio compare . --against origin/main --worktree # Whole branch plus current edits
 reducio history . --report --format all # Git history trends (up to 100 commits)
-reducio deduplicate .          # Similar blocks → proposed utils modules
-reducio idiomatize .           # Pythonic heuristics (comprehensions, etc.)
+reducio deduplicate .          # Structural clones → proposed utils modules
+reducio idiomatize . --llm-api openai --model ID  # Model-proposed idiomatic rewrites
 reducio pattern factory .      # Design-pattern templates
 reducio check .                # Naming, function length, cyclomatic-complexity issues
 reducio apply <session-id>     # Apply a saved plan
@@ -140,10 +130,10 @@ commit reviewed changes manually. See [runner setup and recovery](SAFETY.md).
 
 | Command | What the plan contains |
 |---------|-------------------------|
-| `deduplicate` | Embeddings compare self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Call sites are **not** rewritten. |
+| `deduplicate` | An AST fingerprint (identifiers, literals and docstrings abstracted; 2+ statements) groups exact structural clones among self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Call sites are **not** rewritten. |
 | `pattern` | All default patterns, including singleton, propose new advisory modules. A configured model enables optional whole-module rewrites for applicable named patterns. |
-| `idiomatize` | Python heuristics by default; a configured model enables optional whole-module rewrites. Both paths require behavior review. |
-| `apply` | Validated diffs, file snapshots, scoped recovery, opt-in target tests and whole-file metrics. No Git writes or semantic guarantee. See [SAFETY.md](SAFETY.md). |
+| `idiomatize` | Model-only: requires `--llm-api` and `--model` (exit 2 otherwise) and proposes whole-module rewrites that require behavior review. |
+| `apply` | Exact whole-file byte checks, file snapshots, scoped recovery, opt-in target tests and whole-file metrics. No Git writes or semantic guarantee. See [SAFETY.md](SAFETY.md). |
 
 ### Flags
 
@@ -154,7 +144,7 @@ Flags are command-specific, not global:
 | `analyze`, `compare`, `history`, `deduplicate`, `idiomatize`, `pattern`, `check`, `apply` | `--config` / `-c`, `--quiet` / `-q` (hide progress only) |
 | `analyze`, `compare`, `deduplicate`, `idiomatize`, `check` | `--verbose` / `-v`, `--no-verbose` |
 | `deduplicate`, `idiomatize`, `pattern` | `--dry-run` (save unified diff, diagnostics, provenance, and session JSON) |
-| `idiomatize`, `pattern` | `--allow-fallback` (explicitly permit heuristic/template fallback after model failure) |
+| `pattern` | `--allow-fallback` (explicitly permit template fallback after model failure) |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `history`, `check` | `--report` / `-r` |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |
@@ -169,9 +159,9 @@ Flags are command-specific, not global:
 | `sessions list`, `sessions show`, `sessions cleanup` | `--path` / `-C`; cleanup also accepts nonnegative `--days` |
 
 Model rewriting requires an explicit API format and model. See [API setup](LLM.md).
-Selected-model failures stop planning by default (exit 1). `--allow-fallback`
-explicitly permits fallback, with a warning and recorded provenance. A valid
-unchanged model response is not a failure and does not trigger heuristics.
+Selected-model failures stop planning by default (exit 1). For `pattern`,
+`--allow-fallback` explicitly permits template fallback, with a warning and recorded
+provenance. A valid unchanged model response is not a failure.
 Model planning sends source text to the configured endpoint, including during dry runs.
 There is no model discovery or provider switching. In CI/non-TTY, nonempty application
 requires explicit `--yes`; dry runs and empty plans do not require approval.
@@ -224,9 +214,22 @@ See the [configuration example](GITHUB_CI.md#optional-quality-gate); quote `"off
 in YAML. Suppressed findings remain visible separately; parse/read errors are
 unsuppressible. These settings do not change metrics used by other commands.
 
+### Scan scope and thresholds
+
+`include_patterns` defaults to `["*.py"]`; `exclude_patterns` defaults to
+`[".git", "node_modules", "venv", "__pycache__", "dist", "build", "target"]`, and
+dot-directories are always skipped. A configured `exclude_patterns` **replaces** the
+default list, so re-add the defaults you still want. Symlinked files and symlinked
+directories (even ones without Python, such as `docs -> ../shared`) are reported as
+unavailable and make `analyze`/`check` incomplete (exit 1; `check` labels them as
+unparsed); list such directories in `exclude_patterns` to skip them.
+`complexity_thresholds.cyclomatic_complexity` (default 10) selects hotspots and
+`check` complexity findings, `lines_of_code` (default 50) drives `long_function`;
+`cognitive_complexity` is accepted but reserved — nothing reads it yet.
+
 ## Architecture
 
-Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, Python AST, read-only Git, opt-in tests) + agents (optional compatible APIs + optional embeddings). Plans persist under `.reducio/sessions/`.
+Single Python process: Typer CLI → `App` → `Workspace` (walk `*.py`, Python AST, read-only Git, opt-in tests) + agents (optional compatible APIs). Plans persist under `.reducio/sessions/`; reducio writes `.reducio/.gitignore` so its plans, reports and backups never make the tree dirty or get committed.
 
 See [migration notes](MIGRATION.md) for strict configuration/glob rules, source
 encoding, versioned byte-exact plans and removed Python APIs.
@@ -245,7 +248,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md).
 | [SAFETY.md](SAFETY.md) | Apply/recovery safeguards, test configuration and limitations |
 | [TEST_IMPLEMENTATION.md](TEST_IMPLEMENTATION.md) | pytest and CI |
 | [TEST_RULES.md](TEST_RULES.md) | Acceptance criteria |
-| [DESIGN.md](DESIGN.md) | Product vision (long-form) |
+| [MIGRATION.md](MIGRATION.md) | Breaking changes and upgrade notes |
+| [REVIEW.md](REVIEW.md) | 2026-10 code review and its follow-up status |
+| [DESIGN.md](DESIGN.md) | Product vision |
 | [ROADMAP.md](../ROADMAP.md) | What's shipped vs planned |
 
 ## License

@@ -1,13 +1,10 @@
 """apply_plan refuses whole-file rewrites that drop a def/class."""
 
-import pytest
-
 from reducio.models import FileChange, RefactorPlan
 from reducio.services import App
 
 
-@pytest.mark.asyncio
-async def test_apply_plan_refuses_dropping_a_def(tmp_path):
+def test_apply_plan_refuses_dropping_a_def(tmp_path):
     f = tmp_path / "m.py"
     f.write_text("def keep():\n    return 1\n\n\ndef also():\n    return 2\n")
     app = App(str(tmp_path))

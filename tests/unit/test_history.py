@@ -10,8 +10,8 @@ import pytest
 from typer.testing import CliRunner
 
 from reducio.cli import _get_cfg, app
-from reducio.compare import CompareError
-from reducio.history import _read_blobs, history_revisions, snapshot_metrics
+from reducio.compare import CompareError, _read_blobs
+from reducio.history import history_revisions, snapshot_metrics
 from reducio.models import AppConfig
 from reducio.visual_report import ReportFormat, write_reports
 from tests.unit.test_compare import commit, git
@@ -118,7 +118,7 @@ def test_shallow_and_missing_ref_are_actionable(temp_git_repo, tmp_path):
 
 @pytest.mark.parametrize("response", [b"missing\n", b"abc blob 9\nshort\n"])
 def test_batch_read_failure_is_not_a_historical_gap(tmp_path, monkeypatch, response):
-    monkeypatch.setattr("reducio.history._git", lambda *args, **kw: response)
+    monkeypatch.setattr("reducio.compare._git", lambda *args, **kw: response)
     with pytest.raises(CompareError):
         list(_read_blobs(tmp_path, ["abc"]))
 

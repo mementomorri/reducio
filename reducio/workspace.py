@@ -5,30 +5,16 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from reducio import parse, repo
-from reducio.git_safety import GitSafety
-from reducio.models import AppConfig, ComplexityMetrics, FileChange, FileInfo, Symbol
+from reducio import repo
+from reducio.models import AppConfig, FileChange, FileInfo
 from reducio.runner import ProjectRunner
-
-
-class PathEscapeError(ValueError):
-    pass
 
 
 class Workspace:
     def __init__(self, root_dir: str, cfg: AppConfig | None = None):
         self.root = Path(root_dir).resolve()
         self.cfg = cfg or AppConfig()
-        self._git = GitSafety(str(self.root))
         self._runner = ProjectRunner(str(self.root), self.cfg)
-
-    def _resolve_path(self, path: str) -> Path:
-        full = (self.root / path).resolve()
-        try:
-            full.relative_to(self.root)
-        except ValueError as e:
-            raise PathEscapeError(f"path escapes workspace: {path}") from e
-        return full
 
     def list_files(self) -> list[FileInfo]:
         return repo.walk(
@@ -36,28 +22,6 @@ class Workspace:
             self.cfg.exclude_patterns,
             self.cfg.include_patterns,
         )
-
-    def read_file(self, path: str) -> FileInfo:
-        self._resolve_path(path)
-        file = repo._read_one(self.root, self.root / path)
-        if file.error:
-            raise ValueError(file.error)
-        return file
-
-    def get_symbols(self, path: str, content: str | None = None) -> list[Symbol]:
-        if content is None:
-            content = self.read_file(path).content
-        lang = repo.detect_language(path)
-        symbols = parse.get_symbols(content, path, lang)
-        for s in symbols:
-            if not s.file:
-                s.file = path
-        return symbols
-
-    def get_complexity(self, path: str, content: str | None = None) -> ComplexityMetrics:
-        if content is None:
-            content = self.read_file(path).content
-        return parse.get_complexity(content)
 
     def apply_changes_safe(
         self, changes: list[FileChange], run_tests: bool = False, validate_after=None
@@ -122,8 +86,8 @@ class Workspace:
                 )
                 if not result.success:
                     raise ValueError("Requested tests failed or could not run")
-            if validate_after is not None:
-                validate_after()
+                if validate_after is not None:
+                    validate_after()  # tests may have touched the files
             snapshot.complete()
             outcome.update(
                 success=True, applied=len(proposed), tests_passed=outcome["test_status"] == "passed"
@@ -143,17 +107,3 @@ class Workspace:
                 )
         outcome["tests_passed"] = outcome["test_status"] == "passed"
         return outcome
-
-    def run_tests(self) -> dict:
-        r = self._runner.run_tests()
-        return {
-            "success": r.success,
-            "output": r.output,
-            "command": r.command,
-            "exit_code": r.exit_code,
-            "status": r.status,
-            "count": r.count,
-        }
-
-    def is_git_clean(self) -> bool:
-        return self._git.is_clean()

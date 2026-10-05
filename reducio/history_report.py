@@ -83,7 +83,7 @@ def html_history(result: HistoryResult) -> str:
     )
     controls = """<section id="history"><h2>History · why is the code changing?</h2>
 <p>Every point uses today's engine and configuration. Gaps mean unavailable measurements, not improvement.
-Source-root transitions are labeled; function renames and ambiguous definitions are not guessed.</p>
+Source-root transitions are labeled; repeated names pair in source order, renames are not guessed.</p>
 <div class="history-controls"><label>From commit <select id="history-start"></select></label>
 <label>Through commit <select id="history-end"></select></label>
 <label>Inspect commit <select id="history-commit"></select></label>

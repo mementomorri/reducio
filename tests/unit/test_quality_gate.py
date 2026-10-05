@@ -2,7 +2,7 @@
 
 import sys
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import Mock
 
 import pytest
 from typer.testing import CliRunner
@@ -30,8 +30,9 @@ def test_invalid_gate():
 def test_cli_report_precedes_gate_exit(tmp_path, monkeypatch, threshold, code):
     monkeypatch.chdir(tmp_path)
     result = {"total_issues": 1, "critical": 0, "warning": 1, "info": 0, "issues": []}
+    result |= evaluate_gate(result, threshold)  # App.check applies the gate
     monkeypatch.setattr(
-        "reducio.cli._new_app", lambda *a: SimpleNamespace(check=AsyncMock(return_value=result))
+        "reducio.cli._new_app", lambda *a: SimpleNamespace(check=Mock(return_value=result))
     )
     response = CliRunner().invoke(app, ["check", ".", "--fail-on", threshold, "--report"])
     assert response.exit_code == code, response.output

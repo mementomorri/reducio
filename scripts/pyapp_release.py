@@ -79,7 +79,7 @@ def release_notes(package: dict[str, str]) -> str:
 
 Commit: {package['commit']}
 
-Includes HTML reports and semantic embeddings (`reports,embeddings,llm`). Built with
+Includes HTML reports and optional model API support (`reports,llm`). Built with
 PyApp 0.29.0 on Ubuntu 22.04 for Linux x64 with glibc; Alpine/musl is not supported.
 The executable embeds the same Reducio wheel published to PyPI by this workflow.
 
@@ -93,8 +93,7 @@ chmod +x {binary}
 ```
 
 Python 3.14 and package dependencies are downloaded and installed on first launch.
-The embedding model is downloaded on first use. Internet access and writable user
-storage are required for initial setup; this is not an offline bundle.
+Internet access and writable user storage are required for initial setup; this is not an offline bundle.
 Git operations require Git on PATH. Target-project tests still require their own
 configured environment. Download a newer executable to upgrade; PyApp management
 commands are disabled. `version` reports the Python package version.

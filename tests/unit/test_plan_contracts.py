@@ -1,9 +1,8 @@
 """Persisted review, capability failure, and advisory preflight contracts."""
 
 import ast
-import builtins
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
@@ -28,51 +27,37 @@ from reducio.workspace import Workspace
 
 
 @pytest.mark.parametrize("fallback", [False, True])
-async def test_pattern_model_failure_requires_explicit_fallback(tmp_path, fallback):
+def test_pattern_model_failure_requires_explicit_fallback(tmp_path, fallback):
     workspace = Workspace(str(tmp_path), AppConfig(model="test/model"))
-    llm = MagicMock(complete=AsyncMock(side_effect=RuntimeError("SECRET")))
+    llm = MagicMock(complete=Mock(side_effect=RuntimeError("SECRET")))
     agent = PatternAgent(workspace, llm, SessionStore(str(tmp_path / "sessions")))
-    plan = await agent.apply_pattern(
+    plan = agent.apply_pattern(
         PatternRequest(
             path=str(tmp_path),
             pattern="singleton",
-            files=[FileInfo(path="state.py", content="global state\n")],
+            files=[FileInfo(path=f"state{i}.py", content="global state\n") for i in range(2)],
             allow_fallback=fallback,
         )
     )
+    # Without fallback the first failure stops planning: no repeated model timeouts.
+    assert llm.complete.call_count == (2 if fallback else 1)
     assert plan.complete is fallback and bool(plan.changes) is fallback
     assert "SECRET" not in plan.model_dump_json()
-    assert [p.engine for p in plan.provenance] == (["model", "template"] if fallback else ["model"])
+    assert [p.engine for p in plan.provenance] == (
+        ["model", "template"] * 2 if fallback else ["model"]
+    )
 
 
-def test_symbols_need_no_external_parser(monkeypatch):
-    from reducio import parse
-
-    original_import = builtins.__import__
-
-    def fail(name, *args, **kwargs):
-        if name.startswith("tree_sitter"):
-            raise AssertionError("External parser must not load")
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", fail)
-    assert parse.get_symbols("def f(): pass", "a.py")
-
-
-async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatch, caplog):
+def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatch, caplog):
     import httpx
 
     from reducio.llm import LLMClient, LLMError
 
     monkeypatch.setenv("REDUCIO_API_KEY", "SECRET")
     caplog.set_level("INFO")
-    monkeypatch.setattr(
-        httpx.AsyncClient, "post", AsyncMock(side_effect=RuntimeError("SECRET PRIVATE"))
-    )
+    monkeypatch.setattr(httpx.AsyncClient, "post", Mock(side_effect=RuntimeError("SECRET PRIVATE")))
     with pytest.raises(LLMError):
-        await LLMClient(AppConfig(verbose=True, llm_api="openai", model="chosen")).complete(
-            "PRIVATE"
-        )
+        LLMClient(AppConfig(verbose=True, llm_api="openai", model="chosen")).complete("PRIVATE")
     assert "SECRET" not in caplog.text and "PRIVATE" not in caplog.text
 
 
@@ -83,9 +68,8 @@ async def test_verbose_router_does_not_log_prompts_or_provider_errors(monkeypatc
 def test_session_ids_rejected_before_cache_or_filesystem(tmp_path, session_id):
     store = SessionStore(str(tmp_path / "sessions"))
     plan = RefactorPlan(session_id=session_id, changes=[], description="cached")
-    for operation in (store.load_plan, store.delete_session, store.get_session_info):
-        with pytest.raises(StorageError):
-            operation(session_id)
+    with pytest.raises(StorageError):
+        store.load_plan(session_id)
     with pytest.raises(StorageError):
         store.save_plan(plan)
     with pytest.raises(StorageError):
@@ -124,53 +108,45 @@ def test_storage_root_symlink_rejected(tmp_path):
 @pytest.mark.parametrize(
     "reply", [RuntimeError("credential=SECRET prompt=PRIVATE"), "", "not valid python !"]
 )
-@pytest.mark.parametrize("fallback", [False, True])
-async def test_model_failure_is_explicit_and_persisted(tmp_path, reply, fallback):
+def test_model_failure_is_explicit_and_persisted(tmp_path, reply):
     ws = Workspace(str(tmp_path), AppConfig(model="test/model"))
     llm = MagicMock()
-    llm.complete = AsyncMock(
+    llm.complete = Mock(
         **({"side_effect": reply} if isinstance(reply, Exception) else {"return_value": reply})
     )
     store = SessionStore(str(tmp_path / ".reducio/sessions"))
     source = "def f():\n    x = None\n    return x == None\n"
     agent = IdiomatizerAgent(ws, llm, store)
-    plan = await agent.idiomatize(
+    plan = agent.idiomatize(
         IdiomatizeRequest(
             path=str(tmp_path),
             files=[FileInfo(path="f.py", content=source)],
-            allow_fallback=fallback,
         )
     )
-    assert plan.complete is fallback
-    assert bool(plan.changes) is fallback
-    assert [p.engine for p in plan.provenance] == (
-        ["model", "heuristic"] if fallback else ["model"]
-    )
+    assert not plan.complete and not plan.changes
+    assert [p.engine for p in plan.provenance] == ["model"]
     restored = store.load_plan(plan.session_id)
     assert restored == plan
     assert "SECRET" not in plan.model_dump_json() and "PRIVATE" not in plan.model_dump_json()
-    if not fallback:
-        assert not App(str(tmp_path)).apply_plan(restored, run_tests=False).success
+    assert not App(str(tmp_path), AppConfig()).apply_plan(restored, run_tests=False).success
 
 
-async def test_unchanged_model_does_not_run_heuristics(tmp_path):
+def test_unchanged_model_reply_proposes_nothing(tmp_path):
     content = "def f():\n    x = None\n    return x == None\n"
-    llm = MagicMock(complete=AsyncMock(return_value=content))
+    llm = MagicMock(complete=Mock(return_value=content))
     agent = IdiomatizerAgent(
         Workspace(str(tmp_path), AppConfig(model="test")),
         llm,
         SessionStore(str(tmp_path / "sessions")),
     )
-    plan = await agent.idiomatize(
-        IdiomatizeRequest(
-            path=str(tmp_path), files=[FileInfo(path="f.py", content=content)], allow_fallback=True
-        )
+    plan = agent.idiomatize(
+        IdiomatizeRequest(path=str(tmp_path), files=[FileInfo(path="f.py", content=content)])
     )
     assert plan.complete and not plan.changes
     assert plan.provenance[0].outcome == "unchanged"
 
 
-async def test_advisory_scope_and_dependency_filter(tmp_path):
+def test_advisory_scope_and_dependency_filter(tmp_path):
     source = """import math
 CONST = 3
 def safe(x):
@@ -187,49 +163,38 @@ def outer(x):
         return x
     return inner()
 """
-    emb = MagicMock(is_using_real_embeddings=True, find_duplicates=AsyncMock(return_value=[]))
     agent = DeduplicatorAgent(
-        Workspace(str(tmp_path)), emb, session_store=SessionStore(str(tmp_path / "sessions"))
+        Workspace(str(tmp_path)), session_store=SessionStore(str(tmp_path / "sessions"))
     )
-    plan = await agent.find_duplicates(
+    blocks = agent._extract_blocks([FileInfo(path="a.py", content=source)])
+    assert {node.name for _, node, _ in blocks} == {"safe", "outer"}
+    for _, _, content in blocks:
+        ast.parse(content)
+    plan = agent.find_duplicates(
         DeduplicateRequest(path=str(tmp_path), files=[FileInfo(path="a.py", content=source)])
     )
-    blocks = emb.find_duplicates.call_args.args[0]
-    assert {b.symbol_name for b in blocks} == {"safe", "outer"}
-    for block in blocks:
-        ast.parse(block.content)
     assert {d.code for d in plan.diagnostics} == {"dependencies", "unsupported_scope"}
     assert plan.complete
 
 
-async def test_parser_failure_is_incomplete_but_ast_analysis_works(tmp_path, monkeypatch):
+def test_parser_failure_is_incomplete_but_ast_analysis_works(tmp_path, monkeypatch):
 
     (tmp_path / "a.py").write_text("def f():\n    return 1\n")
     app = App(str(tmp_path))
-    assert (await app.analyze(str(tmp_path))).complete
+    assert (app.analyze(str(tmp_path))).complete
     (tmp_path / "broken.py").write_text("def broken(:")
-    emb = MagicMock(is_using_real_embeddings=True, find_duplicates=AsyncMock(return_value=[]))
-    plan = await DeduplicatorAgent(app.workspace, emb, session_store=app.sessions).find_duplicates(
+    plan = DeduplicatorAgent(app.workspace, session_store=app.sessions).find_duplicates(
         DeduplicateRequest(path=str(tmp_path))
     )
     assert not plan.complete and plan.diagnostics[0].code == "parser_failed"
 
 
-async def test_missing_embeddings_is_failure(tmp_path):
-    emb = MagicMock(is_using_real_embeddings=False)
-    plan = await DeduplicatorAgent(
-        Workspace(str(tmp_path)), emb, session_store=SessionStore(str(tmp_path / "sessions"))
-    ).find_duplicates(DeduplicateRequest(path=str(tmp_path)))
-    assert not plan.complete and plan.diagnostics[0].code == "embeddings_unavailable"
-    emb.find_duplicates.assert_not_called()
-
-
-async def test_patterns_source_qualified_and_valid(tmp_path):
+def test_patterns_source_qualified_and_valid(tmp_path):
     content = "global state\n"
     agent = PatternAgent(
         Workspace(str(tmp_path)), session_store=SessionStore(str(tmp_path / "sessions"))
     )
-    plan = await agent.apply_pattern(
+    plan = agent.apply_pattern(
         PatternRequest(
             path=str(tmp_path),
             pattern="singleton",

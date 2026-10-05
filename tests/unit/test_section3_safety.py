@@ -12,7 +12,6 @@ import pytest
 
 from reducio import recovery
 from reducio.analysis import analyze_files
-from reducio.idioms import rewrite
 from reducio.models import AppConfig, FileChange, FileInfo, RefactorPlan, RefactorResult
 from reducio.reporter import Reporter
 from reducio.runner import ProjectRunner
@@ -28,112 +27,6 @@ def plan_for(tmp_path, before="def f():\n    return 1\n", after="def f():\n    r
         description="update",
         changes=[FileChange(path="a.py", original=before, modified=after, description="update")],
     )
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        "out = [99]\nfor x in range(2):\n    out.append(x)\nreturn out",
-        "out = []\nalias = out\nfor x in range(2):\n    out.append(x)\nreturn alias",
-        "out = []\nfor x in range(2):\n    out.append(x)\nreturn x",
-        "out = []\nfor x in range(2):\n    out.append(x)\n    print(x)\nreturn out",
-        "out = []\nfor x in range(2):\n    out.append(x)\nelse:\n    out.append(9)\nreturn out",
-        "out = {}\nfor x in range(2):\n    out[x] = len(out)\nreturn out",
-        "out = []\nfor x in range(2):\n    out.append(side_effect(x))\nreturn out",
-        "out = []\nfor x in []:\n    out.append(x)\nreturn out",
-        "out = []\nfor x in range(2000):\n    out.append(x)\nreturn out",
-        "out = []\nfor x in range(2):\n    out.append(x) # preserve\nreturn out",
-        "try:\n    out = []\n    for x in range(2):\n        out.append(x)\nexcept Exception:\n    return out\nreturn out",
-        "out = []\nfor x in range(2):\n    out.append(x)\nreturn lambda: x",
-        "out = []\nfor x in range(2):\n    out.append(x)\nreturn locals()",
-        "global out\nout = []\nfor x in range(2):\n    out.append(x)\nreturn out",
-        "x = 1\nwhile len(x) == 0:\n    x = custom()\nreturn x",
-        "return x == None",
-        "if len(x) > 0:\n    return 1\nreturn 0",
-        "if x == 1 or x == side_effect():\n    return 1\nreturn 0",
-    ],
-)
-def test_uncertain_rewrites_are_skipped(body):
-    source = (
-        "def f(unknown=None):\n" + "\n".join("    " + line for line in body.splitlines()) + "\n"
-    )
-    assert rewrite(source, "a.py")[0] == source
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        "out = []\nfor x in range(3):\n    out.append(x * 2)\nreturn out",
-        "out = {}\nfor x in [1, 2, 3]:\n    out[x] = x * 2\nreturn out",
-        "out = []\nfor x in [-1, 0, 1]:\n    if x > 0:\n        out.append(x + 1)\nreturn out",
-        "x = None\nreturn x == None",
-        "x = 1\nreturn x != None",
-        "xs = [1]\nif len(xs) > 0:\n    return 1\nreturn 0",
-        "xs = []\nif len(xs) == 0:\n    return 1\nreturn 0",
-        "x = 'a'\nif x == 'a' or x == 'b':\n    return 1\nreturn 0",
-    ],
-)
-def test_supported_rewrites_preserve_results_and_surrounding_bytes(body):
-    prefix = '# π: "x == None"\r\nTEXT = "len(x) > 0"\r\n\r\n'
-    suffix = "\r\n# final comment\r\n"
-    source = (
-        prefix
-        + "def f():\r\n"
-        + "\r\n".join("    " + line for line in body.splitlines())
-        + "\r\n"
-        + suffix
-    )
-    updated, descriptions, _ = rewrite(source, "a.py")
-    assert descriptions and updated != source
-    assert updated.startswith(prefix) and updated.endswith(suffix)
-    before, after = {}, {}
-    exec(source, before)
-    exec(updated, after)
-    assert before["f"]() == after["f"]()
-
-
-@pytest.mark.parametrize(
-    "binding", ["def range(n):\n    return []", "range = custom", "from x import range"]
-)
-def test_shadowed_range_is_not_assumed_builtin(binding):
-    source = (
-        binding
-        + "\ndef f():\n    out = []\n    for x in range(3):\n        out.append(x)\n    return out\n"
-    )
-    assert rewrite(source, "a.py")[0] == source
-
-
-@pytest.mark.parametrize("parameter", ["x", "out"])
-def test_rebinding_parameter_does_not_change_finalizer_timing(parameter):
-    source = (
-        "events = []\n"
-        "class Watched:\n"
-        "    def __del__(self):\n"
-        "        events.append('released')\n"
-        f"def f({parameter}):\n"
-        "    out = []\n"
-        "    for x in range(3):\n"
-        "        out.append(x)\n"
-        "    return len(events)\n"
-    )
-    updated, descriptions, diagnostics = rewrite(source, "a.py")
-    assert updated == source and not descriptions and diagnostics
-    before, after = {}, {}
-    exec(source, before)
-    exec(updated, after)
-    assert before["f"](before["Watched"]()) == after["f"](after["Watched"]())
-
-
-def test_previously_bound_loop_variable_is_not_rewritten():
-    source = (
-        "def f():\n"
-        "    x = object()\n"
-        "    out = []\n"
-        "    for x in range(3):\n"
-        "        out.append(x)\n"
-        "    return out\n"
-    )
-    assert rewrite(source, "a.py")[0] == source
 
 
 def test_default_apply_never_runs_tests_and_measures_full_files(tmp_path, monkeypatch):

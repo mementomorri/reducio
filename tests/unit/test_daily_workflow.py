@@ -167,7 +167,7 @@ def test_annotations_escape_and_cap(temp_git_repo):
     assert "%2C" in github_annotations(result)[0] and "%0A" in github_annotations(result)[0]
 
 
-async def test_quality_overrides_and_targeted_suppressions(tmp_path):
+def test_quality_overrides_and_targeted_suppressions(tmp_path):
     cfg = AppConfig(
         quality_rules={"naming_convention": "off", "bad_variable_name": "info"},
         quality_ignores={"tests/*.py": ["bad_variable_name"]},
@@ -177,7 +177,7 @@ async def test_quality_overrides_and_targeted_suppressions(tmp_path):
         FileInfo(path=p, content="def BAD():\n    zz = 1\n") for p in ("src/a.py", "tests/a.py")
     ]
     files.append(FileInfo(path="tests/bad.py", content="break\n"))
-    result = (await service.quality.check_quality(files, ".")).to_dict()
+    result = (service.quality.check_quality(files, ".")).to_dict()
     assert result["suppressed_count"] == 3
     assert len(result["issues"]) == 2
     assert (

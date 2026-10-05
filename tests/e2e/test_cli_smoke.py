@@ -108,28 +108,6 @@ def test_check_report_writes_markdown(sample_repo):
     assert "long_function" in text or "high_complexity" in text
 
 
-def test_idiomatize_sample_repo(sample_repo):
-    r = _run_cli("idiomatize", str(sample_repo), "--yes")
-    assert r.returncode == 1  # The fixture corpus contains invalid Python.
-    assert "incomplete" in (r.stdout + r.stderr).lower()
-
-
-def test_idiomatize_never_breaks_valid_python(sample_repo):
-    # ROADMAP P0 guard: the apply path used to drop snippet edits at line 1 and
-    # corrupt files. No file that parsed before may fail to parse after.
-    py_files = [p for p in sample_repo.rglob("*.py") if ".reducio" not in p.parts]
-    valid_before = {p for p in py_files if _parses(p)}
-    assert valid_before  # corpus has real Python to protect
-    original = {p: p.read_bytes() for p in py_files}
-
-    r = _run_cli("idiomatize", str(sample_repo), "--yes")
-    assert r.returncode == 1
-    assert all(p.read_bytes() == data for p, data in original.items())
-
-    regressions = [str(p) for p in valid_before if not _parses(p)]
-    assert not regressions, f"idiomatize corrupted valid files: {regressions}"
-
-
 def test_deduplicate_sample_repo_dry_run(sample_repo):
     # The corpus includes an existing proposed destination; exercise planning,
     # not an application that used to hide its create-over-existing failure.

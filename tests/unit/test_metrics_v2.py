@@ -1,12 +1,18 @@
 """Exact metric contracts: measurements must reflect syntax, not text layout."""
 
+import ast
+
 import pytest
 
 from reducio.agents.quality_checker import QualityCheckerAgent
 from reducio.analysis import analyze_files
-from reducio.metrics import get_complexity, line_decisions, measure_functions
+from reducio.metrics import functions_from_tree, get_complexity, line_decisions
 from reducio.models import AppConfig, FileInfo
 from reducio.workspace import Workspace
+
+
+def measure_functions(content):
+    return functions_from_tree(ast.parse(content), "<source>")
 
 
 @pytest.mark.parametrize(
@@ -96,7 +102,7 @@ def test_actual_hotspots_not_top_twenty_or_classes():
     assert result.model_dump()["total_hotspots"] == 25
 
 
-async def test_analyze_and_check_agree(tmp_path):
+def test_analyze_and_check_agree(tmp_path):
     cfg = AppConfig(complexity_thresholds={"cyclomatic_complexity": 2})
     files = [
         FileInfo(
@@ -105,7 +111,7 @@ async def test_analyze_and_check_agree(tmp_path):
         )
     ]
     analysis = analyze_files(files, cfg)
-    quality = await QualityCheckerAgent(Workspace(str(tmp_path), cfg)).check_quality(files, ".")
+    quality = QualityCheckerAgent(Workspace(str(tmp_path), cfg)).check_quality(files, ".")
     issue = next(i for i in quality.issues if i.issue_type == "high_complexity_function")
     assert issue.symbol == analysis.hotspots[0].symbol == "C.f"
     assert "2 cyclomatic complexity" in issue.message

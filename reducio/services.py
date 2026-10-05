@@ -41,42 +41,29 @@ class App:
         self.workspace = Workspace(root, self.cfg)
         self.sessions = SessionStore(storage_dir=str(self.workspace.root / ".reducio" / "sessions"))
         self.llm: LLMClient | None = None
-        self._embedding = None
         self.analyzer = AnalyzerAgent(self.workspace)
         self.quality = QualityCheckerAgent(self.workspace)
-
-    async def _embeddings(self):
-        if self._embedding is None:
-            status("Loading embeddings (first use may download a model)...")
-            from reducio.embeddings import EmbeddingService
-
-            self._embedding = EmbeddingService()
-            await self._embedding.initialize(verbose=self.cfg.verbose)
-        return self._embedding
 
     def _files(self) -> list[FileInfo]:
         return self.workspace.list_files()
 
-    async def analyze(self, path: str) -> AnalyzeResult:
-        return await self.analyzer.analyze(AnalyzeRequest(path=path, files=self._files()))
+    def analyze(self, path: str) -> AnalyzeResult:
+        return self.analyzer.analyze(AnalyzeRequest(path=path, files=self._files()))
 
-    async def deduplicate(self, path: str) -> RefactorPlan:
-        emb = await self._embeddings()
-        agent = DeduplicatorAgent(self.workspace, emb, self.llm, self.sessions)
+    def deduplicate(self, path: str) -> RefactorPlan:
+        agent = DeduplicatorAgent(self.workspace, session_store=self.sessions)
         files = self._files()
-        status("Finding similar functions and preparing duplicate proposals...")
-        return await agent.find_duplicates(DeduplicateRequest(path=path, files=files))
+        status("Fingerprinting functions and preparing duplicate proposals...")
+        return agent.find_duplicates(DeduplicateRequest(path=path, files=files))
 
-    async def idiomatize(self, path: str, *, allow_fallback: bool = False) -> RefactorPlan:
+    def idiomatize(self, path: str) -> RefactorPlan:
         self._prepare_llm()
         agent = IdiomatizerAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing idioms and preparing proposals...")
-        return await agent.idiomatize(
-            IdiomatizeRequest(path=path, files=files, allow_fallback=allow_fallback)
-        )
+        return agent.idiomatize(IdiomatizeRequest(path=path, files=files))
 
-    async def pattern(
+    def pattern(
         self, pattern_name: str, path: str, *, allow_fallback: bool = False
     ) -> RefactorPlan:
         if pattern_name:
@@ -84,16 +71,16 @@ class App:
         agent = PatternAgent(self.workspace, self.llm, self.sessions)
         files = self._files()
         status("Analyzing patterns and preparing suggestions...")
-        return await agent.apply_pattern(
+        return agent.apply_pattern(
             PatternRequest(
                 pattern=pattern_name, path=path, files=files, allow_fallback=allow_fallback
             )
         )
 
-    async def check(self, path: str) -> dict[str, Any]:
+    def check(self, path: str) -> dict[str, Any]:
         files = self._files()
         status("Checking naming, function length, and complexity...")
-        report = await self.quality.check_quality(files, path)
+        report = self.quality.check_quality(files, path)
         result = report.to_dict()
         from reducio.quality_gate import evaluate_gate
 

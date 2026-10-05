@@ -178,14 +178,12 @@ def functions_from_tree(tree: ast.AST, path: str) -> list[FunctionMetrics]:
             parents = (*parents, node.name)
             scope = "class" if isinstance(node, ast.ClassDef) else "function"
         for child in ast.iter_child_nodes(node):
-            walk(child, parents, scope)
+            # Definitions only occur in statement bodies; skip expression subtrees.
+            if isinstance(child, ast.stmt | ast.excepthandler | ast.match_case):
+                walk(child, parents, scope)
 
     walk(tree)
     return functions
-
-
-def measure_functions(content: str, path: str = "<source>") -> list[FunctionMetrics]:
-    return functions_from_tree(ast.parse(content, filename=path), path)
 
 
 def get_complexity(content: str) -> ComplexityMetrics:

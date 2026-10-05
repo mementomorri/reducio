@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 from scripts.pyapp_release import digest, package_metadata
-from scripts.smoke_pyapp import EMBEDDING_CHECK, check_cli
+from scripts.smoke_pyapp import check_cli
 
 
 def smoke(wheel_directory: Path, commit: str, *, local: bool = False) -> None:
@@ -18,13 +18,10 @@ def smoke(wheel_directory: Path, commit: str, *, local: bool = False) -> None:
     with tempfile.TemporaryDirectory(prefix="reducio-pypi-") as temporary:
         root = Path(temporary)
         env = {
-            k: v
-            for k, v in os.environ.items()
-            if not k.startswith(("PYTHON", "PIP_", "REDUCIO_", "HF_"))
+            k: v for k, v in os.environ.items() if not k.startswith(("PYTHON", "PIP_", "REDUCIO_"))
         }
         env.update(
             PIP_CONFIG_FILE=os.devnull,
-            HF_HOME=str(root / "models"),
             XDG_CACHE_HOME=str(root / "cache"),
         )
 
@@ -63,7 +60,6 @@ def smoke(wheel_directory: Path, commit: str, *, local: bool = False) -> None:
             assert len(wheels) == 1 and digest(wheels[0]) == digest(
                 Path(package["wheel"])
             ), "PyPI wheel differs from the published artifact"
-        extras = "reports,llm" if local else "reports,embeddings,llm"
         if local:
             run(
                 python,
@@ -78,7 +74,7 @@ def smoke(wheel_directory: Path, commit: str, *, local: bool = False) -> None:
                 python,
                 "-I",
                 "-c",
-                "import reducio.cli, importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('httpx', 'tree_sitter', 'chromadb', 'numpy'))",
+                "import reducio.cli, importlib.util; assert all(importlib.util.find_spec(name) is None for name in ('httpx', 'plotly'))",
             )
         run(
             python,
@@ -87,12 +83,10 @@ def smoke(wheel_directory: Path, commit: str, *, local: bool = False) -> None:
             "install",
             "--index-url",
             "https://pypi.org/simple",
-            f"{wheels[0]}[{extras}]",
+            f"{wheels[0]}[reports,llm]",
         )
         check_cli(run, str(root / "venv/bin/reducio"), root, version)
         run(python, "-I", "-c", Path(__file__).with_name("smoke_llm.py").read_text())
-        if not local:
-            run(python, "-I", "-c", EMBEDDING_CHECK, version)
         print(
             "Local wheel verified" if local else "Published PyPI installation verified", flush=True
         )

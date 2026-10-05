@@ -107,7 +107,7 @@ def test_landing_demo_uses_supported_cli_commands_without_execution():
         assert program == "reducio"
         # Parsing validates flags and required arguments without applying any plan.
         with cli.commands[name].make_context(name, args) as context:
-            if name == "idiomatize":
+            if name == "deduplicate":
                 assert context.params["dry_run"] is True
             else:
                 assert name in {"analyze", "compare"}
@@ -131,7 +131,7 @@ def test_landing_copy_discloses_limits_and_links_enhancements():
         "Model planning sends source code",
         "Hotspots use the cyclomatic threshold",
         "reports",
-        "embeddings",
+        "structural clones",
         "ROADMAP.md#enhancement-opportunities",
     ):
         assert disclosure in source

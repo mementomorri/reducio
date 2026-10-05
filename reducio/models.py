@@ -38,34 +38,12 @@ class Symbol(BaseModel):
     file: str = ""
     start_line: int
     end_line: int
-    signature: str | None = None
-    references: list[str] = Field(default_factory=list)
 
 
 class ComplexityMetrics(BaseModel):
     cyclomatic_complexity: int = 0
     cognitive_complexity: int = 0
     lines_of_code: int = 0
-
-
-class CodeBlock(BaseModel):
-    id: str
-    file: str
-    start_line: int
-    end_line: int
-    content: str
-    language: Language
-    symbol_type: str
-    symbol_name: str
-    metrics: ComplexityMetrics
-    embedding: list[float] | None = None
-
-
-class DuplicateGroup(BaseModel):
-    id: str
-    blocks: list[CodeBlock]
-    similarity: float
-    suggested_fix: str | None = None
 
 
 class FileChange(BaseModel):
@@ -161,7 +139,6 @@ class AnalyzeResult(BaseModel):
     total_files: int
     total_symbols: int
     hotspots: list[ComplexityHotspot]
-    duplicates: list[DuplicateGroup] = Field(default_factory=list)
     symbols: list[Symbol] = Field(default_factory=list)
     metrics_version: int = 2
     scope: str = "."
@@ -212,6 +189,14 @@ class CompareResult(BaseModel):
     @property
     def complete(self) -> bool:
         return self.before.complete and self.after.complete and not self.diagnostics
+
+    @property
+    def gate_status(self) -> str:
+        if not self.complete:
+            return "unavailable"
+        if self.gate_failed:
+            return "failed"
+        return "disabled" if self.gate_threshold == "none" else "passed"
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -297,13 +282,21 @@ class AppConfig(BaseModel):
     )
     quality_ignores: dict[str, list[QualityRule]] = Field(default_factory=dict)
     exclude_patterns: list[str] = Field(
-        default_factory=lambda: [".git", "node_modules", "venv", "__pycache__"]
+        default_factory=lambda: [
+            ".git",
+            "node_modules",
+            "venv",
+            "__pycache__",
+            "dist",
+            "build",
+            "target",
+        ]
     )
     include_patterns: list[str] = Field(default_factory=lambda: ["*.py"])
 
     @model_validator(mode="before")
     @classmethod
-    def reject_commit_setting(cls, data):
+    def reject_retired_settings(cls, data):
         if isinstance(data, dict) and {"dry_run", "report", "pre_approve"}.intersection(data):
             raise ValueError(
                 "Use CLI --dry-run, --report or --yes instead of these retired settings"
@@ -339,13 +332,11 @@ class AnalyzeRequest(BaseModel):
 class DeduplicateRequest(BaseModel):
     path: str
     files: list[FileInfo] = Field(default_factory=list)
-    similarity_threshold: float = Field(default=0.85, ge=0, le=1, allow_inf_nan=False)
 
 
 class IdiomatizeRequest(BaseModel):
     path: str
     files: list[FileInfo] = Field(default_factory=list)
-    allow_fallback: bool = False
 
 
 class PatternRequest(BaseModel):

@@ -1,10 +1,8 @@
 """Pydantic model tests."""
 
 from reducio.models import (
-    CodeBlock,
     FileChange,
     FileInfo,
-    Language,
     RefactorPlan,
     Symbol,
 )
@@ -18,8 +16,13 @@ def test_file_info():
 
 def test_symbol_defaults():
     s = Symbol(name="f", type="function", file="t.py", start_line=1, end_line=2)
-    assert s.references == []
-    assert s.signature is None
+    assert s.model_dump() == {
+        "name": "f",
+        "type": "function",
+        "file": "t.py",
+        "start_line": 1,
+        "end_line": 2,
+    }
 
 
 def test_complexity_metrics_json(sample_complexity_metrics):
@@ -35,18 +38,3 @@ def test_refactor_plan():
         description="test",
     )
     assert len(plan.changes) == 1
-
-
-def test_code_block(sample_complexity_metrics):
-    block = CodeBlock(
-        id="b1",
-        file="m.py",
-        start_line=1,
-        end_line=5,
-        content="def x(): pass",
-        language=Language.PYTHON,
-        symbol_type="function",
-        symbol_name="x",
-        metrics=sample_complexity_metrics,
-    )
-    assert block.language == Language.PYTHON

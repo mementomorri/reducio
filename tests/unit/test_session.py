@@ -68,16 +68,6 @@ _LEGACY_SESSION_JSON = """{
 }"""
 
 
-def test_get_session_info_legacy_metadata(tmp_path):
-    store = SessionStore(storage_dir=str(tmp_path / "sessions"))
-    store.storage_dir.mkdir(exist_ok=True)
-    (store.storage_dir / "legacy-id.json").write_text(_LEGACY_SESSION_JSON)
-    info = store.get_session_info("legacy-id")
-    assert info is not None
-    assert info.session_id == "legacy-id"
-    assert info.command_type == "idiomatize"
-
-
 def test_cleanup_old_sessions_pops_cache_for_legacy_metadata(tmp_path):
     store = SessionStore(storage_dir=str(tmp_path / "sessions"))
     store.storage_dir.mkdir(exist_ok=True)
@@ -86,4 +76,15 @@ def test_cleanup_old_sessions_pops_cache_for_legacy_metadata(tmp_path):
     assert store.load_plan("legacy-id") is not None
     assert store.cleanup_old_sessions(max_age_days=0) == 1
     assert store.load_plan("legacy-id") is None
-    store.clear_cache()  # public compatibility no-op
+
+
+def test_saved_plans_keep_git_clean(temp_git_repo):
+    import subprocess
+
+    store = SessionStore(str(temp_git_repo / ".reducio" / "sessions"))
+    store.save_plan(RefactorPlan(session_id="s", changes=[], description="d"))
+    assert (temp_git_repo / ".reducio/.gitignore").read_text() == "*\n"
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=temp_git_repo, capture_output=True, text=True
+    )
+    assert status.stdout == ""

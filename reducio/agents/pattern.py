@@ -12,17 +12,21 @@ from reducio.models import (
     RefactorPlan,
 )
 from reducio.plan_review import advisory_path, identifier
+from reducio.utils.code_utils import to_pascal_case
 
 
 class PatternAgent(BaseAgent):
-    async def apply_pattern(self, request: PatternRequest) -> RefactorPlan:
+    def apply_pattern(self, request: PatternRequest) -> RefactorPlan:
         self._begin_plan(request.allow_fallback)
         pattern = request.pattern.lower()
         if pattern and pattern not in _DESIGN_PATTERNS:
             raise ValueError("Unknown design pattern")
         selected = [pattern] if pattern else ["strategy", "factory"]
         changes = []
+        model_failed = False
         for file in request.files:
+            if model_failed:
+                break  # diagnostics record the failure; asking again only adds timeouts
             template_used = False
             try:
                 tree = file.tree
@@ -42,7 +46,7 @@ class PatternAgent(BaseAgent):
                     continue
                 if pattern and self._llm_enabled():
                     try:
-                        change = await self._llm_rewrite(
+                        change = self._llm_rewrite(
                             file.content,
                             file.path,
                             f"Refactor this Python module to use the {name} design pattern idiomatically, preserving behaviour.",
@@ -53,7 +57,7 @@ class PatternAgent(BaseAgent):
                             changes.append(change)
                         continue
                     except ModelRewriteError:
-                        if not self.allow_fallback:
+                        if model_failed := not self.allow_fallback:
                             break
                 changes.append(
                     FileChange(
@@ -123,17 +127,17 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class {module.title()}Strategy(ABC):
+class {to_pascal_case(module)}Strategy(ABC):
     @abstractmethod
     def execute(self, *args, **kwargs) -> Any:
         pass
 
 
 class Context:
-    def __init__(self, strategy: {module.title()}Strategy):
+    def __init__(self, strategy: {to_pascal_case(module)}Strategy):
         self._strategy = strategy
 
-    def set_strategy(self, strategy: {module.title()}Strategy) -> None:
+    def set_strategy(self, strategy: {to_pascal_case(module)}Strategy) -> None:
         self._strategy = strategy
 
     def execute_strategy(self, *args, **kwargs) -> Any:
@@ -150,7 +154,7 @@ Factory pattern implementation for {module}.
 from typing import Any, Dict, Type
 
 
-class {module.title()}Factory:
+class {to_pascal_case(module)}Factory:
     _registry: Dict[str, Type] = {{}}
 
     @classmethod

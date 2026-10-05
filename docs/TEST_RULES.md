@@ -28,20 +28,20 @@ plan/application tests cover CRLF, UTF-8 BOM and declared non-UTF-8 source.
 ### Test Case: Cross-File Deduplication Detection
 
 **Scenario**: Provide two files with semantically identical logic (e.g., identical input validation blocks) but different variable names.
-**Status: implemented as suggestions.** Optional embeddings identify similar
-functions and propose copied utility modules. Applying writes those modules, but
+**Status: implemented as suggestions.** An AST fingerprint (identifiers, literals
+and docstrings abstracted) groups structural clones and proposes copied utility modules. Applying writes those modules, but
 does not remove originals or rewrite callers. Extraction is restricted to self-contained
 top-level functions; dependency/scope exclusions are explained. Proposed Python and
 source-qualified destinations are checked during planning and replay.
-Mocked embedding tests cover stable representative groups, more than ten matches,
-batched comparisons, malformed vectors and repeated/reordered runs without model downloads.
+Scenario tests group the four renamed validator pairs in the fixture corpus.
+Near-miss clones (different statements) are not detected.
 
 ### Test Case: Idiomatic Transformation (Pythonic Alignment)
 
 **Scenario**: Run the tool on a file containing verbose procedural code (e.g., a multi-line for loop used for list creation).
-**Status: partial.** Existing heuristics propose comprehensions and selected
-other idioms; configured models can propose broader rewrites. Behavior preservation
-is incomplete; additional validated idioms are enhancement opportunities.
+**Status: model-only.** A configured model proposes whole-module rewrites that
+require review; there is no built-in heuristic rewriter. Behavior preservation is
+not verified beyond syntax, def/class retention and opt-in tests.
 
 ### Test Case: Design Pattern Injection
 
@@ -77,7 +77,7 @@ display remains optional future work. Empty/incomplete plans are not applied.
 ### Test Case: Non-Destructive Apply
 
 **Scenario**: Apply a plan that would land an edit somewhere other than the top of a file, that no longer matches the on-disk file, that yields invalid Python, or that creates a module whose path already exists.
-**Status: partial.** File-relative diffs validate context, create diffs reject
+**Status: partial.** Whole-file original bytes must match exactly, creates reject
 existing files, and syntax failures trigger recovery on handled paths. Reliable
 atomic recovery on all Git/non-Git paths is not implemented. See [SAFETY.md](SAFETY.md).
 
@@ -88,7 +88,7 @@ atomic recovery on all Git/non-Git paths is not implemented. See [SAFETY.md](SAF
 **Scenario**: Explicitly select an OpenAI/Anthropic-compatible API and model.
 **Status: implemented (mocked API contracts).** CLI settings override environment,
 selected YAML, then defaults. HTTP support is optional and lazy. Missing credentials,
-timeouts, refusals and malformed replies fail planning unless fallback is explicit.
+timeouts, refusals and malformed replies fail planning unless `pattern` fallback is explicit.
 No automatic model discovery, tiers, retries or provider switching are supported.
 Live provider availability and model-specific compatibility are not certified.
 
@@ -96,7 +96,7 @@ Live provider availability and model-specific compatibility are not certified.
 
 **Scenario**: Apply a refactor to a core business logic function.
 **Status: partial.** Explicit target runner selection and passed/failed/error/not-run
-reporting are implemented. Narrow heuristic prerequisites have regression coverage;
+reporting are implemented;
 passing tests still does not prove equivalence, especially for model rewrites.
 
 ## 5. Reporting and Metrics

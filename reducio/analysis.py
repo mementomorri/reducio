@@ -125,15 +125,17 @@ def match_functions(before: AnalyzeResult, after: AnalyzeResult, threshold: int,
         else [(p, p) for p in sorted(before.file_lines.keys() | after.file_lines.keys())]
     )
     bad = [{d.file for d in s.diagnostics} for s in (before, after)]
-    changes, notes = [], []
+    changes: list[FunctionComparison] = []
+    notes: list[str] = []
     for old_path, new_path in pairs:
         if old_path in bad[0] or new_path in bad[1]:
             continue
         old, new = indexes[0].get(old_path, {}), indexes[1].get(new_path, {})
         for name in sorted(old.keys() | new.keys()):
             left, right = old.get(name, []), new.get(name, [])
-            if len(left) == len(right) == 1:
-                changes.append(comparison(left[0], right[0], threshold))
+            if len(left) == len(right):
+                # Repeated names (property setters, overloads) pair in source order.
+                changes.extend(comparison(a, b, threshold) for a, b in zip(left, right))
             else:
                 if len(left) > 1 or len(right) > 1:
                     notes.append(

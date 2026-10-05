@@ -1,6 +1,5 @@
 """Explicit API contracts, without network calls or real credentials."""
 
-import asyncio
 import builtins
 import json
 
@@ -11,28 +10,14 @@ from reducio.llm import LLMClient, LLMError
 from reducio.models import AppConfig
 
 
-async def test_response_cannot_persist_token(api):
+def test_response_cannot_persist_token(api):
     install, _ = api
     install({"choices": [{"finish_reason": "stop", "message": {"content": "TEST_SECRET"}}]})
     with pytest.raises(LLMError, match="credentials"):
-        await LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
 
 
-async def test_total_deadline(monkeypatch):
-    monkeypatch.setenv("REDUCIO_API_KEY", "TEST_SECRET")
-
-    async def slow(*a, **kw):
-        await asyncio.sleep(1)
-
-    monkeypatch.setattr(httpx.AsyncClient, "post", slow)
-    with pytest.raises(LLMError, match="timed out"):
-        await LLMClient(
-            AppConfig(llm_api="openai", model="chosen", llm_timeout_seconds=0.01)
-        ).complete("source")
-
-
-@pytest.mark.parametrize("fallback", [False, True])
-async def test_app_api_failure_persists_safe_diagnostics(api, tmp_path, fallback):
+def test_app_api_failure_persists_safe_diagnostics(api, tmp_path):
     from reducio.services import App
 
     install, _ = api
@@ -40,8 +25,8 @@ async def test_app_api_failure_persists_safe_diagnostics(api, tmp_path, fallback
     (tmp_path / "sample.py").write_text("def f():\n    x = None\n    return x == None\n")
     service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen"))
     assert service.llm is None
-    plan = await service.idiomatize(str(tmp_path), allow_fallback=fallback)
-    assert plan.complete is fallback
+    plan = service.idiomatize(str(tmp_path))
+    assert not plan.complete
     assert "HTTP 401" in plan.model_dump_json()
     saved = service.sessions.load_plan(plan.session_id)
     assert saved is not None
@@ -49,7 +34,7 @@ async def test_app_api_failure_persists_safe_diagnostics(api, tmp_path, fallback
     assert "PRIVATE" not in saved.model_dump_json()
 
 
-async def test_app_successful_api_plan_replays_offline(api, tmp_path, monkeypatch):
+def test_app_successful_api_plan_replays_offline(api, tmp_path, monkeypatch):
     from reducio.services import App
 
     install, requests = api
@@ -58,7 +43,7 @@ async def test_app_successful_api_plan_replays_offline(api, tmp_path, monkeypatc
     )
     (tmp_path / "sample.py").write_text("def f():\n    return 1\n")
     service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen"))
-    plan = await service.idiomatize(str(tmp_path))
+    plan = service.idiomatize(str(tmp_path))
     assert plan.complete and plan.changes
     assert len(requests) == 1
     monkeypatch.delenv("REDUCIO_API_KEY")
@@ -74,7 +59,7 @@ def api(monkeypatch):
     monkeypatch.setenv("REDUCIO_API_KEY", "TEST_SECRET")
     for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
         monkeypatch.delenv(key, raising=False)
-    real = httpx.AsyncClient
+    real = httpx.Client
     requests = []
 
     def install(reply, status=200):
@@ -86,7 +71,7 @@ def api(monkeypatch):
 
         monkeypatch.setattr(
             httpx,
-            "AsyncClient",
+            "Client",
             lambda **kwargs: real(transport=httpx.MockTransport(handler), **kwargs),
         )
 
@@ -94,7 +79,7 @@ def api(monkeypatch):
 
 
 @pytest.mark.parametrize("protocol", ["openai", "anthropic"])
-async def test_protocol_headers_and_body(api, protocol):
+def test_protocol_headers_and_body(api, protocol):
     install, requests = api
     reply = (
         {"choices": [{"finish_reason": "stop", "message": {"content": "x = 1"}}]}
@@ -105,7 +90,7 @@ async def test_protocol_headers_and_body(api, protocol):
     cfg = AppConfig(
         llm_api=protocol, model="chosen", llm_base_url="https://compatible.example/custom/v1/"
     )
-    assert await LLMClient(cfg).complete("PRIVATE", system_prompt="SYSTEM") == "x = 1"
+    assert LLMClient(cfg).complete("PRIVATE", system_prompt="SYSTEM") == "x = 1"
     request = requests[0]
     body = json.loads(request.content)
     assert body["model"] == "chosen" and body["stream"] is False
@@ -140,31 +125,31 @@ async def test_protocol_headers_and_body(api, protocol):
         ("anthropic", {"stop_reason": "end_turn", "content": "wrong"}),
     ],
 )
-async def test_bad_responses_fail_without_fallback(api, protocol, reply):
+def test_bad_responses_fail_without_fallback(api, protocol, reply):
     install, requests = api
     install(reply)
     with pytest.raises(LLMError):
-        await LLMClient(AppConfig(llm_api=protocol, model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api=protocol, model="chosen")).complete("source")
     assert len(requests) == 1
 
 
 @pytest.mark.parametrize("status", [301, 401, 403, 429, 500])
-async def test_http_errors_are_sanitized(api, status, caplog):
+def test_http_errors_are_sanitized(api, status, caplog):
     install, requests = api
     install({"error": "TEST_SECRET PRIVATE"}, status)
     with pytest.raises(LLMError, match=str(status)) as error:
-        await LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("PRIVATE")
+        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("PRIVATE")
     assert "TEST_SECRET" not in str(error.value) + caplog.text
     assert "PRIVATE" not in str(error.value) + caplog.text
     assert len(requests) == 1
 
 
 @pytest.mark.parametrize("error", [httpx.ReadTimeout("SECRET"), OSError("SECRET")])
-async def test_transport_error_redaction(api, error):
+def test_transport_error_redaction(api, error):
     install, _ = api
     install(error)
     with pytest.raises(LLMError) as caught:
-        await LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
     assert "SECRET" not in str(caught.value)
 
 
@@ -178,34 +163,32 @@ async def test_transport_error_redaction(api, error):
         "https://example.org:bad/v1",
     ],
 )
-async def test_unsafe_endpoint_rejected_without_requests(api, url):
+def test_unsafe_endpoint_rejected_without_requests(api, url):
     _, requests = api
     with pytest.raises(LLMError, match="HTTPS"):
-        await LLMClient(AppConfig(llm_api="openai", model="chosen", llm_base_url=url)).complete(
-            "source"
-        )
+        LLMClient(AppConfig(llm_api="openai", model="chosen", llm_base_url=url)).complete("source")
     assert not requests
 
 
 @pytest.mark.parametrize("settings", [{}, {"model": "chosen"}, {"llm_api": "openai"}])
-async def test_model_and_protocol_required(api, settings):
+def test_model_and_protocol_required(api, settings):
     with pytest.raises(LLMError, match="explicit model"):
-        await LLMClient(AppConfig(**settings)).complete("source")
+        LLMClient(AppConfig(**settings)).complete("source")
 
 
-async def test_missing_key_and_standard_key_fallback(api, monkeypatch):
+def test_missing_key_and_standard_key_fallback(api, monkeypatch):
     install, requests = api
     monkeypatch.delenv("REDUCIO_API_KEY")
     client = LLMClient(AppConfig(llm_api="openai", model="chosen"))
     with pytest.raises(LLMError, match="OPENAI_API_KEY"):
-        await client.complete("source")
+        client.complete("source")
     monkeypatch.setenv("OPENAI_API_KEY", "STANDARD")
     install({"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]})
-    assert await client.complete("source") == "ok"
+    assert client.complete("source") == "ok"
     assert requests[0].headers["authorization"] == "Bearer STANDARD"
 
 
-async def test_missing_extra_has_actionable_error(api, monkeypatch):
+def test_missing_extra_has_actionable_error(api, monkeypatch):
     original = builtins.__import__
 
     def blocked(name, *args, **kwargs):
@@ -215,4 +198,4 @@ async def test_missing_extra_has_actionable_error(api, monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", blocked)
     with pytest.raises(LLMError, match=r"reducio\[llm\]"):
-        await LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")

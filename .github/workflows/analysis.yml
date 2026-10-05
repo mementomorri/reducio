@@ -191,22 +191,13 @@ jobs:
       - name: Install
         run: pip install -e ".[reports]"
 
-      - name: Resolve PR comparison
-        id: revisions
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
-          echo "base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
-
+      # HEAD is the PR head; --against compares from its merge base with the PR base.
       - name: Compare changed package files
         env:
-          BASE_SHA: ${{ steps.revisions.outputs.base }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           REDUCIO_COMPARE_FAIL_ON: ${{ vars.REDUCIO_COMPARE_FAIL_ON || 'none' }}
         run: |
-          reducio compare reducio/ --base "$BASE_SHA" --head "$HEAD_SHA" \
+          reducio compare reducio/ --against "$BASE_SHA" \
             --annotations github --report --format all --output-dir ci-reports/comparison -v
 
       - name: Upload comparison

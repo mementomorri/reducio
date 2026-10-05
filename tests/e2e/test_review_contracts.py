@@ -17,17 +17,17 @@ def run(*args, cwd):
     )
 
 
-@pytest.mark.parametrize("command", ["analyze", "check", "idiomatize", "pattern"])
+@pytest.mark.parametrize("command", ["analyze", "check", "deduplicate", "pattern"])
 @pytest.mark.parametrize("override", [False, True])
 def test_report_generation_and_retrieval_outside_target(tmp_path, command, override):
     target = tmp_path / "target"
     target.mkdir()
-    source = "def f():\n    x = None\n    return x == None\n"
+    source = "COUNT = 0\ndef f():\n    global COUNT\n    COUNT += 1\n    return COUNT\n"
     (target / "a.py").write_text(source)
     args = [command, target]
     if command == "pattern":
         args = [command, "singleton", target]
-    args += ["--dry-run"] if command in {"idiomatize", "pattern"} else ["--report"]
+    args += ["--dry-run"] if command in {"deduplicate", "pattern"} else ["--report"]
     options = ["--output-dir", "custom"] if override else []
     result = run(*args, *options, "--quiet", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
@@ -36,14 +36,13 @@ def test_report_generation_and_retrieval_outside_target(tmp_path, command, overr
     assert not (tmp_path / ".reducio").exists()
     retrieved = run("report", "-C", target, *options, cwd=tmp_path)
     assert retrieved.returncode == 0, retrieved.stderr
-    if command == "idiomatize":
-        assert "-    return x == None" in retrieved.stdout
-        assert "+    return x is None" in retrieved.stdout
+    if command == "pattern":
+        assert "+++ b/singletons/" in retrieved.stdout
         envelope = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())
         session_id = envelope["plan"]["session_id"]
         shown = run("sessions", "show", session_id, "-C", target, cwd=tmp_path)
-        assert "+++ b/a.py" in shown.stdout
-        assert "heuristic" in shown.stdout
+        assert "+++ b/singletons/" in shown.stdout
+        assert "template" in shown.stdout
     assert (target / "a.py").read_text() == source
 
 
@@ -57,28 +56,25 @@ def test_invalid_session_ids_are_clean_errors(tmp_path, command):
     assert not (tmp_path / ".reducio").exists()
 
 
-def test_real_saved_apply_shows_diff_with_yes_and_preserves_behavior(tmp_path):
+def test_real_saved_apply_shows_diff_with_yes_and_creates_advisory_module(tmp_path):
     target = tmp_path / "target"
     target.mkdir()
-    source = "def f():\n    out = []\n    for x in range(3):\n        out.append(x * 2)\n    return out\n"
+    source = "COUNT = 0\ndef f():\n    global COUNT\n    COUNT += 1\n    return COUNT\n"
     path = target / "a.py"
     path.write_text(source)
-    result = run("idiomatize", target, "--dry-run", "--quiet", cwd=tmp_path)
+    result = run("pattern", "singleton", target, "--dry-run", "--quiet", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
     session = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())["plan"]
     refused = run("apply", session["session_id"], target, "--quiet", cwd=tmp_path)
     assert refused.returncode == 1 and "--yes" in refused.stderr
-    assert path.read_text() == source
+    created = target / session["changes"][0]["path"]
+    assert not created.exists()
     result = run("apply", session["session_id"], target, "--yes", "--quiet", cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    assert "+++ b/a.py" in result.stdout and result.stdout.index(
-        "+++ b/a.py"
+    assert "+++ b/singletons/" in result.stdout and result.stdout.index(
+        "+++ b/singletons/"
     ) < result.stdout.index("Applied.")
-    assert path.read_text() != source
-    before, after = {}, {}
-    exec(source, before)
-    exec(path.read_text(), after)
-    assert before["f"]() == after["f"]() == [0, 2, 4]
+    assert path.read_text() == source and "class Singleton" in created.read_text()
 
 
 def test_incomplete_session_cannot_replay(tmp_path):

@@ -4,11 +4,7 @@ import ast
 
 from reducio.metrics import functions_from_tree
 from reducio.metrics import get_complexity as get_complexity
-from reducio.models import FileInfo, Language, Symbol
-
-
-class ParserError(ValueError):
-    pass
+from reducio.models import Symbol
 
 
 def symbols_from_tree(tree: ast.Module, path: str, functions=None) -> list[Symbol]:
@@ -27,12 +23,3 @@ def symbols_from_tree(tree: ast.Module, path: str, functions=None) -> list[Symbo
         for n in ast.walk(tree)
         if isinstance(n, ast.ClassDef)
     ]
-
-
-def get_symbols(content: str, path: str, language: Language = Language.PYTHON) -> list[Symbol]:
-    if language != Language.PYTHON:
-        return []
-    try:
-        return symbols_from_tree(FileInfo(path=path, content=content).tree, path)
-    except SyntaxError, ValueError:
-        raise ParserError("Source contains invalid Python syntax") from None

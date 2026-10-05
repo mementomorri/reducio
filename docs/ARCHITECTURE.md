@@ -1,6 +1,6 @@
 # reducio Architecture
 
-Python 3.14+ CLI for semantic compression of **Python source code**. One process: Typer CLI, in-process `Workspace`, optional embeddings.
+Python 3.14+ CLI for semantic compression of **Python source code**. One process: Typer CLI, in-process `Workspace`, optional model API client.
 
 ## Overview
 
@@ -8,41 +8,40 @@ Python 3.14+ CLI for semantic compression of **Python source code**. One process
 User
   → reducio.cli (Typer)
        → reducio.services.App
-            → Workspace (repo walk *.py, AST, whole-file apply, git, tests)
+            → Workspace (repo walk *.py, whole-file apply, recovery, tests)
             → Agents (analyze, deduplicate, idiomatize, pattern, check)
             → LLMClient (optional explicit compatible API)
-            → EmbeddingService ([embeddings] extra)
             → SessionStore (.reducio/sessions)
-            → Reporter (.reducio/*.md)
+            → Reporter / visual_report (.reducio/*.md|json|html)
 ```
 
 ## Package map
 
 | Module | Role |
 |--------|------|
-| `cli.py` | Commands, git dirty check, asyncio bridge, session subcommands |
-| `services.py` | `App`: orchestrates agents, apply, embedding lazy init |
-| `workspace.py` | Files, symbols, exact-content application, git, tests |
+| `cli.py` | Commands, git dirty check, shared options, session subcommands |
+| `services.py` | `App`: orchestrates agents and guarded apply |
+| `workspace.py` | File listing, exact-content application, opt-in tests |
 | `repo.py` | Walk repo; include `*.py` by default; `detect_language` → Python or unknown |
-| `parse.py` | Python AST symbols for refactoring; compatibility metric import |
+| `parse.py` | Python AST symbols; compatibility `get_complexity` import |
 | `metrics.py`, `analysis.py` | Shared AST metrics and complete function analysis |
-| `compare.py` | Exact/merge-base Git snapshots or explicit working files, changed-file selection |
+| `compare.py` | Git helper (`_git`, batched blobs, `worktree_clean`), exact/merge-base snapshots or working files |
 | `history.py` | First-parent snapshots, batched Git blobs, run-local metric reuse and source-root aliases |
 | `history_report.py`, `history_view.js` | Shared dashboard shell with offline trend/range/function views |
 | `annotations.py`, `quality_gate.py` | Bounded Actions warnings and opt-in quality/comparison failure policy |
 | `visual_report.py` | Markdown, JSON, and optional offline Plotly HTML dashboards |
 | `plan_review.py` | Unified diff previews and versioned plan preflight |
 | `presentation.py`, `storage.py` | Shared escaping/tables and atomic validated persistence |
-| `git_safety.py` | Read-only repository discovery and dirty-state warnings (GitPython) |
 | `recovery.py` | Durable per-attempt file snapshots, scoped restoration and verification |
 | `runner.py` | `pytest` / `unittest` for Python projects |
 | `session.py` | JSON persistence for `RefactorPlan` |
-| `reporter.py` | Markdown reports |
+| `reporter.py` | Check, dry-run and apply reports (Markdown; apply also JSON) |
 | `config.py` | Validated YAML + environment; CLI applies explicit overrides last |
 | `models.py` | Pydantic models and `AppConfig` |
-| `agents/*` | Planning agents (idiomatize is Python-only) |
+| `agents/*` | Planning agents: analyzer, quality checker, deduplicator (AST fingerprint), pattern, idiomatizer (model-only) |
 | `llm/router.py` | Explicit text-only OpenAI/Anthropic-compatible requests |
-| `embeddings/service.py` | Run-local batched NumPy cosine similarity for deduplication |
+| `progress.py` | Opt-in stderr progress and heartbeats for CLI phases |
+| `utils/code_utils.py` | Naming suggestions and model-reply fence stripping |
 
 ## Request flows
 
@@ -75,11 +74,11 @@ offline Plotly/JavaScript consume that same result, without a data branch or ser
 
 ### Deduplicate / idiomatize / pattern / check
 
-Same default Python walk scope. Idiomatize uses Python heuristics by default, with
-optional configured-model rewriting, and emits **one whole-file change per file**.
-Named patterns also have an optional model path; default templates are advisory modules.
-Deduplicate is
-suggestion-only — it proposes a shared `utils/<symbol>_dedup.py` module and does not rewrite call sites.
+Same default Python walk scope. Idiomatize is model-only and emits **one whole-file
+change per file**. Named patterns also have an optional model path; default templates
+are advisory modules. Deduplicate fingerprints self-contained top-level functions and is
+suggestion-only — it proposes `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py` and does
+not rewrite call sites.
 
 ### Apply
 
@@ -104,7 +103,7 @@ Noninteractive application requires `--yes`. See [API setup and migration](LLM.m
 
 - PyPI: `reducio`, entrypoint `reducio.cli:app`
 - **Python 3.14+**
-- Extras: `embeddings`, `reports`, `llm`, `dev`
+- Extras: `reports`, `llm`, `dev`
 - Supported usage: GitHub CI (primary), PyPI, and a PyApp executable in GitHub Releases.
   The distribution is `reducio`; CLI/import remain `reducio`. See [installation status](README.md#2-pypi).
 
@@ -117,7 +116,7 @@ Noninteractive application requires `--yes`. See [API setup and migration](LLM.m
 | Parse | Standard-library Python AST (metrics and refactoring symbols) |
 | Dashboards | Plotly, optional `[reports]` extra |
 | LLM | HTTPX, optional `[llm]` extra, lazy-loaded on request |
-| VCS | GitPython |
-| Dedup | NumPy, sentence-transformers (optional) |
+| VCS | `git` CLI via subprocess (read-only) |
+| Dedup | Standard-library AST fingerprint |
 
 See [SAFETY.md](SAFETY.md) for the apply/rollback safety model and [ONBOARDING.md](ONBOARDING.md) for maintainer workflows.

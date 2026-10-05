@@ -60,5 +60,14 @@ def replace_bytes(path: Path, content: bytes, mode: int) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
+def ignore_storage(directory: Path) -> None:
+    """Keep the default `.reducio/` output (plans, backups, reports) out of Git."""
+    for parent in (directory, *directory.parents):
+        if parent.name == ".reducio":
+            if not (parent / ".gitignore").exists():
+                write_text(checked_file(parent, ".gitignore"), "*\n")
+            return
+
+
 def report_stem(kind: str) -> str:
     return f"reducio-{kind}-{datetime.now(UTC):%Y%m%d-%H%M%S}-{uuid4().hex[:12]}"

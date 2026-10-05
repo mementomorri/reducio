@@ -39,7 +39,7 @@ See [migration rules](MIGRATION.md) for legacy replay and configuration changes.
 All four modifying commands support `--run-tests`, `--report`, and `--output-dir`:
 
 ```bash
-reducio idiomatize . --dry-run
+reducio pattern strategy . --dry-run
 reducio apply <session-id> --run-tests --report
 ```
 
@@ -97,48 +97,14 @@ state reflects files left after recovery. These reports do not add an HTML dashb
 A report-write failure exits nonzero and identifies whether changes were applied;
 it does not roll back an otherwise successful operation.
 
-## Supported heuristic idioms
+## Symlinks and scan scope
 
-AST node selection and token-aware source slices preserve strings, comments and
-unaffected formatting. Overlapping comments cause the candidate to be skipped.
-
-Comprehensions require an immediately preceding fresh empty local list/dictionary,
-a complete supported loop body, a small nonempty literal iterable or unshadowed
-builtin range, and closed built-in expressions. Accumulator references, aliases,
-escaping loop variables, closures, global/nonlocal state, extra statements and
-exception contexts are rejected. Accumulator and loop-variable names must
-not reuse parameters or earlier bindings, avoiding changes to finalizer timing.
-None comparisons, truthiness and membership
-rewrites require locally established built-in values; unknown/overloaded values
-and side-effecting expressions are skipped. Truthiness is restricted to supported
-single-evaluation conditions, not while-loop invariants.
-
-Two additional closed-value cases are supported inside function bodies:
-
-- String concatenations become f-strings only for proven built-in strings and
-  unshadowed `str(...)` of supported built-in scalar expressions. Unknown types,
-  user-defined formatting and side-effecting calls are skipped; braces/quotes
-  are escaped through the AST renderer.
-- An `if key in mapping: return mapping[key]` with an `else: return default` (or
-  following return) becomes `mapping.get(key, default)` only for a proven local
-  built-in dictionary and pure known scalar keys/defaults. Calls as defaults are
-  skipped because `get` would evaluate them eagerly.
-
-Both use the same comment/overlap checks, exact-byte saved plans, review and
-opt-in test/recovery pipeline. They do not expand deduplication into caller rewrites.
-
-The supported subset is deliberately narrow; there is no unsafe heuristic override.
-Reflection/tracing, monkeypatched builtins and resource-exhaustion equivalence are
-not guaranteed. Wider patterns are enhancement opportunities, not current support.
-Saved plans remain reviewable proposals; old/model plans are not retrospectively
-certified by the new heuristic checks.
-
-## Migration
-
-Remove `commit_changes` from configuration: even `false` now raises a clear
-configuration error. Git checkpoint/rollback/commit APIs are removed.
-Commit reviewed changes manually. Previous report consumers must handle absent
-metrics and explicit test/recovery statuses.
+Symlinked or nonregular sources are never followed. Any symlinked file or directory
+under the target (even one without Python) makes `analyze`/`check` results
+incomplete (exit 1); add such directories to `exclude_patterns` to skip them.
+Configured `exclude_patterns` replace the defaults; see
+[scan scope](README.md#scan-scope-and-thresholds).
 
 Regression coverage: `tests/unit/test_section3_safety.py`,
 `test_known_safety_gaps.py`, `test_git.py`, `test_workspace.py`, and CLI tests.
+Upgrade notes (removed commit settings and Git checkpoints) are in [MIGRATION.md](MIGRATION.md).

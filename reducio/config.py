@@ -42,27 +42,15 @@ def load_config(config_path: str | None = None) -> AppConfig:
             data = {}
         if not isinstance(data, dict):
             raise ConfigError(f"Configuration must be a mapping: {p}")
-        if {"prefer_local", "prefer_remote", "model_tiers", "tier"}.intersection(data):
-            raise ConfigError(
-                "Model tiers/preferences were removed; set llm_api and model explicitly"
-            )
-        if {"api_key", "llm_api_key"}.intersection(data):
-            raise ConfigError("Use REDUCIO_API_KEY in the environment, not configuration")
-        if "commit_changes" in data:
-            raise ConfigError("commit_changes was removed; remove this setting and commit manually")
-        if {"pre_approve", "dry_run", "report"}.intersection(data):
-            raise ConfigError(
-                "Remove pre_approve/dry_run/report settings; use CLI --yes/--dry-run/--report"
-            )
         try:
             return AppConfig.model_validate({**cfg.model_dump(), **data})
         except (ValidationError, TypeError) as error:
-            fields = ""
-            if isinstance(error, ValidationError):
-                fields = ": " + ", ".join(
-                    ".".join(map(str, issue["loc"])) for issue in error.errors()
-                )
-            raise ConfigError(f"Invalid configuration fields in {p}{fields}") from None
+            issues = error.errors() if isinstance(error, ValidationError) else []
+            # Retired settings fail in the model validator (no field location); its text is safe.
+            if retired := [i["msg"].removeprefix("Value error, ") for i in issues if not i["loc"]]:
+                raise ConfigError(f"{retired[0]} ({p})") from None
+            fields = ", ".join(".".join(map(str, issue["loc"])) for issue in issues)
+            raise ConfigError(f"Invalid configuration fields in {p}: {fields}") from None
     return cfg
 
 

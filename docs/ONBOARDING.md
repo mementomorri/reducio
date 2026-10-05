@@ -13,9 +13,9 @@ and experimental refactoring. Automatic modification is not production-safe.
 
 - **Tool implementation:** Python 3.14+ package under `reducio/`
 - **Target code:** `.py` files only (`include_patterns` default `["*.py"]`)
-- **Tests on apply:** `pytest` or `unittest` when the target repo is a Python project
+- **Tests on apply:** opt-in with `--run-tests` (`pytest` or `unittest` in the target)
 
-Non-Python files are ignored by the walker and report `Language.UNKNOWN` if referenced directly.
+Non-Python files are ignored by the walker.
 
 ## Repository layout
 
@@ -24,7 +24,7 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 | `reducio/` | Shipped package |
 | `reducio/cli.py` | Typer entrypoint |
 | `reducio/services.py` | `App` orchestration |
-| `reducio/workspace.py` | Repo I/O, parse, apply, git, tests |
+| `reducio/workspace.py` | File listing and guarded apply with recovery and opt-in tests |
 | `reducio/parse.py` | Standard-library AST symbols |
 | `reducio/agents/` | Analyzer, deduplicator, idiomatizer, pattern, quality |
 | `tests/` | pytest (unit, scenario, e2e) |
@@ -37,7 +37,7 @@ Non-Python files are ignored by the walker and report `Language.UNKNOWN` if refe
 cd /path/to/reducio
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -e ".[dev,embeddings,reports,llm]"
+pip install -e ".[dev,reports,llm]"
 reducio version
 pytest tests/ -v
 ```
@@ -55,7 +55,7 @@ existing current-directory/user config, without merging. See the
 complexity_thresholds:
   cyclomatic_complexity: 8
 include_patterns: ["*.py"]
-exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
+exclude_patterns: [".git", "node_modules", "venv", "__pycache__", "dist", "build", "target"]  # replaces the default
 ```
 
 ## Command map
@@ -64,8 +64,9 @@ exclude_patterns: [".git", "node_modules", "venv", "__pycache__"]
 |-----|--------------|-------|
 | `analyze` | `analyze` | Static; AST symbols and shared metrics v2 |
 | `compare` | Direct `compare_revisions` | Read-only Git snapshots; changed-file function deltas |
-| `deduplicate` | `deduplicate` | Embeddings on Python functions/methods |
-| `idiomatize` | `idiomatize` | Python heuristics; optional configured-model rewrite |
+| `history` | Direct `history_revisions` | First-parent rebuild from Git blobs; dashboards |
+| `deduplicate` | `deduplicate` | AST fingerprint of self-contained top-level functions (methods/nested skipped) |
+| `idiomatize` | `idiomatize` | Model-only rewrite; requires `--llm-api`/`--model` |
 | `pattern` | `pattern` | Advisory modules for every default pattern; optional configured-model rewrite for named patterns |
 | `check` | `check` | Naming, function length, per-function cyclomatic complexity |
 | `apply` | `apply_plan` | Session JSON → dirty-tree warning, approval, guarded apply with recovery limits |
@@ -75,8 +76,8 @@ accept explicit API/model flags, configuration or environment. Plans print sessi
 dry-runs print report paths. Failed application exits 1; invalid inputs exit 2.
 `--quiet` hides progress only, while `--no-verbose` disables detailed results.
 Diff previews and provenance appear in terminal output, dry-run Markdown, and
-`sessions show`. Selected-model failures stop by default; `--allow-fallback`
-explicitly permits heuristic/template fallback. Incomplete plans cannot apply.
+`sessions show`. Selected-model failures stop by default; `pattern --allow-fallback`
+explicitly permits template fallback. Incomplete plans cannot apply.
 Reports and sessions live under `<target>/.reducio`; use `report -C TARGET` for lookup.
 
 Distribution name: `reducio`; CLI/import: `reducio`. Editable installation
@@ -85,7 +86,7 @@ above is for contributors. Public usage routes are CI, PyPI, and Releases execut
 ## Extending
 
 1. New command: `cli.py` → `services.py` → agent or `workspace.py`
-2. New Python refactor rule: `agents/idiomatizer.py` or dedicated agent
+2. New Python refactor rule: a dedicated agent under `agents/` (see `pattern.py`)
 3. Tests under `tests/`; map to [TEST_RULES.md](TEST_RULES.md) when user-visible
 
 ## CI
@@ -93,6 +94,7 @@ above is for contributors. Public usage routes are CI, PyPI, and Releases execut
 | Workflow | Role |
 |----------|------|
 | `test.yml` | Shared pytest/branch-coverage, lint, build and isolated wheel smoke gate |
+| `installation.yml` | Editable and wheel installs, base install without optional deps, mocked API contract |
 | `publish.yml` | Shared verification → PyPI → published-wheel check → PyApp Release |
 | `analysis.yml` | Source overview; independent PR comparison with optional gates; main-only history and Pages |
 
@@ -102,9 +104,12 @@ counting rules. Fixtures are validated by pytest, including known parse failures
 ## Smoke
 
 ```bash
-reducio analyze test-python-code/python -v
-reducio deduplicate test-python-code/python --dry-run
+reducio analyze test-python-code/python/duplicates -v
+reducio deduplicate test-python-code/python/duplicates --dry-run
 ```
+
+Both exit 0 on `duplicates/`. The full `test-python-code/python` corpus exits 1 by
+design: five fixtures are intentionally invalid Python.
 
 ## Debugging
 

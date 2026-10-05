@@ -2,7 +2,6 @@
 
 import argparse
 import re
-import tomllib
 from pathlib import Path
 
 from packaging.version import Version
@@ -18,27 +17,15 @@ def tag_version(tag: str) -> str:
 
 
 def stamp_version(root: Path, tag: str) -> str:
+    # The package version is dynamic: hatch reads it from reducio/__init__.py.
     version = tag_version(tag)
-    project = root / "pyproject.toml"
     init = root / "reducio/__init__.py"
-    project_text = project.read_text()
-    old_version = tomllib.loads(project_text)["project"]["version"]
-    project_text, project_count = re.subn(
-        rf'^version = "{re.escape(old_version)}"$',
-        f'version = "{version}"',
-        project_text,
-        flags=re.MULTILINE,
+    text, count = re.subn(
+        r'^__version__ = "[^"]+"$', f'__version__ = "{version}"', init.read_text(), flags=re.M
     )
-    init_text, init_count = re.subn(
-        r'^__version__ = "[^"]+"$',
-        f'__version__ = "{version}"',
-        init.read_text(),
-        flags=re.MULTILINE,
-    )
-    if project_count != 1 or init_count != 1:
-        raise ValueError("Expected one project version and one __version__ declaration")
-    project.write_text(project_text)
-    init.write_text(init_text)
+    if count != 1:
+        raise ValueError("Expected one __version__ declaration")
+    init.write_text(text)
     return version
 
 

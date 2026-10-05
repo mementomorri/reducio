@@ -11,7 +11,7 @@ All modifying commands accept `--report` for Markdown and structured JSON.
 Measurements cover whole affected Python files before edits, attempted edits
 after syntax validation, and files retained after success/recovery. Matched
 functions show cyclomatic/cognitive deltas; additions and removals are separate.
-Ambiguous qualified names are labeled, not guessed. Missing or incomplete
+Repeated qualified names pair in source order when both sides have the same count; otherwise they are labeled ambiguous, not guessed. Missing or incomplete
 measurements are unavailable, never fake zeros; maintainability is not measured.
 Test/recovery statuses accompany the metrics. See [SAFETY.md](SAFETY.md).
 
@@ -85,8 +85,10 @@ function records, not just hotspots.
 `compare` selects changed Python files, then measures their **whole functions on
 both sides**, not isolated added/deleted lines. A function elsewhere in a changed
 file is included as unchanged context. Identity is file path plus qualified name;
-Git-detected file renames preserve identity. Function renames and ambiguous repeated
-definitions are shown as unmatched additions/removals, not guessed refactors.
+Git-detected file renames preserve identity. Repeated definitions of one name (a
+property getter and setter, overloads) pair in source order when both sides have the
+same count; with differing counts they are labeled ambiguous and shown as unmatched
+additions/removals. Function renames are not guessed.
 
 For matched functions, deltas are `after - before`. Lower CC/cognitive with neither
 rising is improved; higher with neither falling is regressed; opposing directions

@@ -8,7 +8,7 @@ import stat
 import uuid
 from pathlib import Path
 
-from reducio.storage import checked_file
+from reducio.storage import checked_file, ignore_storage
 from reducio.storage import replace_bytes as replace_bytes
 
 
@@ -34,6 +34,7 @@ class FileSnapshot:
         self.directory = root / ".reducio/recovery" / str(uuid.uuid4())
         checked_file(self.directory, "manifest.json")
         self.directory.mkdir(parents=True, mode=0o700)
+        ignore_storage(self.directory)
         self.records: dict[str, dict] = {}
         self.written: list[str] = []
         self.created_dirs: list[Path] = []

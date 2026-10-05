@@ -27,14 +27,11 @@ def test_reject_invalid_pypi_tags(tag):
         tag_version(tag)
 
 
-def test_stamp_validates_both_files_before_writing(tmp_path):
-    project = tmp_path / "pyproject.toml"
-    project.write_text('[project]\nversion = "1.0.0"\n')
+def test_stamp_requires_one_version_declaration(tmp_path):
     (tmp_path / "reducio").mkdir()
     (tmp_path / "reducio/__init__.py").write_text("# missing version\n")
     with pytest.raises(ValueError, match="declaration"):
         stamp_version(tmp_path, "v0.1.0")
-    assert '"1.0.0"' in project.read_text()
 
 
 def test_tag_reaches_real_wheel_and_sdist(tmp_path):
@@ -59,8 +56,8 @@ def test_tag_reaches_real_wheel_and_sdist(tmp_path):
         assert b"Version: 0.1.0\n" in wheel.read("reducio-0.1.0.dist-info/METADATA")
         assert b'__version__ = "0.1.0"' in wheel.read("reducio/__init__.py")
     with tarfile.open(tmp_path / "dist/reducio-0.1.0.tar.gz") as sdist:
-        for name in ("pyproject.toml", "reducio/__init__.py"):
-            assert b'"0.1.0"' in sdist.extractfile(f"reducio-0.1.0/{name}").read()
+        assert b"Version: 0.1.0\n" in sdist.extractfile("reducio-0.1.0/PKG-INFO").read()
+        assert b'"0.1.0"' in sdist.extractfile("reducio-0.1.0/reducio/__init__.py").read()
 
 
 def test_publish_passes_tag_to_build_before_verification():

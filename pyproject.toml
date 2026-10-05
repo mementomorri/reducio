@@ -1,6 +1,6 @@
 [project]
 name = "reducio"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Semantic code compression engine"
 requires-python = ">=3.14"
 license = { text = "MIT" }
@@ -14,20 +14,14 @@ dependencies = [
     "typer>=0.12.0",
     "pydantic>=2.0.0",
     "pyyaml>=6.0",
-    "gitpython>=3.1.0",
 ]
 
 [project.optional-dependencies]
 llm = ["httpx>=0.28,<1"]
 reports = ["plotly>=6,<8"]
-embeddings = [
-    "numpy>=1.26",
-    "sentence-transformers>=2.2.0",
-]
 dev = [
     "hatchling",  # release artifact regression tests
     "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
     "pytest-cov>=7.0.0",
     "coverage[toml]>=7.10.6",
     "ruff>=0.1.0",
@@ -45,6 +39,9 @@ Documentation = "https://github.com/mementomorri/reducio/blob/main/docs/README.m
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "reducio/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["reducio"]
@@ -70,12 +67,8 @@ warn_return_any = true
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=reducio --cov-branch --cov-report=term-missing --cov-fail-under=90"
-markers = [
-    "embeddings: requires sentence-transformers model download",
-]
 
 [tool.coverage.run]
 patch = ["subprocess"]

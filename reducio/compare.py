@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import io
+import os
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -26,12 +28,50 @@ def _git(root: Path, *args: str, input: bytes | None = None) -> bytes:
             capture_output=True,
             timeout=60,
             input=input,
+            # Even status/diff may refresh Git's index unless optional locks are disabled.
+            env={**os.environ, "GIT_OPTIONAL_LOCKS": "0"},
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise CompareError(str(error)) from error
     if process.returncode:
         raise CompareError(process.stderr.decode("utf-8", errors="replace").strip())
     return process.stdout
+
+
+def worktree_clean(path: str) -> bool:
+    """True unless a Git work tree containing `path` has changes; non-repositories are clean."""
+    try:
+        return not _git(Path(path), "status", "--porcelain", "--untracked-files=normal").strip()
+    except CompareError:
+        return True
+
+
+def tree_entries(root: Path, revision: str) -> dict[str, tuple[str, str]]:
+    entries = {}
+    for record in _git(root, "ls-tree", "-r", "-z", revision).split(b"\0"):
+        if record:
+            metadata, name = record.split(b"\t", 1)
+            mode, _, oid = metadata.decode("ascii").split()
+            entries[name.decode("utf-8", "surrogateescape")] = (mode, oid)
+    return entries
+
+
+def _read_blobs(root: Path, identifiers: list[str]):
+    # Send only ls-tree object IDs, never filenames, through the batch protocol.
+    for start in range(0, len(identifiers), 128):
+        batch = identifiers[start : start + 128]
+        data = io.BytesIO(
+            _git(root, "cat-file", "--batch", input="".join(f"{oid}\n" for oid in batch).encode())
+        )
+        for oid in batch:
+            header = data.readline().decode("ascii").split()
+            if len(header) != 3 or header[:2] != [oid, "blob"]:
+                raise CompareError("Cannot read a historical Git blob")
+            size = int(header[2])
+            content = data.read(size)
+            if len(content) != size or data.read(1) != b"\n":
+                raise CompareError("Truncated historical Git blob")
+            yield oid, content
 
 
 def _included(path: str | None, scope: str, cfg: AppConfig) -> bool:
@@ -76,16 +116,23 @@ def _changed_files(root: Path, base: str, head: str, scope: str, cfg: AppConfig)
 
 
 def _snapshot(root: Path, revision: str, paths: list[str], cfg: AppConfig, scope: str):
-    files, diagnostics = [], []
+    files, diagnostics, blobs = [], [], {}
+    entries = tree_entries(root, revision) if paths else {}
     for path in sorted(set(paths)):
+        mode, oid = entries.get(path, ("", ""))
+        if mode in ("100644", "100755"):
+            blobs[path] = oid
+        else:
+            message = "Source is not a regular Git blob (symlinks are not followed)"
+            diagnostics.append(
+                AnalysisDiagnostic(file=path, message=message if mode else "Missing at revision")
+            )
+    data = dict(_read_blobs(root, sorted(set(blobs.values()))))
+    for path, oid in blobs.items():
         try:
-            entry = _git(root, "ls-tree", "-z", revision, "--", path)
-            if not entry.startswith((b"100644 ", b"100755 ")):
-                raise CompareError("Source is not a regular Git blob (symlinks are not followed)")
-            data = _git(root, "cat-file", "blob", f"{revision}:{path}")
-            files.append(source_file(path, data))
-        except (CompareError, UnicodeError, LookupError, SyntaxError) as error:
-            diagnostics.append(AnalysisDiagnostic(file=path, message=str(error), revision=revision))
+            files.append(source_file(path, data[oid]))
+        except (UnicodeError, LookupError, SyntaxError) as error:
+            diagnostics.append(AnalysisDiagnostic(file=path, message=str(error)))
     result = analyze_files(files, cfg, scope)
     result.diagnostics.extend(diagnostics)
     result.total_files = len(set(paths))

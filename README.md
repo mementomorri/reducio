@@ -10,7 +10,6 @@ What's shipped vs planned: **[ROADMAP.md](ROADMAP.md)**
 Start with the [GitHub CI setup guide](docs/GITHUB_CI.md) for reports and revision
 comparisons. The other supported routes are PyPI and a GitHub Releases executable;
 the distribution, CLI, and Python import are all **`reducio`**.
-PyPI publication is configured and the maintainer has confirmed a successful upload.
 Counting rules: [Metrics v2](docs/METRICS.md).
 Upgrading after the reliability cleanup: [migration notes](docs/MIGRATION.md).
 Application uses file snapshots and never commits changes. Tests are opt-in with
@@ -51,9 +50,9 @@ Comparison ignores uncommitted edits unless `--worktree` is explicit. Add
 otherwise complexity increases remain informational.
 Reports default to `.reducio/`; open the HTML directly in a browser, without a server.
 
-Start with the [CI setup guide](docs/GITHUB_CI.md). For optional code changes,
-preview with `reducio idiomatize . --dry-run` and review before applying with
-`--run-tests`. Deduplication remains suggestion-only; it does not rewrite callers.
+For optional code changes, preview with `reducio pattern strategy . --dry-run` or a
+model-backed `reducio idiomatize . --llm-api … --model … --dry-run`, and review before
+applying with `--run-tests`. Deduplication is suggestion-only; it does not rewrite callers.
 
 ## License
 

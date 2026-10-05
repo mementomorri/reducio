@@ -7,13 +7,14 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from reducio.models import AnalyzeResult, AppConfig, RefactorPlan, RefactorResult
+from reducio.models import AppConfig, RefactorPlan, RefactorResult
 from reducio.plan_review import plan_preview, terminal_text
 from reducio.presentation import markdown_cell as _md_cell
 from reducio.presentation import table
 from reducio.storage import (
     StorageError,
     checked_file,
+    ignore_storage,
     read_text,
     report_stem,
     validate_session_id,
@@ -37,15 +38,8 @@ class Reporter:
     def _path(self, name: str) -> Path:
         path = checked_file(self.output_dir, name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        ignore_storage(self.output_dir)
         return path
-
-    def generate_baseline(self, result: AnalyzeResult) -> Path:
-        from reducio.analysis import analysis_configuration
-        from reducio.visual_report import write_reports
-
-        if not result.configuration:
-            result = result.model_copy(update={"configuration": analysis_configuration(self.cfg)})
-        return write_reports(result, self.output_dir)[0]
 
     def generate_check(self, result: dict) -> Path:
         name = report_stem("check") + ".md"

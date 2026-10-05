@@ -9,38 +9,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-EMBEDDING_CHECK = """
-import asyncio
-import importlib.metadata
-import math
-import sys
-from pathlib import Path
-
-import reducio
-from reducio.embeddings.service import EmbeddingService
-from reducio.models import CodeBlock, ComplexityMetrics, Language
-
-assert sys.version_info[:2] == (3, 14), sys.version
-assert importlib.metadata.version('reducio') == sys.argv[1]
-assert Path(reducio.__file__).is_relative_to(Path(sys.prefix))
-
-async def check():
-    service = EmbeddingService()
-    await service.initialize()
-    assert service.is_using_real_embeddings, 'Real embeddings failed to initialize'
-    assert service.model is not None
-    vector = await service.embed_text('def add(a, b): return a + b')
-    assert len(vector) == 384 and all(math.isfinite(value) for value in vector)
-    blocks = [CodeBlock(id=str(i), file=f'{i}.py', start_line=1, end_line=2,
-        content='def add(a, b): return a + b', language=Language.PYTHON,
-        symbol_type='function', symbol_name='add', metrics=ComplexityMetrics()) for i in range(12)]
-    groups = await service.find_duplicates(blocks)
-    assert len(groups) == 1 and len(groups[0]) == 12
-    await service.shutdown()
-
-asyncio.run(check())
-"""
-
 
 def check_cli(run, executable: str, root: Path, version: str) -> None:
     """Same public CLI contract for the PyPI installation and PyApp binary."""
@@ -105,7 +73,7 @@ def check_cli(run, executable: str, root: Path, version: str) -> None:
     historical = next((target / ".reducio").glob("reducio-history-*.json"))
     assert len(json.loads(historical.read_text())["snapshots"]) == 2
     assert 'id="history-function"' in historical.with_suffix(".html").read_text()
-    run(executable, "idiomatize", str(target), "--config", str(config), "--dry-run", "--quiet")
+    run(executable, "deduplicate", str(target), "--config", str(config), "--dry-run", "--quiet")
     session = json.loads(next((target / ".reducio/sessions").glob("*.json")).read_text())["plan"]
     assert session["complete"] and session["provenance"]
     run(executable, "sessions", "show", session["session_id"], "-C", str(target))
@@ -120,7 +88,7 @@ def smoke(executable: Path, version: str) -> None:
         env = {
             key: value
             for key, value in os.environ.items()
-            if not key.startswith(("PYTHON", "REDUCIO_", "PYAPP_", "HF_"))
+            if not key.startswith(("PYTHON", "REDUCIO_", "PYAPP_"))
             and key not in {"VIRTUAL_ENV", "CONDA_PREFIX"}
         }
         env.update(
@@ -129,8 +97,6 @@ def smoke(executable: Path, version: str) -> None:
                 "XDG_CONFIG_HOME": str(root / "config"),
                 "XDG_CACHE_HOME": str(root / "cache"),
                 "XDG_DATA_HOME": str(root / "data"),
-                "HF_HOME": str(root / "huggingface"),
-                "TORCH_HOME": str(root / "torch"),
                 "PIP_CACHE_DIR": str(root / "pip"),
             }
         )
@@ -176,11 +142,6 @@ def smoke(executable: Path, version: str) -> None:
         result = json.loads(next(reports.glob("*.json")).read_text())
         assert result["complete"] and result["total_symbols"] >= 1, result
         check_cli(run, str(executable), root, version)
-        print(
-            "Checking real embeddings and cosine grouping (first use downloads the model)",
-            flush=True,
-        )
-        run(str(installed_python), "-I", "-c", EMBEDDING_CHECK, version)
         run(str(installed_python), "-I", "-c", Path(__file__).with_name("smoke_llm.py").read_text())
         assert run(str(executable), "version", capture=True).stdout.strip() == f"reducio {version}"
         print("PyApp smoke checks passed", flush=True)

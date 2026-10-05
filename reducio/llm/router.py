@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import os
 from urllib.parse import urlsplit
 
@@ -17,7 +16,7 @@ class LLMClient:
     def __init__(self, cfg: AppConfig):
         self.cfg = cfg.model_copy(deep=True)
 
-    async def complete(self, prompt: str, system_prompt: str | None = None) -> str:
+    def complete(self, prompt: str, system_prompt: str | None = None) -> str:
         cfg = self.cfg
         if not cfg.llm_api or not cfg.model.strip():
             raise LLMError("Set llm_api (openai or anthropic) and an explicit model")
@@ -75,18 +74,16 @@ class LLMClient:
             if system_prompt:
                 body["system"] = system_prompt
         try:
-            async with asyncio.timeout(cfg.llm_timeout_seconds):
-                async with httpx.AsyncClient(
-                    timeout=cfg.llm_timeout_seconds, follow_redirects=False
-                ) as client:
-                    response = await client.post(
-                        base.rstrip("/") + "/" + endpoint, headers=headers, json=body
-                    )
-                    if not response.is_success:
-                        raise LLMError(
-                            f"API request failed (HTTP {response.status_code}); check endpoint, model and credentials"
-                        )
-                    data = response.json()
+            # ponytail: httpx per-phase timeout (connect/read/write), not a total deadline.
+            with httpx.Client(timeout=cfg.llm_timeout_seconds, follow_redirects=False) as client:
+                response = client.post(
+                    base.rstrip("/") + "/" + endpoint, headers=headers, json=body
+                )
+            if not response.is_success:
+                raise LLMError(
+                    f"API request failed (HTTP {response.status_code}); check endpoint, model and credentials"
+                )
+            data = response.json()
             if cfg.llm_api == "openai":
                 choice = data["choices"][0]
                 if choice["finish_reason"] != "stop" or choice["message"].get("refusal"):
@@ -110,7 +107,7 @@ class LLMClient:
             return text
         except LLMError:
             raise
-        except TimeoutError, httpx.TimeoutException:
+        except httpx.TimeoutException:
             raise LLMError("API request timed out") from None
         except Exception:
             raise LLMError(
