@@ -3,6 +3,16 @@
 Newest first. All releases keep the three usage routes: GitHub CI (primary), PyPI,
 and the PyApp executable in Releases.
 
+## Local-only model planning (2026-10)
+
+- **Breaking:** `idiomatize` and named `pattern` proposals refuse non-loopback API
+  hosts — including the default OpenAI/Anthropic URLs — until you consent with
+  `--allow-remote`, `REDUCIO_ALLOW_REMOTE=1` or `allow_remote: true`. Without it the
+  plan is incomplete (exit 1) and no request is made. Loopback endpoints are unchanged.
+- Model planning prints a disclosure line on stderr, even with `--quiet`.
+- `PlanningProvenance` gains optional `endpoint`, `prompt_bytes` and
+  `prompt_sha256`; older saved plans load unchanged.
+
 ## Code-reduction follow-up (2026-10)
 
 - **Embeddings removed.** `deduplicate` groups exact structural clones by AST

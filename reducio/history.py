@@ -161,7 +161,7 @@ def history_revisions(path: str, ref: str = "HEAD", cfg: AppConfig | None = None
                 snapshot.changes, notes = match_functions(
                     previous.measurement,
                     measurement,
-                    cfg.complexity_thresholds.cyclomatic_complexity,
+                    cfg.complexity_thresholds,
                 )
                 snapshot.notes.extend(notes)
             else:

@@ -113,7 +113,7 @@ reducio compare . --base HEAD~1 # Changed-file complexity vs a committed revisio
 reducio compare . --against origin/main --worktree # Whole branch plus current edits
 reducio history . --report --format all # Git history trends (up to 100 commits)
 reducio deduplicate .          # Structural clones → proposed utils modules
-reducio idiomatize . --llm-api openai --model ID  # Model-proposed idiomatic rewrites
+reducio idiomatize . --llm-api openai --model ID --allow-remote  # Model-proposed rewrites (hosted API)
 reducio pattern factory .      # Design-pattern templates
 reducio check .                # Naming, function length, cyclomatic-complexity issues
 reducio apply <session-id>     # Apply a saved plan
@@ -148,7 +148,7 @@ Flags are command-specific, not global:
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `history`, `check` | `--report` / `-r` |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |
-| `idiomatize`, `pattern` | `--model`, `--llm-api openai\|anthropic`, `--llm-base-url` |
+| `idiomatize`, `pattern` | `--model`, `--llm-api openai\|anthropic`, `--llm-base-url`, `--allow-remote` |
 | `check` | `--fail-on none\|info\|warning\|critical` (default `none`) |
 | `analyze`, `compare`, `history` | `--format markdown\|json\|html\|all` |
 | `analyze`, `compare`, `history`, `check`, `deduplicate`, `idiomatize`, `pattern`, `apply` | `--output-dir` |
@@ -223,9 +223,10 @@ default list, so re-add the defaults you still want. Symlinked files and symlink
 directories (even ones without Python, such as `docs -> ../shared`) are reported as
 unavailable and make `analyze`/`check` incomplete (exit 1; `check` labels them as
 unparsed); list such directories in `exclude_patterns` to skip them.
-`complexity_thresholds.cyclomatic_complexity` (default 10) selects hotspots and
-`check` complexity findings, `lines_of_code` (default 50) drives `long_function`;
-`cognitive_complexity` is accepted but reserved — nothing reads it yet.
+A function is a hotspot when `complexity_thresholds.cyclomatic_complexity` (default
+10) **or** `cognitive_complexity` (default 15) is reached; the same rule drives
+`check`'s `high_complexity_function`, comparisons, gates, history and charts.
+`lines_of_code` (default 50) drives `long_function`.
 
 ## Architecture
 

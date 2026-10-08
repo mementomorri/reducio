@@ -54,6 +54,7 @@ const rows = element("history-persistent").children[0].children[1].children;
 assert.equal(rows.length, 1);
 assert.equal(rows[0].children[1].textContent, 1);
 assert.equal(rows[0].children[2].textContent, 2);
+assert.match(String(rows[0].children[3].textContent), /^\d+ \/ \d+$/);  // last CC / cognitive
 rows[0].children[0].children[0].listeners.click();
 assert.deepEqual(Array.from(plot("function-chart").traces[0].y), [2, null, 1]);
 assert.equal(plot("function-chart").traces[2].yaxis, "y2");

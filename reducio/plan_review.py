@@ -33,6 +33,11 @@ def plan_preview(plan: RefactorPlan) -> str:
         lines.append(
             f"{item.file}: {item.engine} {item.outcome}"
             + (f" ({item.model})" if item.model else "")
+            + (
+                f" via {item.endpoint}, {item.prompt_bytes}-byte prompt attempted"
+                if item.endpoint
+                else ""
+            )
         )
     for diagnostic in plan.diagnostics:
         lines.append(

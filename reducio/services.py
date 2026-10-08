@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -90,7 +91,26 @@ class App:
     def _prepare_llm(self) -> None:
         if self.llm is None and (self.cfg.model or self.cfg.llm_api or self.cfg.llm_base_url):
             from reducio.llm import LLMClient
+            from reducio.llm.router import LOOPBACK, endpoint_host
 
+            host = endpoint_host(self.cfg)
+            consent = (
+                "local"
+                if host in LOOPBACK
+                else (
+                    "remote, allowed"
+                    if self.cfg.allow_remote
+                    else "remote, refused without --allow-remote"
+                )
+            )
+            # Disclosure, not progress: shown even with --quiet.
+            print(
+                f"[reducio] Model proposals: {self.cfg.llm_api or 'unset API'} model "
+                f"{self.cfg.model or 'unset'} at {host or 'invalid endpoint'} ({consent}); "
+                "the full source of each planned file is sent, also with --dry-run.",
+                file=sys.stderr,
+                flush=True,
+            )
             self.llm = LLMClient(self.cfg)
 
     def apply_plan(self, plan: RefactorPlan, run_tests: bool = False) -> RefactorResult:

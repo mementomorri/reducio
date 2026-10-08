@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import TYPE_CHECKING
 
+from reducio.llm.router import endpoint_host
 from reducio.models import FileChange, PlanDiagnostic, PlanningProvenance, RefactorPlan
 from reducio.plan_review import validate_plan
 from reducio.session import SessionStore
@@ -64,6 +66,20 @@ class BaseAgent:
         )
         model = self.workspace.cfg.model if self.workspace else ""
         model = "custom endpoint" if "://" in model else model
+        before = getattr(self.llm, "requests", 0)
+
+        def audit() -> dict:
+            # Endpoint, size and hash only for a request actually attempted.
+            if getattr(self.llm, "requests", 0) == before or not self.workspace:
+                return {"model": model}
+            sent = prompt.encode()
+            return dict(
+                model=model,
+                endpoint=endpoint_host(self.workspace.cfg),
+                prompt_bytes=len(sent),
+                prompt_sha256=hashlib.sha256(sent).hexdigest(),
+            )
+
         try:
             if self.llm is None:
                 raise ModelRewriteError("No model router available")
@@ -91,7 +107,7 @@ class BaseAgent:
                 )
             )
             self.provenance.append(
-                PlanningProvenance(file=path, engine="model", outcome="failed", model=model)
+                PlanningProvenance(file=path, engine="model", outcome="failed", **audit())
             )
             raise ModelRewriteError("Model rewrite unavailable") from None
         self.provenance.append(
@@ -99,7 +115,7 @@ class BaseAgent:
                 file=path,
                 engine="model",
                 outcome="unchanged" if code.strip() == content.strip() else "proposed",
-                model=model,
+                **audit(),
             )
         )
         if code.strip() == content.strip():

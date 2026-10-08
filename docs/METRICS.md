@@ -77,7 +77,14 @@ are `(4, 6)`; `a and b and c` is `(3, 1)`; `[x for x in xs if x]` is `(3, 3)`.
 
 ## Reporting and comparison
 
-Hotspots use `CC >= complexity_thresholds.cyclomatic_complexity` (default 10).
+A function is a hotspot when `CC >= complexity_thresholds.cyclomatic_complexity`
+(default 10) **or** `cognitive >= complexity_thresholds.cognitive_complexity`
+(default 15). This single rule selects `analyze` hotspots, `check`
+`high_complexity_function` findings (one finding naming every crossed metric;
+critical at twice a threshold), comparison new/resolved hotspots and gates, history
+counts and persistent hotspots, and report wording. High cognitive scores rarely
+occur without high CC, so at the defaults the selection stays close to a CC-only
+rule; the cognitive threshold adds deeply nested functions with few branches.
 The count and JSON/HTML data include **all** hotspots/functions; terminal and
 Markdown lists and ranked charts show at most 20. Distributions use all applicable
 function records, not just hotspots.

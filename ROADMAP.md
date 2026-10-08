@@ -23,10 +23,10 @@ recovery, but nothing proves semantic equivalence. See [safety limits](docs/SAFE
 | `deduplicate` — AST-fingerprint clones → proposed `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py` | done (suggest-only) | Exact structural clones of standalone top-level functions; does **not** rewrite call sites. |
 | `pattern` — factory/strategy/observer/singleton templates | done | Advisory modules by default; opt-in model rewrite. |
 | `idiomatize` — model-proposed idiomatic rewrites | done (model-only) | Requires `--llm-api`/`--model`; proposals are reviewed, never trusted. |
-| Thresholds | partial | `cyclomatic_complexity` drives hotspots/checks, `lines_of_code` drives `long_function`; `cognitive_complexity` is accepted but not yet used. |
+| Thresholds | done | Hot = CC ≥ `cyclomatic_complexity` or cognitive ≥ `cognitive_complexity`, everywhere; `lines_of_code` drives `long_function`. |
 | Apply — whole-file byte checks, file snapshots, syntax/metrics checks | done (bounded) | No Git writes; opt-in tests; verified scoped recovery. Not crash-proof/multi-file atomic. |
 | Session persistence / replay (`apply`, `sessions`, `report`) | done | JSON under `.reducio/sessions/` (git-ignored automatically). |
-| Explicit compatible APIs | done | Optional `[llm]`; OpenAI Chat Completions or Anthropic Messages format. |
+| Explicit compatible APIs | done | Optional `[llm]`; OpenAI Chat Completions or Anthropic Messages format; local-only unless `--allow-remote`. |
 | Config: `.reducio.yaml` + `REDUCIO_*` env overrides | done | |
 
 ## Enhancement opportunities
@@ -34,10 +34,12 @@ recovery, but nothing proves semantic equivalence. See [safety limits](docs/SAFE
 These are **not shipped capabilities or delivery commitments**; they record the
 gap between the original vision and the tool, ordered from clarity to features:
 
-- [ ] **Enforced local-only mode:** explicit remote consent, provider visibility,
-  safe prompt logging.
-- [ ] **Cognitive threshold policy:** define how CC and cognitive thresholds select
-  findings, then apply it consistently to analysis, checks, comparisons and charts.
+- [x] **Enforced local-only mode:** non-loopback API hosts need `--allow-remote`
+  (or `REDUCIO_ALLOW_REMOTE`); a stderr disclosure names API, model and host; saved
+  plans record host, prompt size and SHA-256 only. See [LLM.md](docs/LLM.md).
+- [x] **Cognitive threshold policy:** a function is hot when CC **or** cognitive
+  reaches its threshold — one predicate for analysis, checks, comparisons, gates,
+  history and charts. See [METRICS.md](docs/METRICS.md).
 - [ ] **Near-miss clones:** deduplicate finds exact structural clones only;
   near-miss detection needs a fuzzy matcher.
 - [ ] **Dependency/reference mapping:** resolve imports, symbols and callers for

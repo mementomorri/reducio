@@ -7,7 +7,8 @@ behavioral equivalence. Model-generated changes remain unverified proposals.
 Nonempty application in CI or with non-TTY stdin requires an explicit CLI
 `--yes`; configuration cannot grant unattended approval. Dry runs and empty
 plans do not prompt. `--yes` does not bypass validation or suppress dirty warnings.
-Model planning sends source to the configured API even in dry-run mode; see
+Model planning sends source to the configured API even in dry-run mode, and only
+to a loopback host unless `--allow-remote` grants consent; see
 [API setup and privacy](LLM.md). Saved-plan replay makes no model request.
 
 ## Pipeline

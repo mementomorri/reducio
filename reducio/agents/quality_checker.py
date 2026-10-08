@@ -107,30 +107,46 @@ class QualityCheckerAgent:
             )
 
         for function in functions_from_tree(tree, path):
-            for attribute, maximum, kind, label, inclusive in (
-                ("lines_of_code", self.thresholds.lines_of_code, "long_function", "lines", False),
+            # (kind, [(score, maximum, label)]): LOC is exclusive; complexity follows the
+            # shared hotspot policy (CC or cognitive, inclusive) as one finding per function.
+            limits = self.thresholds
+            for kind, crossed in (
                 (
-                    "cyclomatic_complexity",
-                    self.thresholds.cyclomatic_complexity,
+                    "long_function",
+                    (
+                        [(function.lines_of_code, limits.lines_of_code, "lines")]
+                        if function.lines_of_code > limits.lines_of_code
+                        else []
+                    ),
+                ),
+                (
                     "high_complexity_function",
-                    "cyclomatic complexity",
-                    True,
+                    [
+                        (getattr(function, name), getattr(limits, name), name.replace("_", " "))
+                        for name in limits.crossed(function)
+                    ],
                 ),
             ):
-                score = getattr(function, attribute)
-                if score > maximum or (inclusive and score == maximum):
-                    critical = score > maximum * 2 or (inclusive and score == maximum * 2)
-                    issues.append(
-                        QualityIssue(
-                            path,
-                            function.line,
-                            kind,
-                            "critical" if critical else "warning",
-                            f"Function '{function.qualified_name}' has {score} {label} (max {maximum})",
-                            function.qualified_name,
-                            "Consider extracting smaller functions",
-                        )
+                if not crossed:
+                    continue
+                critical = any(
+                    score > 2 * maximum or (kind != "long_function" and score == 2 * maximum)
+                    for score, maximum, _ in crossed
+                )
+                detail = ", ".join(
+                    f"{score} {label} (max {maximum})" for score, maximum, label in crossed
+                )
+                issues.append(
+                    QualityIssue(
+                        path,
+                        function.line,
+                        kind,
+                        "critical" if critical else "warning",
+                        f"Function '{function.qualified_name}' has {detail}",
+                        function.qualified_name,
+                        "Consider extracting smaller functions",
                     )
+                )
 
         for line, score in sorted(line_decisions(tree).items()):
             if score > 3:

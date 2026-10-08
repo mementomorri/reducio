@@ -72,6 +72,10 @@ class PlanningProvenance(BaseModel):
     engine: Literal["heuristic", "template", "model", "embeddings", "unknown"]
     outcome: str
     model: str = ""
+    # Audit of what left the machine: host, size and hash only — never source or credentials.
+    endpoint: str = ""
+    prompt_bytes: int | None = None
+    prompt_sha256: str = ""
 
 
 class RefactorPlan(BaseModel):
@@ -259,6 +263,23 @@ class ComplexityThresholds(BaseModel):
     cognitive_complexity: int = Field(default=15, gt=0)
     lines_of_code: int = Field(default=50, gt=0)
 
+    def crossed(self, m) -> list[str]:
+        """Complexity metrics at/above their threshold; the single hotspot policy."""
+        return [
+            name
+            for name in ("cyclomatic_complexity", "cognitive_complexity")
+            if getattr(m, name) >= getattr(self, name)
+        ]
+
+    def is_hot(self, m) -> bool:
+        return bool(self.crossed(m))
+
+    def rule(self) -> str:
+        return (
+            f"cyclomatic complexity ≥ {self.cyclomatic_complexity} "
+            f"or cognitive ≥ {self.cognitive_complexity}"
+        )
+
 
 class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -273,6 +294,7 @@ class AppConfig(BaseModel):
     llm_base_url: str = ""
     llm_timeout_seconds: float = Field(default=60, gt=0, allow_inf_nan=False)
     llm_max_tokens: int = Field(default=2048, gt=0)
+    allow_remote: bool = False
     check_fail_on: Literal["none", "info", "warning", "critical"] = "none"
     compare_fail_on: Literal["none", "new-hotspots", "regressions"] = "none"
     history_limit: int = Field(default=100, gt=0)

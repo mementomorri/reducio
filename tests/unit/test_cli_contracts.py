@@ -53,7 +53,7 @@ def test_report_failure_distinguishes_applied_state(cli_case, monkeypatch, succe
 def cli_case(tmp_path, monkeypatch):
     monkeypatch.setattr("reducio.cli._is_interactive", lambda: True)
     monkeypatch.chdir(tmp_path)
-    for key in ("REDUCIO_MODEL", "REDUCIO_VERBOSE", "REDUCIO_PREFER_LOCAL"):
+    for key in ("REDUCIO_MODEL", "REDUCIO_VERBOSE", "REDUCIO_PREFER_LOCAL", "REDUCIO_ALLOW_REMOTE"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     plan = RefactorPlan(
@@ -230,6 +230,28 @@ def test_cli_configuration_precedence(cli_case, monkeypatch, options, environmen
     assert result.exit_code == 0, result.output
     cfg = cli_case.factory.call_args.args[1]
     assert (cfg.model, cfg.llm_api, cfg.verbose) == expected
+
+
+@pytest.mark.parametrize("command", ["idiomatize", "pattern"])
+@pytest.mark.parametrize(
+    "yaml,environment,options,expected",
+    [
+        ("", {}, [], False),
+        ("allow_remote: true\n", {}, [], True),
+        ("allow_remote: false\n", {"REDUCIO_ALLOW_REMOTE": "1"}, [], True),
+        ("", {"REDUCIO_ALLOW_REMOTE": "0"}, ["--allow-remote"], True),
+    ],
+)
+def test_remote_consent_precedence(
+    cli_case, monkeypatch, command, yaml, environment, options, expected
+):
+    Path(".reducio.yaml").write_text("model: m\nllm_api: openai\n" + yaml)
+    for key, value in environment.items():
+        monkeypatch.setenv(key, value)
+    args = ["strategy"] if command == "pattern" else []
+    result = cli_case.invoke(command, *args, "--dry-run", *options)
+    assert result.exit_code == 0, result.output
+    assert cli_case.factory.call_args.args[1].allow_remote is expected
 
 
 def test_retired_preferences_do_not_initialize(cli_case):

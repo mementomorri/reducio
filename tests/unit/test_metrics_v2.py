@@ -123,3 +123,53 @@ def test_line_counts_ignore_text_and_do_not_double_count_nested_functions():
     assert line_decisions("def outer():\n    def inner():\n        if x:\n            pass\n") == {
         3: 1
     }
+
+
+NESTED = (
+    "def nested(a, b, c):\n    if a:\n        if b:\n            if c:\n                return 1\n"
+)
+
+
+def test_cognitive_threshold_alone_selects_hotspots_everywhere(tmp_path):
+    from reducio.analysis import comparison
+    from reducio.history import snapshot_metrics
+    from reducio.models import HistorySnapshot
+
+    # CC 4 stays below 50; cognitive 6 reaches its threshold of 6.
+    cfg = AppConfig(complexity_thresholds={"cyclomatic_complexity": 50, "cognitive_complexity": 6})
+    limits = cfg.complexity_thresholds
+    files = [FileInfo(path="nested.py", content=NESTED)]
+    analysis = analyze_files(files, cfg)
+    (hot,) = analysis.functions
+    assert (hot.cyclomatic_complexity, hot.cognitive_complexity) == (4, 6)
+    assert limits.crossed(hot) == ["cognitive_complexity"]
+    assert [h.symbol for h in analysis.hotspots] == ["nested"]
+
+    quality = QualityCheckerAgent(Workspace(str(tmp_path), cfg)).check_quality(files, ".")
+    (issue,) = [i for i in quality.issues if i.issue_type == "high_complexity_function"]
+    assert issue.severity == "warning"
+    assert issue.message == "Function 'nested' has 6 cognitive complexity (max 6)"
+
+    flat = analyze_files([FileInfo(path="nested.py", content="def nested():\n    return 1\n")], cfg)
+    assert comparison(flat.functions[0], hot, limits).new_hotspot
+    assert comparison(hot, flat.functions[0], limits).resolved_hotspot
+    assert (
+        snapshot_metrics(
+            HistorySnapshot(revision="r", committed_at="", subject="", measurement=analysis)
+        )["hotspots"]
+        == 1
+    )
+
+
+def test_both_metrics_crossed_is_one_finding_and_critical_at_double(tmp_path):
+    cfg = AppConfig(complexity_thresholds={"cyclomatic_complexity": 2, "cognitive_complexity": 3})
+    files = [FileInfo(path="nested.py", content=NESTED)]
+    quality = QualityCheckerAgent(Workspace(str(tmp_path), cfg)).check_quality(files, ".")
+    (issue,) = [i for i in quality.issues if i.issue_type == "high_complexity_function"]
+    assert issue.severity == "critical"  # cognitive 6 == 2 x 3
+    assert issue.message == (
+        "Function 'nested' has 4 cyclomatic complexity (max 2), 6 cognitive complexity (max 3)"
+    )
+    assert (
+        AppConfig().complexity_thresholds.rule() == "cyclomatic complexity ≥ 10 or cognitive ≥ 15"
+    )

@@ -15,6 +15,7 @@ def github_annotations(result: CompareResult) -> list[str]:
         key=lambda c: (
             not c.new_hotspot,
             -(c.cyclomatic_delta or 0),
+            -(c.cognitive_delta or 0),
             c.after.file if c.after else c.before.file if c.before else "",
         ),
     ):

@@ -149,7 +149,7 @@ class Reporter:
                 continue
             content += f"\n## {label} function changes\n\n"
             comparisons, notes = match_functions(
-                before, measurement, self.cfg.complexity_thresholds.cyclomatic_complexity
+                before, measurement, self.cfg.complexity_thresholds
             )
             if notes:
                 content += "\n\n".join(_md_cell(note) for note in notes) + "\n\n"

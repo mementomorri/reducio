@@ -96,22 +96,24 @@
     plot("complexity", "Typical and high-end function complexity", ["Median CC", "p95 CC", "Median cognitive", "p95 cognitive"], ["median_cc", "p95_cc", "median_cognitive", "p95_cognitive"].map(k => i => series[i][k]));
     plot("hotspots", "Hotspots · count and share of measured functions (%)", ["Hotspots", "Hotspot share (%)"], [i => series[i].hotspots, i => series[i].hotspot_share], false, [1]);
     plot("changes", "New and resolved hotspots vs the previous commit", ["New", "Resolved"], [i => series[i].new_hotspots, i => series[i].resolved_hotspots], true);
-    const ranking = new Map(), threshold = history.configuration.complexity_thresholds.cyclomatic_complexity;
+    // Same policy as ComplexityThresholds.is_hot: CC or cognitive at/above its threshold.
+    const ranking = new Map(), limits = history.configuration.complexity_thresholds;
+    const hot = f => f.cyclomatic_complexity >= limits.cyclomatic_complexity || f.cognitive_complexity >= limits.cognitive_complexity;
     indices.forEach(i => {
       const snapshot = snapshots[i]; if (!snapshot.measurement.complete) return;
       const counts = new Map(); snapshot.measurement.functions.forEach(f => counts.set(identity(f), (counts.get(identity(f)) ?? 0) + 1));
       snapshot.measurement.functions.forEach(f => {
         const key = identity(f); if (counts.get(key) !== 1) return;
         const entry = ranking.get(key) ?? {f, present: 0, hot: 0}; entry.present++; entry.f = f;
-        if (f.cyclomatic_complexity >= threshold) entry.hot++; ranking.set(key, entry);
+        if (hot(f)) entry.hot++; ranking.set(key, entry);
       });
     });
     const rows = [...ranking].filter(([, v]) => v.hot).sort((a, b) => b[1].hot - a[1].hot || label(a[1].f).localeCompare(label(b[1].f))).slice(0, 20).map(([key, entry]) => {
       const button = document.createElement("button"); button.textContent = label(entry.f);
       button.addEventListener("click", () => { element("function").value = key; functionHistory(); element("function").focus(); });
-      return [button, entry.hot, entry.present, entry.f.cyclomatic_complexity];
+      return [button, entry.hot, entry.present, `${entry.f.cyclomatic_complexity} / ${entry.f.cognitive_complexity}`];
     });
-    table("persistent", ["Function", "Hot snapshots", "Present snapshots", "Last measured CC"], rows);
+    table("persistent", ["Function", "Hot snapshots", "Present snapshots", "Last CC / cognitive"], rows);
     functionHistory();
   }
   ["start", "end"].forEach(id => element(id).addEventListener("change", redraw));

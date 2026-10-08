@@ -49,7 +49,7 @@ User
 
 1. `repo.walk` → `.py` files only (per `include_patterns`).
 2. `analysis.analyze_files` parses AST, extracts symbols and independent function metrics.
-3. All hotspots where cyclomatic complexity ≥ threshold; explicit parse diagnostics.
+3. All hotspots where cyclomatic **or** cognitive complexity reaches its threshold; explicit parse diagnostics.
 4. `visual_report` renders one shared result as Markdown/JSON/HTML when requested.
 
 ### Compare

@@ -75,7 +75,7 @@ Use `pull_request`, not `pull_request_target`; do not add secrets to PR analysis
 
 Add `--annotations github` to the comparison command for up to ten file/line
 warnings, plus `--fail-on new-hotspots` to fail only when a hotspot appears or
-crosses the configured CC threshold. `--fail-on regressions` also fails when a
+crosses the configured CC or cognitive threshold. `--fail-on regressions` also fails when a
 matched function's CC or cognitive score increases (including mixed changes).
 Unchanged existing hotspots do not fail. Default `none` is report-only.
 

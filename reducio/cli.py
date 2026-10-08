@@ -66,6 +66,14 @@ RunTests = Annotated[
 LlmApi = Annotated[str | None, typer.Option("--llm-api", help="openai or anthropic")]
 LlmBaseUrl = Annotated[str | None, typer.Option("--llm-base-url", help="API root including /v1")]
 Model = Annotated[str | None, typer.Option("--model")]
+AllowRemote = Annotated[
+    bool | None,
+    typer.Option(
+        "--allow-remote",
+        help="Consent to sending source code to a non-loopback model endpoint",
+        show_default=False,
+    ),
+]
 
 
 def _get_cfg(
@@ -78,6 +86,7 @@ def _get_cfg(
     compare_fail_on: str | None = None,
     history_limit: int | None = None,
     history_path_aliases: list[str] | None = None,
+    allow_remote: bool | None = None,
 ) -> AppConfig:
     try:
         cfg = apply_env(load_config(str(config) if config is not None else None))
@@ -92,6 +101,7 @@ def _get_cfg(
                 ("compare_fail_on", compare_fail_on),
                 ("history_limit", history_limit),
                 ("history_path_aliases", history_path_aliases),
+                ("allow_remote", allow_remote),
             )
             if value is not None
         }
@@ -305,8 +315,7 @@ def analyze(
                     f"cyclomatic={h.cyclomatic_complexity}  cognitive={h.cognitive_complexity}"
                 )
         else:
-            th = cfg.complexity_thresholds.cyclomatic_complexity
-            typer.echo(f"No hotspots (cyclomatic >= {th})")
+            typer.echo(f"No hotspots ({cfg.complexity_thresholds.rule()})")
     if report:
         with progress("Generating analysis reports...", quiet=quiet):
             _write_analysis_reports(result, _report_dir(path, output_dir), format)
@@ -516,10 +525,11 @@ def idiomatize(
     llm_api: LlmApi = None,
     llm_base_url: LlmBaseUrl = None,
     model: Model = None,
+    allow_remote: AllowRemote = None,
     quiet: Quiet = False,
 ):
     """Propose idiomatic rewrites with the configured model API (see docs/LLM.md)."""
-    cfg = _get_cfg(config, verbose, model, llm_api, llm_base_url)
+    cfg = _get_cfg(config, verbose, model, llm_api, llm_base_url, allow_remote=allow_remote)
     if not (cfg.llm_api and cfg.model.strip()):
         typer.echo("idiomatize needs --llm-api and --model (see docs/LLM.md).", err=True)
         raise typer.Exit(2)
@@ -555,6 +565,7 @@ def pattern(
     llm_api: LlmApi = None,
     llm_base_url: LlmBaseUrl = None,
     model: Model = None,
+    allow_remote: AllowRemote = None,
     config: Config = None,
     quiet: Quiet = False,
 ):
@@ -564,7 +575,13 @@ def pattern(
             f"Unknown pattern '{pattern_name}'. Choose from: {', '.join(_PATTERNS)}", err=True
         )
         raise typer.Exit(2)
-    cfg = _get_cfg(config, model=model, llm_api=llm_api, llm_base_url=llm_base_url)
+    cfg = _get_cfg(
+        config,
+        model=model,
+        llm_api=llm_api,
+        llm_base_url=llm_base_url,
+        allow_remote=allow_remote,
+    )
     _plan_command(
         "pattern",
         lambda svc: svc.pattern(pattern_name, str(path), allow_fallback=allow_fallback),

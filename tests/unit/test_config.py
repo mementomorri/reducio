@@ -129,18 +129,24 @@ def test_unreadable_configuration(tmp_path, monkeypatch):
         ("off", False),
     ],
 )
-def test_environment_boolean_both_directions(monkeypatch, value, expected):
-    monkeypatch.setenv("REDUCIO_VERBOSE", value)
-    cfg = apply_env(AppConfig(verbose=not expected))
-    assert cfg.verbose is expected
+@pytest.mark.parametrize("field", ["verbose", "allow_remote"])
+def test_environment_boolean_both_directions(monkeypatch, field, value, expected):
+    monkeypatch.setenv("REDUCIO_" + field.upper(), value)
+    cfg = apply_env(AppConfig(**{field: not expected}))
+    assert getattr(cfg, field) is expected
 
 
-def test_invalid_environment_boolean(monkeypatch):
-    monkeypatch.setenv("REDUCIO_VERBOSE", "private-value")
+@pytest.mark.parametrize("variable", ["REDUCIO_VERBOSE", "REDUCIO_ALLOW_REMOTE"])
+def test_invalid_environment_boolean(monkeypatch, variable):
+    monkeypatch.setenv(variable, "private-value")
     with pytest.raises(ConfigError) as error:
         apply_env(AppConfig())
-    assert "REDUCIO_VERBOSE" in str(error.value)
+    assert variable in str(error.value)
     assert "private-value" not in str(error.value)
+
+
+def test_remote_consent_defaults_off():
+    assert AppConfig().allow_remote is False
 
 
 def test_first_config_wins_without_merging(tmp_path, monkeypatch):

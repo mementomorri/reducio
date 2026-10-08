@@ -70,11 +70,13 @@ def apply_env(cfg: AppConfig) -> AppConfig:
     ):
         if value := os.environ.get("REDUCIO_" + name.upper()):
             values[name] = value
-    value = os.environ.get("REDUCIO_VERBOSE", "").strip().lower()
-    if value:
-        if value not in ("1", "true", "yes", "on", "0", "false", "no", "off"):
-            raise ConfigError("REDUCIO_VERBOSE must be a boolean (true/false, yes/no, on/off, 1/0)")
-        values["verbose"] = value in ("1", "true", "yes", "on")
+    for name in ("verbose", "allow_remote"):
+        variable = "REDUCIO_" + name.upper()
+        value = os.environ.get(variable, "").strip().lower()
+        if value:
+            if value not in ("1", "true", "yes", "on", "0", "false", "no", "off"):
+                raise ConfigError(f"{variable} must be a boolean (true/false, yes/no, on/off, 1/0)")
+            values[name] = value in ("1", "true", "yes", "on")
     try:
         return AppConfig.model_validate(values)
     except ValidationError, TypeError:

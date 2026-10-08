@@ -11,6 +11,7 @@ from reducio.models import (
     AppConfig,
     ComplexityHotspot,
     ComplexityMetrics,
+    ComplexityThresholds,
     FileInfo,
     FunctionComparison,
     FunctionMetrics,
@@ -66,7 +67,7 @@ def analyze_files(
                 cognitive_complexity=f.cognitive_complexity,
             )
             for f in functions
-            if f.cyclomatic_complexity >= cfg.complexity_thresholds.cyclomatic_complexity
+            if cfg.complexity_thresholds.is_hot(f)
         )
     result.total_symbols = len(result.symbols)
     result.hotspots.sort(key=lambda h: (-h.cyclomatic_complexity, h.file, h.line))
@@ -83,9 +84,13 @@ def totals(measurement: AnalyzeResult | None) -> ComplexityMetrics | None:
     )
 
 
-def comparison(before: FunctionMetrics | None, after: FunctionMetrics | None, threshold: int):
-    was_hot = before is not None and before.cyclomatic_complexity >= threshold
-    now_hot = after is not None and after.cyclomatic_complexity >= threshold
+def comparison(
+    before: FunctionMetrics | None,
+    after: FunctionMetrics | None,
+    thresholds: ComplexityThresholds,
+):
+    was_hot = before is not None and thresholds.is_hot(before)
+    now_hot = after is not None and thresholds.is_hot(after)
     values: dict = dict(
         before=before,
         after=after,
@@ -107,7 +112,9 @@ def comparison(before: FunctionMetrics | None, after: FunctionMetrics | None, th
     )
 
 
-def match_functions(before: AnalyzeResult, after: AnalyzeResult, threshold: int, pairs=None):
+def match_functions(
+    before: AnalyzeResult, after: AnalyzeResult, thresholds: ComplexityThresholds, pairs=None
+):
     """Match unambiguous qualified names/kinds, excluding unavailable files."""
     from collections import defaultdict
 
@@ -135,12 +142,12 @@ def match_functions(before: AnalyzeResult, after: AnalyzeResult, threshold: int,
             left, right = old.get(name, []), new.get(name, [])
             if len(left) == len(right):
                 # Repeated names (property setters, overloads) pair in source order.
-                changes.extend(comparison(a, b, threshold) for a, b in zip(left, right))
+                changes.extend(comparison(a, b, thresholds) for a, b in zip(left, right))
             else:
                 if len(left) > 1 or len(right) > 1:
                     notes.append(
                         f"Ambiguous definition {new_path or old_path}:{name[0]}; shown unmatched"
                     )
-                changes.extend(comparison(f, None, threshold) for f in left)
-                changes.extend(comparison(None, f, threshold) for f in right)
+                changes.extend(comparison(f, None, thresholds) for f in left)
+                changes.extend(comparison(None, f, thresholds) for f in right)
     return changes, notes

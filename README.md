@@ -51,7 +51,8 @@ otherwise complexity increases remain informational.
 Reports default to `.reducio/`; open the HTML directly in a browser, without a server.
 
 For optional code changes, preview with `reducio pattern strategy . --dry-run` or a
-model-backed `reducio idiomatize . --llm-api … --model … --dry-run`, and review before
+model-backed `reducio idiomatize . --llm-api … --model … --dry-run` (hosted APIs also need
+`--allow-remote`: source stays local by default), and review before
 applying with `--run-tests`. Deduplication is suggestion-only; it does not rewrite callers.
 
 ## License

@@ -4,7 +4,7 @@ import os
 
 import httpx
 
-from reducio.llm import LLMClient
+from reducio.llm import LLMClient, LLMError
 from reducio.models import AppConfig
 
 
@@ -26,7 +26,15 @@ def check() -> None:
                 return httpx.Response(200, json=body)
 
             httpx.Client = lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw)
-            client = LLMClient(AppConfig(llm_api=protocol, model="mock-model"))
+            # Local-only by default: a remote endpoint is refused before any request.
+            try:
+                LLMClient(AppConfig(llm_api=protocol, model="mock-model")).complete("x = 1")
+            except LLMError as error:
+                assert "--allow-remote" in str(error)
+            else:
+                raise AssertionError("remote endpoint used without consent")
+            assert not requests
+            client = LLMClient(AppConfig(llm_api=protocol, model="mock-model", allow_remote=True))
             assert client.complete("x = 1") == "x = 1"
             assert len(requests) == 1
     finally:

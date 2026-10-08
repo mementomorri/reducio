@@ -7,7 +7,13 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from reducio.models import AnalyzeResult, CompareResult, FunctionMetrics, HistoryResult
+from reducio.models import (
+    AnalyzeResult,
+    CompareResult,
+    ComplexityThresholds,
+    FunctionMetrics,
+    HistoryResult,
+)
 from reducio.presentation import markdown_cell as _md_cell
 from reducio.presentation import table as _table
 from reducio.progress import status
@@ -177,9 +183,10 @@ def _context(result: Result) -> str:
     return f"Source overview · {result.scope}. Function-level metrics; class totals are not added to methods."
 
 
-def _threshold(result: Result) -> int:
-    return int(
-        result.configuration.get("complexity_thresholds", {}).get("cyclomatic_complexity", 10)
+def _thresholds(result: Result) -> ComplexityThresholds:
+    # Persisted results carry the thresholds they were measured with.
+    return ComplexityThresholds.model_validate(
+        result.configuration.get("complexity_thresholds", {})
     )
 
 
@@ -194,7 +201,7 @@ def markdown_report(result: Result) -> str:
         "",
         f'Metrics version: {result.metrics_version} · Status: {"Complete" if result.complete else "INCOMPLETE"}',
         "",
-        f"Hotspots have cyclomatic complexity ≥ {_threshold(result)}. Cognitive is the Reducio nesting-weighted score.",
+        f"Hotspots have {_thresholds(result).rule()}. Cognitive is the Reducio nesting-weighted score.",
         "",
         "## Summary",
         "",
@@ -277,7 +284,12 @@ def _figures(result: Result) -> list[Any]:
                 hovertemplate="%{text}<br>Lines: %{x}<br>CC: %{y}<br>Cognitive: %{marker.color}<extra></extra>",
             )
         )
-        scatter.add_hline(y=_threshold(result), line_dash="dash", line_color="#d4a853")
+        scatter.add_hline(
+            y=_thresholds(result).cyclomatic_complexity,
+            line_dash="dash",
+            line_color="#d4a853",
+            annotation_text="CC hotspot threshold (cognitive threshold applies too)",
+        )
         scatter.update_layout(
             title="Where are the long, complex functions?",
             xaxis_title="Function length (physical lines)",
@@ -463,7 +475,7 @@ def html_report(
 Added and removed functions are separate from changes to existing functions. A mixed result means one complexity metric rose while the other fell.
 Physical line counts include comments and blank lines; fewer lines alone are not an improvement verdict.</p>
 <p>Cyclomatic counts syntax decisions, starting at 1 per function. Cognitive is Reducio's nesting-weighted score, starting at 0;
-it does not claim Sonar compatibility. Hotspots have cyclomatic complexity ≥ {_threshold(result)}.
+it does not claim Sonar compatibility. Hotspots have {escape(_thresholds(result).rule())}.
 Nested functions are measured independently. Module/class-body control flow is outside the function-level scores.</p>
 <details><summary>Measurement configuration</summary><pre>{escape(str(result.configuration))}</pre></details></section>
 <footer>Self-contained report · works offline · complete data also available with --format json or all.</footer></main>{scripts}</body></html>"""

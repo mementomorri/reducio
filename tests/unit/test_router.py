@@ -14,7 +14,7 @@ def test_response_cannot_persist_token(api):
     install, _ = api
     install({"choices": [{"finish_reason": "stop", "message": {"content": "TEST_SECRET"}}]})
     with pytest.raises(LLMError, match="credentials"):
-        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen", allow_remote=True)).complete("source")
 
 
 def test_app_api_failure_persists_safe_diagnostics(api, tmp_path):
@@ -23,7 +23,7 @@ def test_app_api_failure_persists_safe_diagnostics(api, tmp_path):
     install, _ = api
     install({"error": "TEST_SECRET PRIVATE"}, status=401)
     (tmp_path / "sample.py").write_text("def f():\n    x = None\n    return x == None\n")
-    service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen"))
+    service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen", allow_remote=True))
     assert service.llm is None
     plan = service.idiomatize(str(tmp_path))
     assert not plan.complete
@@ -42,7 +42,7 @@ def test_app_successful_api_plan_replays_offline(api, tmp_path, monkeypatch):
         {"choices": [{"finish_reason": "stop", "message": {"content": "def f():\n    return 2\n"}}]}
     )
     (tmp_path / "sample.py").write_text("def f():\n    return 1\n")
-    service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen"))
+    service = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen", allow_remote=True))
     plan = service.idiomatize(str(tmp_path))
     assert plan.complete and plan.changes
     assert len(requests) == 1
@@ -88,7 +88,10 @@ def test_protocol_headers_and_body(api, protocol):
     )
     install(reply)
     cfg = AppConfig(
-        llm_api=protocol, model="chosen", llm_base_url="https://compatible.example/custom/v1/"
+        llm_api=protocol,
+        model="chosen",
+        llm_base_url="https://compatible.example/custom/v1/",
+        allow_remote=True,
     )
     assert LLMClient(cfg).complete("PRIVATE", system_prompt="SYSTEM") == "x = 1"
     request = requests[0]
@@ -129,7 +132,7 @@ def test_bad_responses_fail_without_fallback(api, protocol, reply):
     install, requests = api
     install(reply)
     with pytest.raises(LLMError):
-        LLMClient(AppConfig(llm_api=protocol, model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api=protocol, model="chosen", allow_remote=True)).complete("source")
     assert len(requests) == 1
 
 
@@ -138,7 +141,9 @@ def test_http_errors_are_sanitized(api, status, caplog):
     install, requests = api
     install({"error": "TEST_SECRET PRIVATE"}, status)
     with pytest.raises(LLMError, match=str(status)) as error:
-        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("PRIVATE")
+        LLMClient(AppConfig(llm_api="openai", model="chosen", allow_remote=True)).complete(
+            "PRIVATE"
+        )
     assert "TEST_SECRET" not in str(error.value) + caplog.text
     assert "PRIVATE" not in str(error.value) + caplog.text
     assert len(requests) == 1
@@ -149,7 +154,7 @@ def test_transport_error_redaction(api, error):
     install, _ = api
     install(error)
     with pytest.raises(LLMError) as caught:
-        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen", allow_remote=True)).complete("source")
     assert "SECRET" not in str(caught.value)
 
 
@@ -166,7 +171,9 @@ def test_transport_error_redaction(api, error):
 def test_unsafe_endpoint_rejected_without_requests(api, url):
     _, requests = api
     with pytest.raises(LLMError, match="HTTPS"):
-        LLMClient(AppConfig(llm_api="openai", model="chosen", llm_base_url=url)).complete("source")
+        LLMClient(
+            AppConfig(llm_api="openai", model="chosen", allow_remote=True, llm_base_url=url)
+        ).complete("source")
     assert not requests
 
 
@@ -179,7 +186,7 @@ def test_model_and_protocol_required(api, settings):
 def test_missing_key_and_standard_key_fallback(api, monkeypatch):
     install, requests = api
     monkeypatch.delenv("REDUCIO_API_KEY")
-    client = LLMClient(AppConfig(llm_api="openai", model="chosen"))
+    client = LLMClient(AppConfig(llm_api="openai", model="chosen", allow_remote=True))
     with pytest.raises(LLMError, match="OPENAI_API_KEY"):
         client.complete("source")
     monkeypatch.setenv("OPENAI_API_KEY", "STANDARD")
@@ -198,4 +205,77 @@ def test_missing_extra_has_actionable_error(api, monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", blocked)
     with pytest.raises(LLMError, match=r"reducio\[llm\]"):
-        LLMClient(AppConfig(llm_api="openai", model="chosen")).complete("source")
+        LLMClient(AppConfig(llm_api="openai", model="chosen", allow_remote=True)).complete("source")
+
+
+@pytest.mark.parametrize(
+    "url",
+    ["", "https://compatible.example/v1", "https://192.168.1.5/v1", "https://localhost.evil/v1"],
+)
+def test_remote_endpoint_needs_consent_before_any_request(api, url):
+    install, requests = api
+    install({"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]})
+    client = LLMClient(AppConfig(llm_api="openai", model="chosen", llm_base_url=url))
+    with pytest.raises(LLMError, match="--allow-remote") as error:
+        client.complete("PRIVATE")
+    assert "TEST_SECRET" not in str(error.value)
+    assert not requests and client.requests == 0
+
+
+@pytest.mark.parametrize(
+    "url", ["http://localhost:11434/v1", "http://127.0.0.1/v1", "http://[::1]:8080/v1"]
+)
+def test_loopback_endpoint_needs_no_consent(api, url):
+    install, requests = api
+    install({"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]})
+    client = LLMClient(AppConfig(llm_api="openai", model="chosen", llm_base_url=url))
+    assert client.complete("source") == "ok"
+    assert len(requests) == 1 and client.requests == 1
+
+
+def test_refused_plan_records_no_endpoint_and_notice_discloses(api, tmp_path, capsys):
+    from reducio.services import App
+
+    _, requests = api
+    (tmp_path / "sample.py").write_text("def f():\n    return 1\n")
+    plan = App(str(tmp_path), AppConfig(llm_api="openai", model="chosen")).idiomatize(str(tmp_path))
+    assert not plan.complete and not requests
+    assert "--allow-remote" in plan.model_dump_json()
+    item = plan.provenance[0]
+    assert item.outcome == "failed" and not item.endpoint and item.prompt_bytes is None
+    notice = capsys.readouterr().err
+    assert "api.openai.com" in notice and "refused without --allow-remote" in notice
+    assert "full source" in notice
+
+
+def test_consented_plan_records_host_size_and_hash_only(api, tmp_path):
+    import hashlib
+
+    from reducio.services import App
+
+    install, requests = api
+    install(
+        {"choices": [{"finish_reason": "stop", "message": {"content": "def f():\n    return 2\n"}}]}
+    )
+    (tmp_path / "sample.py").write_text("def f():\n    return 1\n")
+    service = App(
+        str(tmp_path),
+        AppConfig(
+            llm_api="openai",
+            model="chosen",
+            llm_base_url="https://compatible.example/v1",
+            allow_remote=True,
+        ),
+    )
+    plan = service.idiomatize(str(tmp_path))
+    item = plan.provenance[0]
+    sent = json.loads(requests[0].content)["messages"][-1]["content"].encode()
+    assert item.endpoint == "compatible.example"
+    assert item.prompt_bytes == len(sent)
+    assert item.prompt_sha256 == hashlib.sha256(sent).hexdigest()
+    saved = service.sessions.load_plan(plan.session_id).model_dump_json()
+    assert "return 1" not in saved.split('"provenance"')[1]
+    assert "TEST_SECRET" not in saved
+    from reducio.plan_review import plan_preview
+
+    assert "via compatible.example" in plan_preview(plan)

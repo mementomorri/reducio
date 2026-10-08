@@ -7,14 +7,32 @@ from urllib.parse import urlsplit
 
 from reducio.models import AppConfig
 
+# ponytail: loopback by name only; add 127.0.0.0/8 or unix sockets if someone needs them.
+LOOPBACK = ("localhost", "127.0.0.1", "::1")
+
 
 class LLMError(RuntimeError):
     """Only sanitized, user-actionable messages may cross the API boundary."""
 
 
+def api_base(cfg: AppConfig) -> str:
+    return cfg.llm_base_url or (
+        "https://api.openai.com/v1" if cfg.llm_api == "openai" else "https://api.anthropic.com/v1"
+    )
+
+
+def endpoint_host(cfg: AppConfig) -> str:
+    """Host only (no path, port or credentials), safe to show and persist."""
+    try:
+        return urlsplit(api_base(cfg)).hostname or ""
+    except ValueError:
+        return ""
+
+
 class LLMClient:
     def __init__(self, cfg: AppConfig):
         self.cfg = cfg.model_copy(deep=True)
+        self.requests = 0  # attempted HTTP requests: what actually left the machine
 
     def complete(self, prompt: str, system_prompt: str | None = None) -> str:
         cfg = self.cfg
@@ -24,11 +42,7 @@ class LLMClient:
         token = os.environ.get("REDUCIO_API_KEY") or os.environ.get(key_name)
         if not token or not token.strip():
             raise LLMError(f"Set REDUCIO_API_KEY or {key_name}")
-        base = cfg.llm_base_url or (
-            "https://api.openai.com/v1"
-            if cfg.llm_api == "openai"
-            else "https://api.anthropic.com/v1"
-        )
+        base = api_base(cfg)
         try:
             url = urlsplit(base)
             if (
@@ -39,9 +53,7 @@ class LLMClient:
                 or url.fragment
                 or (
                     url.scheme != "https"
-                    and not (
-                        url.scheme == "http" and url.hostname in ("localhost", "127.0.0.1", "::1")
-                    )
+                    and not (url.scheme == "http" and url.hostname in LOOPBACK)
                 )
             ):
                 raise ValueError()
@@ -50,6 +62,12 @@ class LLMClient:
             raise LLMError(
                 "Use an HTTPS API base URL without credentials/query/fragment; HTTP is loopback-only"
             ) from None
+        if url.hostname not in LOOPBACK and not cfg.allow_remote:
+            # Enforced local-only mode: source never leaves the machine without explicit consent.
+            raise LLMError(
+                f"Remote endpoint {url.hostname} needs consent: pass --allow-remote "
+                "or set REDUCIO_ALLOW_REMOTE=1 (source code is sent to it)"
+            )
         try:
             import httpx
         except ImportError:
@@ -76,6 +94,7 @@ class LLMClient:
         try:
             # ponytail: httpx per-phase timeout (connect/read/write), not a total deadline.
             with httpx.Client(timeout=cfg.llm_timeout_seconds, follow_redirects=False) as client:
+                self.requests += 1
                 response = client.post(
                     base.rstrip("/") + "/" + endpoint, headers=headers, json=body
                 )

@@ -129,7 +129,7 @@ def test_landing_copy_discloses_limits_and_links_enhancements():
         "Automatic modification is not production-safe",
         "call sites are not rewritten",
         "Model planning sends source code",
-        "Hotspots use the cyclomatic threshold",
+        "Hotspots use the cyclomatic or cognitive threshold",
         "reports",
         "structural clones",
         "ROADMAP.md#enhancement-opportunities",

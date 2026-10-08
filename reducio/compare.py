@@ -212,7 +212,7 @@ def compare_revisions(
     result.changes, result.notes = match_functions(
         before,
         after,
-        cfg.complexity_thresholds.cyclomatic_complexity,
+        cfg.complexity_thresholds,
         [(f["before"], f["after"]) for f in files],
     )
     if worktree:
