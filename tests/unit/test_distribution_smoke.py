@@ -89,3 +89,91 @@ def test_publication_consumes_shared_verified_build():
         "ini_options"
     ]["addopts"]
     assert "--cov-branch" in pytest_options and "--cov-fail-under=90" in pytest_options
+
+
+def _fake_release(monkeypatch, installed: set[str], version="1.2.3"):
+    commands = []
+
+    def run(command, **kwargs):
+        command = list(command)
+        commands.append(command)
+        assert "REDUCIO_API_KEY" not in kwargs["env"] and kwargs["cwd"] != Path.cwd()
+        out = ""
+        if "analyze" in command:
+            reports = Path(command[command.index("analyze") + 1]) / ".reducio"
+            reports.mkdir()
+            suffixes = ("json", "md", "html") if command[-1] == "all" else ("json",)
+            for suffix in suffixes:
+                (reports / f"report.{suffix}").write_text("")
+        if command[-1] == "version":
+            out = f"reducio {version}\n"
+        elif "-c" in command and "find_spec" in command[-1]:
+            out = str(any(repr(m) in command[-1] for m in installed))
+        return subprocess.CompletedProcess(command, 0, out, "")
+
+    monkeypatch.setattr(smoke_pypi.subprocess, "run", run)
+    checked = []
+    monkeypatch.setattr(smoke_pypi, "check_cli", lambda *args: checked.append(args))
+    return commands, checked
+
+
+@pytest.mark.parametrize(
+    "extras,installed,spec",
+    [
+        ("", set(), "reducio==1.2.3"),
+        ("reports", {"plotly"}, "reducio[reports]==1.2.3"),
+        ("llm,reports", {"plotly", "httpx"}, "reducio[llm,reports]==1.2.3"),
+    ],
+)
+def test_published_release_parity_per_extra(tmp_path, monkeypatch, extras, installed, spec):
+    release = tmp_path / "release"
+    (release / "scripts").mkdir(parents=True)
+    (release / "scripts/smoke_llm.py").write_text("")
+    commands, checked = _fake_release(monkeypatch, installed)
+    smoke_pypi.published("1.2.3", extras, release)
+    install = next(c for c in commands if "install" in c)
+    assert (
+        install[-1] == spec
+        and install[install.index("--index-url") + 1] == "https://pypi.org/simple"
+    )
+    docs = next(c for c in commands if any(str(part).endswith("doc_commands.py") for part in c))
+    assert docs[-1] == str(release)
+    assert not checked  # check_cli encodes current behavior; old releases differ
+    analyze = next(c for c in commands if "analyze" in c)
+    assert analyze[-1] == ("all" if "reports" in extras else "json")
+    llm = [c for c in commands if any(str(part).endswith("smoke_llm.py") for part in c)]
+    assert llm == (
+        [[llm[0][0], "-I", str(release / "scripts/smoke_llm.py")]] if "llm" in extras else []
+    )
+
+
+def test_published_release_rejects_wrong_extras(tmp_path, monkeypatch):
+    _fake_release(monkeypatch, {"plotly"})
+    with pytest.raises(AssertionError, match="plotly"):
+        smoke_pypi.published("1.2.3", "", tmp_path)
+    with pytest.raises(SystemExit, match="embeddings"):
+        smoke_pypi.published("1.2.3", "embeddings", tmp_path)
+
+
+def test_release_parity_workflow_is_manual_read_only_and_injection_safe():
+    root = Path(__file__).resolve().parents[2]
+    text = (root / ".github/workflows/release-parity.yml").read_text()
+    workflow = yaml.load(text, Loader=yaml.BaseLoader)
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["parity"]
+    assert job["strategy"]["matrix"]["extras"] == ["", "reports", "llm"]
+    step = job["steps"][-1]
+    # Inputs reach the shell only through env, never interpolated into the script.
+    assert "${{" not in step["run"] and step["env"]["TAG"] == "${{ inputs.tag }}"
+    assert "--release-dir release" in step["run"]
+
+
+def test_release_notes_pin_version_and_link_tag_docs():
+    from scripts.pyapp_release import release_notes
+
+    notes = release_notes(
+        {"version": "0.2.0rc1", "tag": "v0.2.0-rc1", "commit": "c" * 40, "binary_name": "b"}
+    )
+    assert 'pip install "reducio[reports]==0.2.0rc1"' in notes
+    assert "/blob/v0.2.0-rc1/docs/README.md" in notes

@@ -132,3 +132,23 @@ def test_history_job_policy_and_pr_annotations():
     )
     assert "--annotations github" in comparison["run"]
     assert "vars.REDUCIO_COMPARE_FAIL_ON || 'none'" in comparison["env"]["REDUCIO_COMPARE_FAIL_ON"]
+
+
+def test_pr_comment_is_opt_in_isolated_from_pr_code():
+    workflow = Path(__file__).resolve().parents[2] / ".github/workflows/analysis.yml"
+    jobs = yaml.safe_load(workflow.read_text())["jobs"]
+    comment = jobs["comment"]
+    assert comment["needs"] == "comparison"
+    for condition in (
+        "vars.REDUCIO_PR_COMMENT == 'true'",
+        "github.event.pull_request.head.repo.full_name == github.repository",
+        "always()",
+    ):
+        assert condition in comment["if"]
+    # Only this job can write, and it never checks out or installs PR code.
+    assert comment["permissions"] == {"pull-requests": "write"}
+    assert "permissions" not in jobs["comparison"]
+    assert not any("checkout" in step.get("uses", "") for step in comment["steps"])
+    assert not any("pip install" in step.get("run", "") for step in comment["steps"])
+    post = comment["steps"][-1]
+    assert "${{" not in post["run"] and "--edit-last" in post["run"]

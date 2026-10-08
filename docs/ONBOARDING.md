@@ -96,7 +96,8 @@ above is for contributors. Public usage routes are CI, PyPI, and Releases execut
 | `test.yml` | Shared pytest/branch-coverage, lint, build and isolated wheel smoke gate |
 | `installation.yml` | Editable and wheel installs, base install without optional deps, mocked API contract |
 | `publish.yml` | Shared verification → PyPI → published-wheel check → PyApp Release |
-| `analysis.yml` | Source overview; independent PR comparison with optional gates; main-only history and Pages |
+| `release-parity.yml` | Manual: re-test a published tag from PyPI per extra against the commands documented at that tag |
+| `analysis.yml` | Source overview; independent PR comparison with optional gates and opt-in PR comment; main-only history and Pages |
 
 See [CI.md](CI.md) for report access and [METRICS.md](METRICS.md) before changing
 counting rules. Fixtures are validated by pytest, including known parse failures.

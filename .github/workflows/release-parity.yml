@@ -1,0 +1,43 @@
+name: Release parity
+
+# Re-test one already-published release in clean environments: the exact PyPI
+# version per extra, its optional dependencies, and the commands documented at its tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published release tag, e.g. v1.2.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        extras: ['', 'reports', 'llm']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check out the release's documentation
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          path: release
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install and exercise the published release
+        env:
+          TAG: ${{ inputs.tag }}
+          EXTRAS: ${{ matrix.extras }}
+        run: |
+          python -m pip install packaging
+          VERSION="$(python -c 'import sys; from scripts.release_version import tag_version; print(tag_version(sys.argv[1]))' "$TAG")"
+          python -m scripts.smoke_pypi --published "$VERSION" --extras "$EXTRAS" --release-dir release

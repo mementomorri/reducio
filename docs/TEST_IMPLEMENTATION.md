@@ -70,6 +70,22 @@ python -m build
 python -m scripts.smoke_pypi --local --wheel-directory dist --commit "$(git rev-parse HEAD)"
 ```
 
+**Release parity** re-tests an already-published release. Run **Actions → Release
+parity** with a tag, or locally against a checkout/archive of that tag:
+
+```bash
+git archive v0.1.1 --prefix=release/ | tar -x
+python -m scripts.smoke_pypi --published 0.1.1 --extras reports --release-dir release
+```
+
+Each extra (`""`, `reports`, `llm`) gets a fresh venv with `reducio[extra]==VERSION`
+from public PyPI. The check asserts the reported version, that exactly the requested
+optional dependencies are installed, that every `reducio …` command documented at the
+tag (README, `docs/*.md`, workflows) parses against the installed CLI, that reports in
+the extra's formats are written, and — for `llm` — the tag's own mocked API contract.
+`tests/unit/test_docs_commands.py` runs the same documented-command parser on every
+commit, so docs and flags cannot drift.
+
 ## CI analysis job
 
 `.github/workflows/analysis.yml` runs a source overview on pushes/manual runs and a

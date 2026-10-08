@@ -92,6 +92,16 @@ chmod +x {binary}
 ./{binary} analyze . --report --format all
 ```
 
+Prefer PyPI? Pin this release and only the extras you need:
+
+```bash
+pip install "reducio=={package['version']}"            # analysis, checks, comparisons
+pip install "reducio[reports]=={package['version']}"   # + offline HTML reports
+pip install "reducio[llm]=={package['version']}"       # + model proposals (local-only unless --allow-remote)
+```
+
+Documentation for this release: https://github.com/mementomorri/reducio/blob/{package.get('tag', 'v' + package['version'])}/docs/README.md
+
 Python 3.14 and package dependencies are downloaded and installed on first launch.
 Internet access and writable user storage are required for initial setup; this is not an offline bundle.
 Git operations require Git on PATH. Target-project tests still require their own

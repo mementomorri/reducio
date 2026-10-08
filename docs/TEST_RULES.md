@@ -30,11 +30,11 @@ plan/application tests cover CRLF, UTF-8 BOM and declared non-UTF-8 source.
 **Scenario**: Provide two files with semantically identical logic (e.g., identical input validation blocks) but different variable names.
 **Status: implemented as suggestions.** An AST fingerprint (identifiers, literals
 and docstrings abstracted) groups structural clones and proposes copied utility modules. Applying writes those modules, but
-does not remove originals or rewrite callers. Extraction is restricted to self-contained
+does not remove originals or rewrite callers (`--rewrite` handles identical same-name copies; see SAFETY.md). Extraction is restricted to self-contained
 top-level functions; dependency/scope exclusions are explained. Proposed Python and
 source-qualified destinations are checked during planning and replay.
 Scenario tests group the four renamed validator pairs in the fixture corpus.
-Near-miss clones (different statements) are not detected.
+Near-miss clones (a few different statements) are suggested with their similarity; they are never rewritten.
 
 ### Test Case: Idiomatic Transformation (Pythonic Alignment)
 

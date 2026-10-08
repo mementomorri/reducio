@@ -27,6 +27,6 @@ patterns, and show measurably where complexity grows or shrinks.
 
 - Cross-file symbol/reference mapping, used only by commands that need it
   (impact analysis, safe renames, real deduplication with caller rewrites).
-- Near-miss clone detection beyond today's exact structural fingerprints.
+- Near-miss clone rewriting (today they are suggestions only).
 - Validated idioms with explicit preconditions and behavior tests.
 - PR-review integration, persistent idiom memory, multi-language support.

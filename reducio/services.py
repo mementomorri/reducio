@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import sys
+from pathlib import PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -51,11 +52,11 @@ class App:
     def analyze(self, path: str) -> AnalyzeResult:
         return self.analyzer.analyze(AnalyzeRequest(path=path, files=self._files()))
 
-    def deduplicate(self, path: str) -> RefactorPlan:
+    def deduplicate(self, path: str, rewrite: bool = False) -> RefactorPlan:
         agent = DeduplicatorAgent(self.workspace, session_store=self.sessions)
         files = self._files()
         status("Fingerprinting functions and preparing duplicate proposals...")
-        return agent.find_duplicates(DeduplicateRequest(path=path, files=files))
+        return agent.find_duplicates(DeduplicateRequest(path=path, files=files), rewrite=rewrite)
 
     def idiomatize(self, path: str) -> RefactorPlan:
         self._prepare_llm()
@@ -126,10 +127,11 @@ class App:
             )
         # A whole-file rewrite (non-empty original) must not silently drop a def/class —
         # guards against LLM rewrites (or future bugs) deleting code. Advisory modules
-        # (original="") are exempt.
+        # (original="") are exempt; a def replaced by a verified sibling import is kept.
         for c in plan.changes:
             if c.original.strip() and c.path.endswith(".py"):
                 lost = _def_names(c.original) - _def_names(c.modified)
+                lost -= _sibling_rebound(c, plan, self.workspace.root)
                 if lost:
                     return RefactorResult(
                         session_id=plan.session_id,
@@ -221,3 +223,30 @@ def _def_names(src: str) -> set[str]:
         for n in ast.walk(tree)
         if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
     }
+
+
+def _sibling_rebound(change, plan: RefactorPlan, root) -> set[str]:
+    """Names bound by top-level `from .<stem> import name` where `<stem>.py` defines them."""
+    try:
+        tree = ast.parse(change.modified)
+    except SyntaxError:
+        return set()
+    planned = {c.path: c.modified for c in plan.changes}
+    names = set()
+    for node in tree.body:
+        if not (isinstance(node, ast.ImportFrom) and node.level == 1 and node.module):
+            continue
+        sibling = (PurePosixPath(change.path).parent / f"{node.module}.py").as_posix()
+        source = planned.get(sibling)
+        if source is None and (root / sibling).is_file():
+            source = (root / sibling).read_text(errors="replace")
+        try:
+            defined = {
+                d.name
+                for d in ast.parse(source or "").body
+                if isinstance(d, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+            }
+        except SyntaxError:
+            continue
+        names |= {a.name for a in node.names if a.asname in (None, a.name) and a.name in defined}
+    return names

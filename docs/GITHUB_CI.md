@@ -80,9 +80,19 @@ matched function's CC or cognitive score increases (including mixed changes).
 Unchanged existing hotspots do not fail. Default `none` is report-only.
 
 Configure the default with YAML `compare_fail_on` or environment variable
-`REDUCIO_COMPARE_FAIL_ON`; explicit CLI wins. No PR comments, secrets or write
-permissions are required. Reports are written before a gate failure; retain
-the `if: always()` summary/upload steps.
+`REDUCIO_COMPARE_FAIL_ON`; explicit CLI wins. No secrets or write permissions are
+required. Reports are written before a gate failure; retain the `if: always()`
+summary/upload steps.
+
+## Optional PR comment
+
+This repository's [Analysis workflow](../.github/workflows/analysis.yml) can also post
+the comparison Markdown as one sticky PR comment, updated on each push. Enable it with
+the repository variable `REDUCIO_PR_COMMENT=true`. A separate `comment` job, which
+never checks out or runs PR code, holds the only `pull-requests: write` token and
+just downloads the report artifact. PRs from forks are skipped because their token
+is read-only; use the job summary and artifact there. To copy it, take the whole
+`comment` job together with a comparison job that uploads `reducio-comparison`.
 
 ## Optional quality gate
 

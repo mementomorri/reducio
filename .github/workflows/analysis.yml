@@ -224,3 +224,37 @@ jobs:
           else
             echo "Comparison unavailable; inspect the failed step above." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # Opt-in sticky PR comment (repository variable REDUCIO_PR_COMMENT=true). Kept apart
+  # from `comparison`, which runs PR code: this job holds the only write token and only
+  # downloads the report artifact. Fork PRs are skipped (their token is read-only).
+  comment:
+    needs: comparison
+    if: >-
+      always() && github.event_name == 'pull_request' && vars.REDUCIO_PR_COMMENT == 'true'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: reducio-comparison
+          path: comparison
+      - name: Post or update the comparison comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import glob, pathlib, os
+          parts = [pathlib.Path(p).read_text(encoding="utf-8") for p in sorted(glob.glob("comparison/*.md"))]
+          body = "\n\n".join(parts) or "Comparison unavailable; see the workflow run."
+          link = f"\n\n[Full reports and HTML dashboard]({os.environ['RUN_URL']})"
+          # GitHub caps comments at 65,536 characters.
+          pathlib.Path("comment.md").write_text(body[: 65000 - len(link)] + link, encoding="utf-8")
+          PY
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md --edit-last --create-if-none \
+            || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md

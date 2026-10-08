@@ -20,7 +20,7 @@ recovery, but nothing proves semantic equivalence. See [safety limits](docs/SAFE
 | `compare` — revisions or explicit working tree | done | `--against` merge base, changed-file deltas, opt-in PR gates/annotations. |
 | `history` — rebuilt first-parent trends | done | Configurable 100-commit default, root aliases, gaps, persistent hotspots, offline drill-down. |
 | `check` — naming, function length, per-function cyclomatic complexity | done | Severity gates, per-rule overrides, per-path suppression; source errors stay fatal. |
-| `deduplicate` — AST-fingerprint clones → proposed `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py` | done (suggest-only) | Exact structural clones of standalone top-level functions; does **not** rewrite call sites. |
+| `deduplicate` — AST-fingerprint clones → proposed `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py` | done | Suggests for structural clones; `--rewrite` turns identical same-name copies in a package into imports of one shared module (callers unchanged). |
 | `pattern` — factory/strategy/observer/singleton templates | done | Advisory modules by default; opt-in model rewrite. |
 | `idiomatize` — model-proposed idiomatic rewrites | done (model-only) | Requires `--llm-api`/`--model`; proposals are reviewed, never trusted. |
 | Thresholds | done | Hot = CC ≥ `cyclomatic_complexity` or cognitive ≥ `cognitive_complexity`, everywhere; `lines_of_code` drives `long_function`. |
@@ -40,20 +40,25 @@ gap between the original vision and the tool, ordered from clarity to features:
 - [x] **Cognitive threshold policy:** a function is hot when CC **or** cognitive
   reaches its threshold — one predicate for analysis, checks, comparisons, gates,
   history and charts. See [METRICS.md](docs/METRICS.md).
-- [ ] **Near-miss clones:** deduplicate finds exact structural clones only;
-  near-miss detection needs a fuzzy matcher.
+- [x] **Near-miss clones:** leftover functions ≥90% similar (normalized AST, stdlib
+  `difflib`) are suggested with their similarity; never rewritten.
 - [ ] **Dependency/reference mapping:** resolve imports, symbols and callers for
-  impact analysis; report ambiguity instead of guessing.
-- [ ] **Real deduplication and pattern integration:** rewrite imports/callers and
-  remove originals only when validated; measure actual LOC/complexity changes.
-- [ ] **Release parity checks:** test documented commands/extras against a
-  published release in a clean environment.
+  impact analysis; report ambiguity instead of guessing. Only the workspace
+  name-use scan that `--rewrite` needs exists.
+- [x] **Real deduplication (exact copies):** `deduplicate --rewrite` replaces identical
+  same-name copies in a package with imports of one shared module, refuses
+  identity-observable uses, and measures LOC/CC. Pattern integration and rewriting
+  renamed clones remain open.
+- [x] **Release parity checks:** the manual Release parity workflow installs a chosen
+  published tag per extra in a clean venv and parses its documented commands; release
+  notes pin the version. Documented commands are parsed on every commit.
 
 ## Mid-term
 
 - **Cross-file impact analysis** — a symbol-graph layer *only when a command
   consumes it* (dead-code detection, safe-rename impact, real dedup rewrite).
-- **Further reporting** — hosted PR previews and optional PR comments.
+- **Further reporting** — hosted PR previews (optional sticky PR comments are done:
+  `REDUCIO_PR_COMMENT=true`, see [GITHUB_CI.md](docs/GITHUB_CI.md#optional-pr-comment)).
 
 ## Vision (not scheduled)
 

@@ -11,6 +11,28 @@ Model planning sends source to the configured API even in dry-run mode, and only
 to a loopback host unless `--allow-remote` grants consent; see
 [API setup and privacy](LLM.md). Saved-plan replay makes no model request.
 
+## Exact-copy deduplication (`deduplicate --rewrite`)
+
+Default `deduplicate` only suggests. With `--rewrite`, identical copies — same name,
+identical syntax tree including docstring, defaults and annotations — of a
+self-contained top-level function in **one package directory** (with `__init__.py`)
+move to a new sibling module `_<name>_shared.py`; each copy is replaced in place by
+`from ._<name>_shared import <name>`. The module-level name stays bound, so callers
+and importers are not rewritten and keep working. Afterwards the copies are one
+function object: `__module__` names the shared module, and attributes are shared.
+
+A group is refused, with an `unsafe_duplicate` diagnostic, when sharing one object
+could be observed or relative imports could fail: non-constant defaults, string
+annotations, self-reference, differing `__future__` imports, star imports or
+`exec`/`eval`/`globals`/`locals`/`vars` in a copy's module, a `__main__` guard or
+shebang, the name being rebound or defined twice, or **any use of the name anywhere
+in the scanned workspace other than a direct call** (dict values, attribute access,
+`f.cache = …`). Code outside the scanned workspace and `getattr` by string are not
+checked. Structural clones that differ in names or literals stay suggestions. The
+apply guard accepts a removed definition only when the replacing relative import
+names a sibling that defines it. The plan states predicted line/CC totals; the
+apply report measures the actual change.
+
 ## Pipeline
 
 1. Validate plan completeness, paths, syntax, definition names, destination

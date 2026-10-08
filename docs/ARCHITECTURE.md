@@ -76,9 +76,11 @@ offline Plotly/JavaScript consume that same result, without a data branch or ser
 
 Same default Python walk scope. Idiomatize is model-only and emits **one whole-file
 change per file**. Named patterns also have an optional model path; default templates
-are advisory modules. Deduplicate fingerprints self-contained top-level functions and is
-suggestion-only — it proposes `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py` and does
-not rewrite call sites.
+are advisory modules. Deduplicate fingerprints self-contained top-level functions and by
+default only suggests `utils/<stem>_<symbol>_<line>_dedup_<sha12>.py`. With `--rewrite`
+it moves identical same-name copies in one package to `_<name>_shared.py` and replaces
+each with a relative import; a workspace-wide name-use scan refuses identity-observable
+uses. No import/caller graph exists beyond that scan.
 
 ### Apply
 

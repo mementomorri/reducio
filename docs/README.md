@@ -113,6 +113,7 @@ reducio compare . --base HEAD~1 # Changed-file complexity vs a committed revisio
 reducio compare . --against origin/main --worktree # Whole branch plus current edits
 reducio history . --report --format all # Git history trends (up to 100 commits)
 reducio deduplicate .          # Structural clones → proposed utils modules
+reducio deduplicate . --rewrite --dry-run  # Identical copies in a package → one shared module
 reducio idiomatize . --llm-api openai --model ID --allow-remote  # Model-proposed rewrites (hosted API)
 reducio pattern factory .      # Design-pattern templates
 reducio check .                # Naming, function length, cyclomatic-complexity issues
@@ -130,7 +131,7 @@ commit reviewed changes manually. See [runner setup and recovery](SAFETY.md).
 
 | Command | What the plan contains |
 |---------|-------------------------|
-| `deduplicate` | An AST fingerprint (identifiers, literals and docstrings abstracted; 2+ statements) groups exact structural clones among self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Call sites are **not** rewritten. |
+| `deduplicate` | An AST fingerprint (identifiers, literals and docstrings abstracted; 2+ statements) groups exact structural clones among self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Near-miss clones (≥90% similar) are suggested separately. Call sites are **not** rewritten. `--rewrite` replaces identical same-name copies in a package with imports of one `_<name>_shared.py` module (see SAFETY.md). |
 | `pattern` | All default patterns, including singleton, propose new advisory modules. A configured model enables optional whole-module rewrites for applicable named patterns. |
 | `idiomatize` | Model-only: requires `--llm-api` and `--model` (exit 2 otherwise) and proposes whole-module rewrites that require behavior review. |
 | `apply` | Exact whole-file byte checks, file snapshots, scoped recovery, opt-in target tests and whole-file metrics. No Git writes or semantic guarantee. See [SAFETY.md](SAFETY.md). |
@@ -145,6 +146,7 @@ Flags are command-specific, not global:
 | `analyze`, `compare`, `deduplicate`, `idiomatize`, `check` | `--verbose` / `-v`, `--no-verbose` |
 | `deduplicate`, `idiomatize`, `pattern` | `--dry-run` (save unified diff, diagnostics, provenance, and session JSON) |
 | `pattern` | `--allow-fallback` (explicitly permit template fallback after model failure) |
+| `deduplicate` | `--rewrite` (replace identical copies with imports of one shared sibling module) |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--yes` (bypass prompts, not dirty-tree warnings) |
 | `analyze`, `compare`, `history`, `check` | `--report` / `-r` |
 | `deduplicate`, `idiomatize`, `pattern`, `apply` | `--run-tests` (after edits only), `--report` (Markdown + JSON, including application failures) |

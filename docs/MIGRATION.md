@@ -13,6 +13,17 @@ and the PyApp executable in Releases.
 - `PlanningProvenance` gains optional `endpoint`, `prompt_bytes` and
   `prompt_sha256`; older saved plans load unchanged.
 
+## Deduplication and hotspot policy (2026-10)
+
+- **Hotspots** now include functions whose cognitive score reaches
+  `complexity_thresholds.cognitive_complexity` (default 15), not only CC; `check`
+  reports one `high_complexity_function` finding naming every crossed metric. Raise
+  `cognitive_complexity` to restore CC-only selection.
+- `deduplicate` also suggests near-miss clones (≥90% similar normalized AST).
+- `deduplicate --rewrite` (opt-in) replaces identical copies with imports.
+- Functions reading module dunders such as `__name__` are no longer proposed as
+  shared utilities, nor are functions relying on a `global`-rebound builtin.
+
 ## Code-reduction follow-up (2026-10)
 
 - **Embeddings removed.** `deduplicate` groups exact structural clones by AST
@@ -20,7 +31,7 @@ and the PyApp executable in Releases.
   the standard library. The `[embeddings]` extra, `reducio.embeddings`,
   `EmbeddingService`, `CodeBlock`, `DuplicateGroup`, `AnalyzeResult.duplicates`
   and `DeduplicateRequest.similarity_threshold` are gone; no model is downloaded.
-  Near-miss (non-identical) clones are no longer suggested.
+  Near-miss clones later returned as suggestions (see "Deduplication and hotspot policy" above).
 - **Heuristic idioms removed.** `reducio.idioms` is deleted and `idiomatize` is
   model-only: it exits 2 without `--llm-api`/`--model`. Its `--allow-fallback` flag
   and `IdiomatizeRequest.allow_fallback` are removed (`pattern --allow-fallback`

@@ -495,12 +495,17 @@ def deduplicate(
     config: Config = None,
     verbose: Verbose = None,
     quiet: Quiet = False,
+    rewrite: bool = typer.Option(
+        False,
+        "--rewrite",
+        help="Replace identical same-name copies in a package with imports of one shared module",
+    ),
 ):
-    """Find duplicate code blocks and propose shared utility modules (suggestion only — does not rewrite call sites)."""
+    """Find duplicate functions: suggest shared modules, or with --rewrite replace exact copies by imports."""
     cfg = _get_cfg(config, verbose)
     _plan_command(
         "deduplicate",
-        lambda svc: svc.deduplicate(str(path)),
+        lambda svc: svc.deduplicate(str(path), rewrite=rewrite),
         cfg,
         path,
         output_dir,

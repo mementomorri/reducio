@@ -53,7 +53,7 @@ Reports default to `.reducio/`; open the HTML directly in a browser, without a s
 For optional code changes, preview with `reducio pattern strategy . --dry-run` or a
 model-backed `reducio idiomatize . --llm-api … --model … --dry-run` (hosted APIs also need
 `--allow-remote`: source stays local by default), and review before
-applying with `--run-tests`. Deduplication is suggestion-only; it does not rewrite callers.
+applying with `--run-tests`. Deduplication suggests by default; `deduplicate --rewrite` replaces identical copies inside a package with imports of one shared module (callers unchanged; see [safety](docs/SAFETY.md)).
 
 ## License
 

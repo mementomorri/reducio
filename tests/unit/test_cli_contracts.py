@@ -272,3 +272,10 @@ def test_unattended_application_requires_yes(cli_case, monkeypatch, command, yes
     if not yes and not empty:
         assert "--yes" in result.output and "--dry-run" in result.output
         cli_case.service.apply_plan.assert_not_called()
+
+
+@pytest.mark.parametrize("options,expected", [([], False), (["--rewrite"], True)])
+def test_deduplicate_rewrite_passthrough(cli_case, options, expected):
+    result = cli_case.invoke("deduplicate", "--dry-run", *options)
+    assert result.exit_code == 0, result.output
+    assert cli_case.service.deduplicate.call_args.kwargs == {"rewrite": expected}
