@@ -166,7 +166,7 @@ def test_dependencies_rejects_dunders_and_global_rebinding(tmp_path):
     )
     files = [FileInfo(path="m.py", content=module), FileInfo(path="n.py", content=module)]
     plan = DeduplicatorAgent(Workspace(str(tmp_path))).find_duplicates(
-        DeduplicateRequest(path=str(tmp_path), files=files)
+        DeduplicateRequest(path=str(tmp_path), files=files), rewrite=True
     )
     assert not plan.changes  # `size` needs the module's rebound `len`
     assert any(d.code == "dependencies" and "size" in d.message for d in plan.diagnostics)
@@ -263,3 +263,58 @@ def test_near_miss_is_never_rewritten(tmp_path):
     (pkg / "b.py").write_text(LONG.replace("        count += 1\n", "        count += 2\n"))
     _, plan = _rewrite(tmp_path)
     assert not plan.changes
+
+
+def test_rewrite_spans_ignore_form_feeds_and_unicode_separators(tmp_path):
+    # str.splitlines would split on \x0c and  ; AST line numbers do not.
+    pkg = _package(tmp_path, a_extra="X = 1\n\x0c\n# sep   here\n")
+    service, plan = _rewrite(tmp_path)
+    assert plan.complete, plan.diagnostics
+    assert service.apply_plan(plan).success
+    run = subprocess.run(
+        [sys.executable, "-c", "import pkg.a, pkg.b; assert pkg.a.slug is pkg.b.slug"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == 0, run.stderr
+    assert (pkg / "a.py").read_text().startswith("X = 1\n\x0c\n# sep   here\nfrom ._slug_shared")
+
+
+def test_rewrite_refuses_aliased_identity_escape(tmp_path):
+    _package(tmp_path)
+    (tmp_path / "elsewhere.py").write_text(
+        "from pkg.a import slug as make\nREGISTRY = {'k': make}\n"
+    )
+    _, plan = _rewrite(tmp_path)
+    assert not plan.changes
+    assert any("direct call" in d.message for d in plan.diagnostics)
+
+
+def test_rewrite_scans_the_whole_git_work_tree(temp_git_repo):
+    src = temp_git_repo / "src"
+    src.mkdir()
+    _package(src)
+    (src / "registry.py").write_text("from pkg.a import slug\nREGISTRY = {'s': slug}\n")
+    service = App(str(src / "pkg"), AppConfig())
+    plan = service.deduplicate(str(src / "pkg"), rewrite=True)
+    assert not plan.changes
+    assert any("direct call" in d.message for d in plan.diagnostics)
+    (src / "registry.py").write_text("def broken(:\n")
+    plan = App(str(src / "pkg"), AppConfig()).deduplicate(str(src / "pkg"), rewrite=True)
+    assert not plan.changes
+    assert any("cannot check uses in unreadable" in d.message for d in plan.diagnostics)
+
+
+def test_suggestions_keep_functions_that_need_module_names(tmp_path):
+    copy = "def clean(text):\n    text = re.sub('x', '', text)\n    return text.strip()\n"
+    files = [FileInfo(path=f"{m}.py", content="import re\n\n\n" + copy) for m in "mn"]
+    agent = DeduplicatorAgent(Workspace(str(tmp_path)))
+    plan = agent.find_duplicates(DeduplicateRequest(path=str(tmp_path), files=files))
+    [change] = plan.changes
+    assert change.modified.startswith("# Needs from m.py: re\n")
+    assert "needs module names: re" in change.description
+    strict = agent.find_duplicates(
+        DeduplicateRequest(path=str(tmp_path), files=files), rewrite=True
+    )
+    assert not strict.changes

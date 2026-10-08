@@ -94,7 +94,9 @@ class App:
             from reducio.llm import LLMClient
             from reducio.llm.router import LOOPBACK, endpoint_host
 
-            host = endpoint_host(self.cfg)
+            # No guessed default host before an API format is chosen.
+            chosen = self.cfg.llm_api or self.cfg.llm_base_url
+            host = endpoint_host(self.cfg) if chosen else ""
             consent = (
                 "local"
                 if host in LOOPBACK
@@ -107,7 +109,7 @@ class App:
             # Disclosure, not progress: shown even with --quiet.
             print(
                 f"[reducio] Model proposals: {self.cfg.llm_api or 'unset API'} model "
-                f"{self.cfg.model or 'unset'} at {host or 'invalid endpoint'} ({consent}); "
+                f"{self.cfg.model or 'unset'} at {host or ('invalid endpoint' if chosen else 'unset endpoint')} ({consent}); "
                 "the full source of each planned file is sent, also with --dry-run.",
                 file=sys.stderr,
                 flush=True,

@@ -25,9 +25,11 @@ A group is refused, with an `unsafe_duplicate` diagnostic, when sharing one obje
 could be observed or relative imports could fail: non-constant defaults, string
 annotations, self-reference, differing `__future__` imports, star imports or
 `exec`/`eval`/`globals`/`locals`/`vars` in a copy's module, a `__main__` guard or
-shebang, the name being rebound or defined twice, or **any use of the name anywhere
-in the scanned workspace other than a direct call** (dict values, attribute access,
-`f.cache = …`). Code outside the scanned workspace and `getattr` by string are not
+shebang, the name being rebound or defined twice, or **any use of the name — or of a
+`from … import name as alias` alias — other than a direct call, anywhere in the Git
+work tree** (dict values, attribute access, `f.cache = …`), even when the target is a
+subdirectory. Outside Git the target alone is scanned. An unreadable or unparsable file
+in the work tree refuses every group (its uses are unknown). `getattr` by string is not
 checked. Structural clones that differ in names or literals stay suggestions. The
 apply guard accepts a removed definition only when the replacing relative import
 names a sibling that defines it. The plan states predicted line/CC totals; the

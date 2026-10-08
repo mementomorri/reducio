@@ -87,7 +87,8 @@ summary/upload steps.
 ## Optional PR comment
 
 This repository's [Analysis workflow](../.github/workflows/analysis.yml) can also post
-the comparison Markdown as one sticky PR comment, updated on each push. Enable it with
+the comparison Markdown as one sticky PR comment, updated on each push. The comment
+carries a hidden `<!-- reducio-comparison -->` marker; only that comment is edited. Enable it with
 the repository variable `REDUCIO_PR_COMMENT=true`. A separate `comment` job, which
 never checks out or runs PR code, holds the only `pull-requests: write` token and
 just downloads the report artifact. PRs from forks are skipped because their token

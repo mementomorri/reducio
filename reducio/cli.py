@@ -173,28 +173,6 @@ def _require_complete(plan: RefactorPlan) -> None:
         raise typer.Exit(1)
 
 
-def _has_changes(plan: RefactorPlan, cfg=None, path=None, output_dir=None, report=False) -> bool:
-    if report and (not plan.complete or any(d.severity == "error" for d in plan.diagnostics)):
-        _finish_apply(
-            RefactorResult(
-                session_id=plan.session_id,
-                success=False,
-                changes=[],
-                tests_passed=False,
-                error="Plan is incomplete or failed preflight",
-            ),
-            cfg,
-            path,
-            output_dir,
-            report,
-        )
-    _require_complete(plan)
-    if not plan.changes:
-        typer.echo("No changes to apply.")
-        return False
-    return True
-
-
 def _finish_apply(result, cfg, path, output_dir, report):
     if report:
         try:
@@ -256,7 +234,18 @@ def _review_and_apply(
     if dry_run:
         _dry_run_report(plan, cfg, command, path, output_dir)
         return
-    if not _has_changes(plan, cfg, path, output_dir, report):
+    if report and (not plan.complete or any(d.severity == "error" for d in plan.diagnostics)):
+        failed = RefactorResult(
+            session_id=plan.session_id,
+            success=False,
+            changes=[],
+            tests_passed=False,
+            error="Plan is incomplete or failed preflight",
+        )
+        _finish_apply(failed, cfg, path, output_dir, report)  # exits 1 after the report
+    _require_complete(plan)
+    if not plan.changes:
+        typer.echo("No changes to apply.")
         return
     _check_git(str(path.resolve()), yes)
     _require_approval(yes)

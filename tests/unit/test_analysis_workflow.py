@@ -151,4 +151,6 @@ def test_pr_comment_is_opt_in_isolated_from_pr_code():
     assert not any("checkout" in step.get("uses", "") for step in comment["steps"])
     assert not any("pip install" in step.get("run", "") for step in comment["steps"])
     post = comment["steps"][-1]
-    assert "${{" not in post["run"] and "--edit-last" in post["run"]
+    assert "${{" not in post["run"] and "--edit-last" not in post["run"]
+    # Only the comment carrying our hidden marker is ever edited.
+    assert post["run"].count("<!-- reducio-comparison -->") == 2

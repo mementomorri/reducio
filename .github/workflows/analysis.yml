@@ -251,10 +251,16 @@ jobs:
           python3 - <<'PY'
           import glob, pathlib, os
           parts = [pathlib.Path(p).read_text(encoding="utf-8") for p in sorted(glob.glob("comparison/*.md"))]
-          body = "\n\n".join(parts) or "Comparison unavailable; see the workflow run."
+          # The hidden marker identifies our comment; other bot comments are never edited.
+          body = "<!-- reducio-comparison -->\n" + ("\n\n".join(parts) or "Comparison unavailable; see the workflow run.")
           link = f"\n\n[Full reports and HTML dashboard]({os.environ['RUN_URL']})"
           # GitHub caps comments at 65,536 characters.
           pathlib.Path("comment.md").write_text(body[: 65000 - len(link)] + link, encoding="utf-8")
           PY
-          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md --edit-last --create-if-none \
-            || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq '.[] | select(.body | startswith("<!-- reducio-comparison -->")) | .id' | head -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md >/dev/null
+          else
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+          fi

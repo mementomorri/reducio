@@ -166,14 +166,28 @@ def outer(x):
     agent = DeduplicatorAgent(
         Workspace(str(tmp_path)), session_store=SessionStore(str(tmp_path / "sessions"))
     )
-    blocks = agent._extract_blocks([FileInfo(path="a.py", content=source)])
+    files = [FileInfo(path="a.py", content=source)]
+    # Strict (--rewrite) keeps only self-contained functions...
+    blocks = agent._extract_blocks(files, strict=True)
     assert {node.name for _, node, _ in blocks} == {"safe", "outer"}
     for _, _, content in blocks:
         ast.parse(content)
-    plan = agent.find_duplicates(
-        DeduplicateRequest(path=str(tmp_path), files=[FileInfo(path="a.py", content=source)])
-    )
-    assert {d.code for d in plan.diagnostics} == {"dependencies", "unsupported_scope"}
+    # ...suggestions also keep dependent ones and record the module names they need.
+    loose = agent._extract_blocks(files)
+    assert {node.name for _, node, _ in loose} == {"safe", "dependent", "defaults", "outer"}
+    assert agent._needs[("a.py", 5)] == ["CONST", "math"]
+    plan = agent.find_duplicates(DeduplicateRequest(path=str(tmp_path), files=files), rewrite=True)
+    # One diagnostic per file and reason, naming every skipped function.
+    assert sorted((d.code, d.message) for d in plan.diagnostics) == [
+        (
+            "dependencies",
+            "Skipped 2 (decorators or module dependencies require review): dependent, defaults.",
+        ),
+        (
+            "unsupported_scope",
+            "Skipped 2 (methods and nested functions are not standalone utilities): method, inner.",
+        ),
+    ]
     assert plan.complete
 
 

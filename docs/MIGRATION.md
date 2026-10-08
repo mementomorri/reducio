@@ -21,6 +21,10 @@ and the PyApp executable in Releases.
   `cognitive_complexity` to restore CC-only selection.
 - `deduplicate` also suggests near-miss clones (≥90% similar normalized AST).
 - `deduplicate --rewrite` (opt-in) replaces identical copies with imports.
+- Suggestions (without `--rewrite`) now include functions that use module names
+  (imports, globals); the needed names are listed in the proposed module and
+  description. `--rewrite` still only moves self-contained functions. Skip
+  diagnostics are one summary per file and reason instead of one per function.
 - Functions reading module dunders such as `__name__` are no longer proposed as
   shared utilities, nor are functions relying on a `global`-rebound builtin.
 

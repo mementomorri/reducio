@@ -12,6 +12,7 @@ from pathlib import Path
 
 from reducio.agents.base import BaseAgent
 from reducio.analysis import analyze_files, totals
+from reducio.compare import CompareError, _git
 from reducio.models import (
     DeduplicateRequest,
     FileChange,
@@ -22,7 +23,7 @@ from reducio.models import (
     RefactorPlan,
 )
 from reducio.plan_review import advisory_path
-from reducio.repo import detect_language
+from reducio.repo import detect_language, walk
 from reducio.workspace import Workspace
 
 Block = tuple[str, ast.FunctionDef | ast.AsyncFunctionDef, str]  # (path, node, source)
@@ -35,7 +36,7 @@ class DeduplicatorAgent(BaseAgent):
         self._begin_plan()
         files = request.files or self.workspace.list_files()
         groups: dict[str, list[Block]] = defaultdict(list)
-        for block in self._extract_blocks(files):
+        for block in self._extract_blocks(files, strict=rewrite):
             if key := _fingerprint(block[2]):
                 groups[key].append(block)
         duplicates = [group for group in groups.values() if len(group) > 1]
@@ -51,9 +52,9 @@ class DeduplicatorAgent(BaseAgent):
             )
         )
         near = _near_misses({key: group[0] for key, group in groups.items() if len(group) == 1})
-        changes = [_dedup_change(group) for group in duplicates]
+        changes = [_dedup_change(group, self._needs) for group in duplicates]
         changes += [
-            _dedup_change(group, f"near-miss, {math.floor(ratio * 100)}% similar")
+            _dedup_change(group, self._needs, f"near-miss, {math.floor(ratio * 100)}% similar")
             for group, ratio in near
         ]
         return self._finalize_plan(
@@ -66,12 +67,17 @@ class DeduplicatorAgent(BaseAgent):
 
     def _rewrite_exact(self, duplicates: list[list[Block]], files: list[FileInfo]) -> RefactorPlan:
         by_path = {f.path: f for f in files}
-        trees = []
+        trees, self._unverified = [], []
         for f in files:
             try:
                 trees.append(f.tree)
             except SyntaxError, ValueError:
                 pass  # already an error diagnostic: the plan is incomplete
+        for f in self._outside_files(files):
+            try:
+                trees.append(f.tree)
+            except SyntaxError, ValueError:
+                self._unverified.append(f.path)  # uses there are unknown: refuse, never guess
         edits: dict[str, list[tuple[ast.FunctionDef | ast.AsyncFunctionDef, str]]] = defaultdict(
             list
         )
@@ -193,12 +199,34 @@ class DeduplicatorAgent(BaseAgent):
                 reason = "definition shares a line with other code"
             if reason:
                 return f"{path}: {reason}"
+        if self._unverified:
+            return f"cannot check uses in unreadable {self._unverified[0]}"
         if _escapes(name, trees):
             return f"'{name}' is used other than as a direct call (identity could be observed)"
         return None
 
-    def _extract_blocks(self, files: list[FileInfo]) -> list[Block]:
+    def _outside_files(self, files: list[FileInfo]) -> list[FileInfo]:
+        """Included modules elsewhere in the Git work tree, scanned only for uses."""
+        root = self.workspace.root
+        try:
+            top = Path(_git(root, "rev-parse", "--show-toplevel").decode().strip())
+        except CompareError:
+            return []  # outside Git, the target is the whole program we can see
+        if top.resolve() == root:
+            return []  # the target is the whole work tree: nothing outside it
+        inside = {(root / f.path).resolve() for f in files}
+        cfg = self.workspace.cfg
+        return [
+            f
+            for f in walk(str(top), cfg.exclude_patterns, cfg.include_patterns)
+            if (top / f.path).resolve() not in inside
+        ]
+
+    def _extract_blocks(self, files: list[FileInfo], strict: bool = False) -> list[Block]:
+        """Top-level undecorated functions. Strict (``--rewrite``) also drops any that need
+        module names; suggestions keep them and record the names in ``self._needs``."""
         blocks: list[Block] = []
+        self._needs: dict[tuple[str, int], list[str]] = {}
         for f in files:
             if not f.error and detect_language(f.path) == Language.UNKNOWN:
                 continue
@@ -216,32 +244,42 @@ class DeduplicatorAgent(BaseAgent):
                 )
                 continue
             top = [n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
-            for node in ast.walk(tree):
-                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node not in top:
-                    self.diagnostics.append(
-                        PlanDiagnostic(
-                            code="unsupported_scope",
-                            file=f.path,
-                            message=f"Skipped {node.name}: methods and nested functions are not standalone utilities.",
-                        )
-                    )
+            nested = [
+                n.name
+                for n in ast.walk(tree)
+                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n not in top
+            ]
             bindings = {
                 s.get_name()
                 for s in module_scope.get_symbols()
                 if s.is_assigned() or s.is_imported()
             } | _global_rebindings(module_scope)
+            skipped = []
             for node in top:
                 content = ast.get_source_segment(f.content, node) or ""
-                if node.decorator_list or _dependencies(content, node.name, bindings):
+                needs = sorted(_dependencies(content, node.name, bindings))
+                if node.decorator_list or (strict and needs):
+                    skipped.append(node.name)
+                    continue
+                self._needs[(f.path, node.lineno)] = needs
+                blocks.append((f.path, node, content))
+            # One line per file and reason, not one per function.
+            for code, names, reason in (
+                (
+                    "unsupported_scope",
+                    nested,
+                    "methods and nested functions are not standalone utilities",
+                ),
+                ("dependencies", skipped, "decorators or module dependencies require review"),
+            ):
+                if names:
                     self.diagnostics.append(
                         PlanDiagnostic(
-                            code="dependencies",
+                            code=code,
                             file=f.path,
-                            message=f"Skipped {node.name}: decorators or external dependencies require review.",
+                            message=f"Skipped {len(names)} ({reason}): {', '.join(names)}.",
                         )
                     )
-                    continue
-                blocks.append((f.path, node, content))
         return blocks
 
 
@@ -302,15 +340,20 @@ def _near_misses(singles: dict[str, Block]) -> list[tuple[list[Block], float]]:
     return groups
 
 
-def _dedup_change(group: list[Block], kind: str = "") -> FileChange:
+def _dedup_change(
+    group: list[Block], needs: dict[tuple[str, int], list[str]], kind: str = ""
+) -> FileChange:
     path, node, content = group[0]
+    names = needs.get((path, node.lineno), [])
+    header = f"# Needs from {path}: {', '.join(names)}\n" if names else ""
     return FileChange(
         path=advisory_path("utils", path, f"{node.name}_{node.lineno}_dedup"),
         original="",
-        modified=content,
+        modified=header + content,
         description=(
             f"Proposed shared util for '{node.name}' from {len(group)} sites "
             + (f"({kind}: copies differ; reconcile before adopting) " if kind else "")
+            + (f"(needs module names: {', '.join(names)}) " if names else "")
             + "(suggestion only; applying writes the utility module; "
             "originals and call sites are not rewritten)"
         ),
@@ -427,8 +470,15 @@ def _escapes(name: str, trees: list[ast.Module]) -> bool:
     """True if any load of `name` is not a direct call (identity could be observed)."""
     for tree in trees:
         called = {id(n.func) for n in ast.walk(tree) if isinstance(n, ast.Call)}
+        aliases = {name} | {  # `from m import name as other` binds the same object
+            a.asname
+            for n in ast.walk(tree)
+            if isinstance(n, ast.ImportFrom)
+            for a in n.names
+            if a.name == name and a.asname
+        }
         for n in ast.walk(tree):
-            used = (isinstance(n, ast.Name) and n.id == name) or (
+            used = (isinstance(n, ast.Name) and n.id in aliases) or (
                 isinstance(n, ast.Attribute) and n.attr == name
             )
             if used and isinstance(getattr(n, "ctx", None), ast.Load) and id(n) not in called:
@@ -437,10 +487,12 @@ def _escapes(name: str, trees: list[ast.Module]) -> bool:
 
 
 def _replace_span(content: str, node: ast.stmt, text: str) -> str | None:
-    lines = content.splitlines(keepends=True)
+    # Bytes split on \n, \r\n and \r only, as the AST counts lines (str.splitlines also
+    # splits on form feeds and \u2028); AST column offsets are UTF-8 bytes too.
+    lines = content.encode().splitlines(keepends=True)
     first, last = node.lineno - 1, (node.end_lineno or node.lineno) - 1
-    tail = lines[last].encode()[node.end_col_offset or 0 :].decode().strip()
-    if node.col_offset or (tail and not tail.startswith("#")):
+    tail = lines[last][node.end_col_offset or 0 :].strip()
+    if node.col_offset or (tail and not tail.startswith(b"#")):
         return None  # shares a line with other code; no byte-exact span
-    ending = lines[last][len(lines[last].rstrip("\r\n")) :] or "\n"
-    return "".join([*lines[:first], text + ending, *lines[last + 1 :]])
+    ending = lines[last][len(lines[last].rstrip(b"\r\n")) :] or b"\n"
+    return b"".join([*lines[:first], text.encode() + ending, *lines[last + 1 :]]).decode()

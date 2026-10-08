@@ -131,7 +131,7 @@ commit reviewed changes manually. See [runner setup and recovery](SAFETY.md).
 
 | Command | What the plan contains |
 |---------|-------------------------|
-| `deduplicate` | An AST fingerprint (identifiers, literals and docstrings abstracted; 2+ statements) groups exact structural clones among self-contained top-level functions and propose source-qualified utility modules; methods, closures, decorators, and unresolved dependencies are skipped with diagnostics. Near-miss clones (≥90% similar) are suggested separately. Call sites are **not** rewritten. `--rewrite` replaces identical same-name copies in a package with imports of one `_<name>_shared.py` module (see SAFETY.md). |
+| `deduplicate` | An AST fingerprint (identifiers, literals and docstrings abstracted; 2+ statements) groups exact structural clones among undecorated top-level functions and proposes source-qualified utility modules; a suggestion that needs module names (imports, globals) lists them in a `# Needs from …` header. Methods, nested functions and decorated functions are skipped, with one summary diagnostic per file. Near-miss clones (≥90% similar) are suggested separately. Call sites are **not** rewritten. `--rewrite` replaces identical same-name copies in a package with imports of one `_<name>_shared.py` module (see SAFETY.md). |
 | `pattern` | All default patterns, including singleton, propose new advisory modules. A configured model enables optional whole-module rewrites for applicable named patterns. |
 | `idiomatize` | Model-only: requires `--llm-api` and `--model` (exit 2 otherwise) and proposes whole-module rewrites that require behavior review. |
 | `apply` | Exact whole-file byte checks, file snapshots, scoped recovery, opt-in target tests and whole-file metrics. No Git writes or semantic guarantee. See [SAFETY.md](SAFETY.md). |
@@ -253,6 +253,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md).
 | [TEST_RULES.md](TEST_RULES.md) | Acceptance criteria |
 | [MIGRATION.md](MIGRATION.md) | Breaking changes and upgrade notes |
 | [REVIEW.md](REVIEW.md) | 2026-10 code review and its follow-up status |
+| [REVIEW-2026-10-08.md](REVIEW-2026-10-08.md) | Second review: rewrite-safety bugs, dedup noise |
 | [DESIGN.md](DESIGN.md) | Product vision |
 | [ROADMAP.md](../ROADMAP.md) | What's shipped vs planned |
 
